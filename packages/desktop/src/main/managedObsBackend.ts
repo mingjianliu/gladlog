@@ -380,9 +380,14 @@ export function createManagedObsBackend(
     // fake 测试按调用顺序断言。
     // Only the live client's events count (GH #213): a connection dropped by
     // shutdown() or by the readiness cleanup keeps its listeners, and a late
-    // event from it must not open or split a chunk.
+    // event from it must not open or split a chunk. The epoch check covers
+    // the window where shutdown() still holds `client` while its disconnect
+    // is pending (codex review of the fix: a RecordFileChanged there reached
+    // the recorder's onChunkOpened after teardown).
+    const attachedEpoch = epoch;
+    const live = () => client === c && epoch === attachedEpoch;
     c.on("RecordStateChanged", (data) => {
-      if (client !== c) return;
+      if (!live()) return;
       const outputState = data.outputState;
       const outputPath = data.outputPath;
       if (
@@ -395,7 +400,7 @@ export function createManagedObsBackend(
       }
     });
     c.on("RecordFileChanged", (data) => {
-      if (client !== c) return;
+      if (!live()) return;
       const newOutputPath = data.newOutputPath;
       if (typeof newOutputPath === "string" && newOutputPath.length > 0) {
         handleChunkSplitEvent(newOutputPath);
@@ -519,15 +524,21 @@ export function createManagedObsBackend(
       return true;
     }
     if (connecting) return connecting;
-    connecting = connectFresh().finally(() => {
-      connecting = null;
+    // shutdown() forgets the in-flight connect (GH #213 review): a caller
+    // arriving after it starts afresh instead of joining a connect that is
+    // going to back out. Only the attempt still registered clears the slot.
+    const attempt: Promise<boolean> = connectFresh().finally(() => {
+      if (connecting === attempt) connecting = null;
     });
-    return connecting;
+    connecting = attempt;
+    return attempt;
   }
 
-  /** A connection a shutdown() overtook (GH #213): disconnect it, best
-   * effort, and make sure it is not left as the live client. */
-  async function dropOvertaken(c: ManagedObsWs): Promise<void> {
+  /** A connection that will not be used (GH #213): a shutdown() overtook
+   * it, or its handshake failed or timed out (a timed-out handshake can
+   * still complete later). Disconnect it, best effort, and make sure it is
+   * not left as the live client. */
+  async function dropConnection(c: ManagedObsWs): Promise<void> {
     if (client === c) {
       client = null;
       connected = false;
@@ -563,26 +574,27 @@ export function createManagedObsBackend(
         "connect",
       );
     } catch (err) {
-      if (overtaken()) {
-        await dropOvertaken(c);
-        return false;
-      }
-      lastError = t("errors.obs.connectFailed", { error: errMessage(err) });
+      // Not kept for a retry: `connected` stays false, so shutdown() would
+      // skip its disconnect, and a timed-out handshake that completes later
+      // would be an open socket nobody closes (GH #213 review).
+      if (!overtaken())
+        lastError = t("errors.obs.connectFailed", { error: errMessage(err) });
+      await dropConnection(c);
       return false;
     }
     // shutdown() ran during the handshake: it skipped the disconnect
     // (`connected` was still false) and cleared `client`, so this socket is
     // ours to close.
     if (overtaken() || client !== c) {
-      await dropOvertaken(c);
+      await dropConnection(c);
       return false;
     }
     connected = true;
     if (await waitObsReady(c)) {
-      if (overtaken()) {
-        await dropOvertaken(c);
-        return false;
-      }
+      // A shutdown() that ran during the poll saw `connected` and
+      // disconnected this client itself: back out without a second
+      // disconnect.
+      if (overtaken()) return false;
       return client === c;
     }
     // Never ready: drop this connection instead of keeping it as "connected".
@@ -808,6 +820,7 @@ export function createManagedObsBackend(
 
   async function shutdown(): Promise<void> {
     epoch++;
+    connecting = null;
     const c = client;
     if (c && connected) {
       try {

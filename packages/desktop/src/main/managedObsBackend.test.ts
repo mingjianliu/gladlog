@@ -1249,6 +1249,112 @@ describe("shutdown 与在途连接(GH #213)", () => {
     expect((await backend.probe()).ready).toBe(false);
   });
 
+  it("握手超时的连接被断开:之后才完成的握手不会留下没人关的 socket(复审 #1)", async () => {
+    vi.useFakeTimers();
+    fake.connect = async (url: string, password: string) => {
+      fake.connectCalls.push({ url, password });
+      await new Promise<void>(() => {}); // the handshake never answers in time
+    };
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => fake,
+      now: () => Date.now(),
+    });
+    const start = backend.startContinuous();
+    await vi.advanceTimersByTimeAsync(15_500); // connect times out
+    await start;
+    expect(fake.disconnectCalls).toBe(1);
+    expect((await backend.probe()).lastError).toBeTruthy();
+    await backend.shutdown();
+    expect((await backend.probe()).ready).toBe(false);
+  });
+
+  it("shutdown 后、旧的进程查找还挂着时再连:新一轮不搭旧连接的车,照常连上(复审 #2)", async () => {
+    let resolveProc!: (v: { wsUrl: string; wsPassword: string }) => void;
+    ensureProcess.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveProc = r;
+        }),
+    );
+    const made: FakeManagedObsWs[] = [];
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => {
+        const f = new FakeManagedObsWs();
+        made.push(f);
+        return f;
+      },
+      now,
+    });
+    const start = backend.startContinuous();
+    await vi.waitFor(() => expect(ensureProcess).toHaveBeenCalledTimes(1));
+    await backend.shutdown();
+    await backend.configureSession();
+    expect(ensureProcess).toHaveBeenCalledTimes(2);
+    expect(made).toHaveLength(1);
+    expect((await backend.probe()).ready).toBe(true);
+    resolveProc({ wsUrl: "ws://127.0.0.1:4466", wsPassword: "pw" });
+    await start; // the old attempt backs out without touching the new one
+    expect(made).toHaveLength(1);
+    expect(made[0]!.disconnectCalls).toBe(0);
+    expect((await backend.probe()).ready).toBe(true);
+  });
+
+  it("shutdown 等 disconnect 期间迟到的分片事件不开新分片(复审 #3)", async () => {
+    fake.handlers.StartRecord = async () => {
+      fake.emit("RecordStateChanged", {
+        outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+        outputPath: "/rec/chunk1.mp4",
+      });
+      return {};
+    };
+    const backend = makeBackend();
+    const opened: string[] = [];
+    backend.onChunkOpened((c) => opened.push(c.videoPath));
+    await backend.startContinuous();
+    expect(opened).toEqual(["/rec/chunk1.mp4"]);
+    let releaseDisconnect!: () => void;
+    fake.disconnect = async () => {
+      fake.disconnectCalls++;
+      await new Promise<void>((r) => {
+        releaseDisconnect = r;
+      });
+    };
+    const down = backend.shutdown();
+    await vi.waitFor(() => expect(fake.disconnectCalls).toBe(1));
+    fake.emit("RecordFileChanged", { newOutputPath: "/rec/late.mp4" });
+    fake.emit("RecordStateChanged", {
+      outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+      outputPath: "/rec/late2.mp4",
+    });
+    releaseDisconnect();
+    await down;
+    expect(opened).toEqual(["/rec/chunk1.mp4"]);
+  });
+
+  it("就绪轮询途中 shutdown:shutdown 断开了这条连接,轮询成功后不再断第二次(复审 #4)", async () => {
+    let releaseReady!: () => void;
+    fake.handlers.GetSceneList = () =>
+      new Promise((r) => {
+        releaseReady = () => r({ scenes: [] });
+      });
+    const backend = makeBackend();
+    const conf = backend.configureSession();
+    await vi.waitFor(() =>
+      expect(order(fake)).toContain("call:GetSceneList"),
+    );
+    await backend.shutdown();
+    expect(fake.disconnectCalls).toBe(1);
+    releaseReady();
+    await conf;
+    expect(fake.disconnectCalls).toBe(1);
+    expect(order(fake)).not.toContain("call:CreateInput");
+    expect((await backend.probe()).ready).toBe(false);
+  });
+
   it("shutdown 之后再连:新一轮照常连上(栅栏只挡 shutdown 之前开始的连接)", async () => {
     const backend = makeBackend();
     await backend.shutdown();
