@@ -11,8 +11,10 @@
  *
  *  - `controlAuraNoCcLine` asks the aura itself: every aura APPLIED on a
  *    player of the owner's side by a unit of the other side, inside the
- *    round (`roundEndMs`), whose own DB2 effects apply MOD_CONFUSE /
- *    MOD_CHARM / MOD_FEAR / MOD_STUN (`auraTakesControl`, a lookup), must
+ *    round (`roundEndMs`), whose own DB2 effects apply a control aura type
+ *    (`auraTakesControl`, a lookup: MOD_CONFUSE / MOD_CHARM / MOD_FEAR /
+ *    MOD_STUN and, from T225, MOD_POSSESS — Mind Control —,
+ *    MOD_PACIFY_SILENCE — Hex —, AOE_CHARM and type 298 — Asphyxiate), must
  *    have a `[CC ON TEAM] <victim> ← <aura name>` line within a second of
  *    it. Checked = every such application, whether or not the control set
  *    (`ccSpellIds`) or the dispel backlash table holds the id. Kinds: `not

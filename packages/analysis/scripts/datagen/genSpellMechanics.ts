@@ -71,17 +71,33 @@
  *                    (Barkskin, Dispersion) 0 / 2 (0 / 9): too thin, no flag.
  *   · ctrlAura     — the loss-of-control aura types the spell's OWN effects
  *                    apply: `EffectAura` 5 (MOD_CONFUSE), 6 (MOD_CHARM), 7
- *                    (MOD_FEAR), 12 (MOD_STUN). `mech` is the label of the
+ *                    (MOD_FEAR), 12 (MOD_STUN), and — pipeline T225 — 2
+ *                    (MOD_POSSESS: Mind Control 605), 60
+ *                    (MOD_PACIFY_SILENCE: every Hex), 177 (AOE_CHARM) and
+ *                    298 (the only effect of Asphyxiate 221562; Time Stop
+ *                    378441 carries it beside 39 / 118 / 399). `mech` is
+ *                    the label of the
  *                    spell — an aura that takes no control carries it too
  *                    (Binding Shot's tether 117405: mechanic 12, a dummy
  *                    aura; Snowdrift's pulse 390171: mechanic 12, a periodic
  *                    damage aura) — so "does this aura itself take control"
  *                    is asked here (pipeline T177: of 1,779 auras the
  *                    mechanic called loss-of-control and no control line
- *                    printed, 1,656 were those two). A control whose aura
- *                    is of another type (Hex: transform + pacify-silence;
- *                    Mind Control: possess) has no flag: absence is "not
- *                    one of these four types", never "no control".
+ *                    printed, 1,656 were those two). How the list was
+ *                    closed (T225, build 12.1.5.70391): of the observed
+ *                    spells whose mechanic is a loss of control and that
+ *                    carried none of the first four, the aura types were
+ *                    read one by one — 60 ×8 (Hex), 2 ×1, 298 ×1 are
+ *                    controls; 56 / 260 / 321 (Hex's transform rows), 226,
+ *                    4, 3, 395 and Metamorphosis's own rows are not; 28
+ *                    have no aura row at all (cast ids). 60 also sits on
+ *                    auras a unit puts on ITSELF (Ice Block, Dispersion,
+ *                    Burrow, Ice Cold, Rain from Above, Flying Serpent
+ *                    Kick, Emerald Communion): the flag says what the aura
+ *                    does to its holder, not who applied it. Silence 27,
+ *                    pacify 25, root 26 and disarm 67 are not loss of
+ *                    control and have no flag. Absence is "none of these
+ *                    types", never "no control".
  *
  * Universe = observedSpellIdsGenerated.json (every id the corpus has seen), so
  * the table cannot be incomplete relative to what a log can contain. An id
@@ -104,8 +120,9 @@ const AURA_MECHANIC_IMMUNITY_MASK = "147";
 const AURA_SCHOOL_IMMUNITY = "39";
 const AURA_MOD_PACIFY_SILENCE = "60";
 const AURA_DISABLE_CASTING_EXCEPT_ABILITIES = "263";
-/** MOD_CONFUSE, MOD_CHARM, MOD_FEAR, MOD_STUN */
-const CONTROL_AURA_TYPES = new Set([5, 6, 7, 12]);
+/** MOD_POSSESS, MOD_CONFUSE, MOD_CHARM, MOD_FEAR, MOD_STUN,
+ * MOD_PACIFY_SILENCE, AOE_CHARM, and 298 (Asphyxiate 221562, Time Stop) */
+const CONTROL_AURA_TYPES = new Set([2, 5, 6, 7, 12, 60, 177, 298]);
 const ALL_SCHOOLS = 127;
 /** SpellCategories.PreventionType bit 1: the cast is prevented by silence. */
 const PREVENTION_TYPE_SILENCE = 1;
@@ -384,6 +401,16 @@ async function main() {
   expect(
     !!out["389831"]?.ctrlAura?.includes(12) && !out["390171"]?.ctrlAura,
     "Snowdrift: the stun 389831 is a stun aura, the pulse 390171 is not",
+  );
+  expect(
+    !!out["51514"]?.ctrlAura?.includes(60) &&
+      !!out["605"]?.ctrlAura?.includes(2) &&
+      !!out["221562"]?.ctrlAura?.includes(298),
+    "Hex 51514 is a pacify-silence aura, Mind Control 605 a possess aura, Asphyxiate 221562 an aura of type 298",
+  );
+  expect(
+    !out["15487"]?.ctrlAura && !out["339"]?.ctrlAura,
+    "Silence 15487 and Entangling Roots 339 are not control auras",
   );
   expect(
     !!out["358861"]?.ctrlAura?.includes(7),

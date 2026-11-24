@@ -269,6 +269,7 @@ import {
   SET_BONUS_PER_EVENT_DURATIONS,
 } from "./classSetBonuses";
 import { classMetadata } from "./classSpells";
+import { CONTROL_RULED_OUT_AURA_IDS } from "./controlRuledOut";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
 import { spellClassMap } from "./drCategories";
@@ -1224,6 +1225,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("COPY_CAST_IDS", "utils/castPress.ts", "cast", () => [
     ...COPY_CAST_IDS.keys(),
   ]),
+  t("CONTROL_RULED_OUT_AURA_IDS", "data/controlRuledOut.ts", "aura", () =>
+    set(CONTROL_RULED_OUT_AURA_IDS),
+  ),
   t(
     "DOT_AURA_NEVER_TICKS_IDS",
     "context/matchTimelineSections.ts",

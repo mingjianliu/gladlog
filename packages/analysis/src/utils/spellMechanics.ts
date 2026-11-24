@@ -47,13 +47,16 @@ export function ccMechanicOf(spellId: string): number | undefined {
 }
 
 /** Does this aura ITSELF take control of its holder: one of its own DB2
- * effects applies MOD_CONFUSE, MOD_CHARM, MOD_FEAR or MOD_STUN. `true` /
- * `false` from DB2, `undefined` for a spell the table does not know.
- * `ccMechanicOf` is the label of the spell, and an aura that takes no
- * control carries it too (Binding Shot's tether 117405 and Snowdrift's
- * pulse 390171 are both "stunned"); a control built from another aura type
- * (Hex, Mind Control) answers `false` here — so `false` is "not one of
- * these four", never "no control". */
+ * effects is of a control aura type — MOD_CONFUSE, MOD_CHARM, MOD_FEAR,
+ * MOD_STUN, MOD_POSSESS (Mind Control), MOD_PACIFY_SILENCE (Hex), AOE_CHARM
+ * or type 298 (Asphyxiate 221562); the list and how it was closed are in
+ * `genSpellMechanics.ts` (pipeline T225). `true` / `false` from DB2,
+ * `undefined` for a spell the table does not know. `ccMechanicOf` is the
+ * label of the spell, and an aura that takes no control carries it too
+ * (Binding Shot's tether 117405 and Snowdrift's pulse 390171 are both
+ * "stunned"). It says what the aura does to its holder, not who put it
+ * there: a unit's own Ice Block is a pacify-silence aura too. `false` is
+ * "none of these types", never a proof of "no control". */
 export function auraTakesControl(spellId: string): boolean | undefined {
   const e = SPELLS[spellId];
   return e === undefined ? undefined : (e.ctrlAura?.length ?? 0) > 0;

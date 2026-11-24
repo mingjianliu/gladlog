@@ -21,6 +21,7 @@
  *    the ids the user ruled are not controls (`RULED_OUT`).
  */
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
+import { CONTROL_RULED_OUT_AURA_IDS } from "@gladlog/analysis/src/data/controlRuledOut";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import {
@@ -51,19 +52,12 @@ const LOSS_OF_CONTROL_MECHANICS: ReadonlySet<number> = new Set([
  * count reads the same on a capture from before and after */
 const RULED_IN: ReadonlySet<string> = new Set(["358861"]);
 
-/** Real stun auras a user ruling left out of the controls — known items,
- * listed out of the total so a later scan does not raise them as new:
- *  - Earthquake 77505 and Fel Cleave 213688 (R48, 2026-11-15);
- *  - Intimidation 1258508 (user ruling R76, 2026-11-19, T177): a hunter pet's
- *    stun, DB2 build 12.1.5.70391 SpellCategories `Mechanic 12,
- *    DiminishType 0` (no DR family; the 3 s stun 24394 has DiminishType 4),
- *    one effect `EffectAura 12`, 0.5 s; 605: 1 fact, removed after 0.45 s. */
-export const RULED_OUT: ReadonlySet<string> = new Set([
-  "77505",
-  "213688",
-  "1258508",
-]);
-const LABEL_ONLY = "mechanic label only, the aura itself takes no control";
+/** Real stun auras a user ruling left out of the controls
+ * (`CONTROL_RULED_OUT_AURA_IDS`, data/controlRuledOut.ts — the hand list,
+ * registered in `curatedIdRegistry.ts`) */
+export const RULED_OUT = CONTROL_RULED_OUT_AURA_IDS;
+const LABEL_ONLY =
+  "mechanic label only, the aura has none of the control aura types";
 export const RULED_OUT_KIND = "ruled not a control (user rulings)";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `lossOfControlAuraNoCcLine|${LABEL_ONLY}`,
