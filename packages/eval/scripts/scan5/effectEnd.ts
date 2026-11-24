@@ -33,13 +33,14 @@
  *    is not a wall and is not read.
  *  - `unseenEndOpener` (D59): `X active ON THE TARGET Ns` of a stealth /
  *    invisibility aura with no end row, printed longer than the gap to the
- *    first debuff its holder put on a player (a stealth opener whose cast row
- *    the log lost): the gap + 0.1 s. The run is the line's own: the holder's
- *    run applied `pressed Ns after` the burst head's start, or the last one
- *    before that start for `already up`. A debuff that opens nothing is no
- *    end: a snare (a press's rider, DB2 mechanic 11), one the state allows
- *    (DB2 Allow While Stealthed, on Vanish), a press with no unit on its row
- *    still inside its official length (Ring of Frost: a ground effect).
+ *    first debuff its holder put on another unit (a stealth opener whose cast
+ *    row the log lost): the gap + 0.1 s. The run is the line's own: the
+ *    holder's run applied `pressed Ns after` the burst head's start, or the
+ *    last one before that start for `already up`. Which debuff opens is the
+ *    product's own reading (`holderOpenerDebuffAfterMs`, with row order inside
+ *    the application's millisecond): not a snare, not one the state allows,
+ *    not a standing press inside its length, not a press's own landing logged
+ *    below the application (T261; codex 85-mac-minifix-T261-1 #1).
  *  - `immuneCauseUnnamed` (D61): `[CC NOT LANDED] … — logged IMMUNE` with no
  *    cause, while an aura with a DB2 school immunity covering the control's
  *    school, or a mechanic immunity for its mechanic, was up on the target.
@@ -47,13 +48,11 @@
  *    of an interrupt putting it back later than its unit's next press of it.
  */
 import { parseResRow } from "@gladlog/analysis/src/context/resRow";
-import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   immunityCoversSpell,
   spellSchoolMask,
 } from "@gladlog/analysis/src/data/spellSchools";
-import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { stasisReplayWindows } from "@gladlog/analysis/src/utils/combatStates";
@@ -67,6 +66,7 @@ import {
   auraBlocksMechanic,
   ccMechanicOf,
 } from "@gladlog/analysis/src/utils/spellMechanics";
+import { holderOpenerDebuffAfterMs } from "@gladlog/analysis/src/utils/stealthActionEnd";
 import { AURA_NATURAL_END_JITTER_S } from "@gladlog/analysis/src/utils/unitDeath";
 
 import {
@@ -400,52 +400,39 @@ function wallHeldPastHold(ctx: IRoundCtx): void {
 const BURST_HEAD = /^\s*Burst #\d+ — (\d+:\d\d)–/;
 const UNSEEN_LINE =
   /(.+?) active ON THE TARGET (\d+\.\d)s of this burst(?: \((already up|(?:pressed )?(<?\d+\.\d)s after))?/;
-const VANISH = "11327";
-const NO_UNIT = "0000000000000000";
 
-/** The first debuff `u` put on a player after `t` that opens something. */
+/**
+ * The first debuff `u` put on another unit after its application at `t`
+ * (`line`: the APPLIED's own row) that opens something: the product's own
+ * debuff-opener reading (`holderOpenerDebuffAfterMs`, row order inside the
+ * application's millisecond — codex 85-mac-minifix-T261-1 #1: a scan that
+ * kept only `> t` passed a same-millisecond Cheap Shot), then that row.
+ */
 function firstOpener(
   ctx: IRoundCtx,
   u: any,
   id: string,
   t: number,
+  line: number | undefined,
 ): any | undefined {
-  const opens = (r: any): boolean => {
-    const mech = ccMechanicOf(r.spellId);
-    if (mech === undefined || mech === 11) return false;
-    const presses = new Set<string>([
-      r.spellId,
-      ...castsOfEffectAura(r.spellId),
-    ]);
-    if (
-      id === VANISH &&
-      [...presses].some((p) => ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(p))
-    )
-      return false;
-    return !successesOf(u).some(
-      (c) =>
-        presses.has(c.spellId) &&
-        (!c.destUnitId || c.destUnitId === NO_UNIT) &&
-        tsOf(c) <= t &&
-        tsOf(c) + (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=
-          tsOf(r),
-    );
-  };
-  return ctx.players
+  const at = holderOpenerDebuffAfterMs(u, t, id, ctx.units, line);
+  if (!Number.isFinite(at)) return undefined;
+  return ctx.units
     .flatMap((p) =>
       ((p.auraEvents ?? []) as any[]).filter(
         (r) =>
           p.id !== u.id &&
-          r.destUnitId === p.id &&
           r.srcUnitId === u.id &&
           ev(r) === APPLIED &&
           r.auraType === "DEBUFF" &&
-          r.spellId &&
-          tsOf(r) > t &&
-          opens(r),
+          tsOf(r) === at,
       ),
     )
-    .sort((x, y) => tsOf(x) - tsOf(y))[0];
+    .sort((x, y) => (x.logLine?.lineIndex ?? 0) - (y.logLine?.lineIndex ?? 0))
+    .find((r) => {
+      const mech = ccMechanicOf(r.spellId);
+      return mech !== undefined && mech !== 11;
+    });
 }
 
 function unseenEndOpener(ctx: IRoundCtx): void {
@@ -465,20 +452,19 @@ function unseenEndOpener(ctx: IRoundCtx): void {
       for (const id of idsNamed(u, name)) {
         if (!SAVE_AURA_END_UNSEEN_IDS.has(id)) continue;
         const rows = rowsOf(u, id);
-        const runs = rows.flatMap((a, k) => {
+        const runs = rows.filter((a, k) => {
           const next = rows[k + 1];
-          return ev(a) === APPLIED && !(next && ev(next) === REMOVED)
-            ? [tsOf(a) as number]
-            : [];
+          return ev(a) === APPLIED && !(next && ev(next) === REMOVED);
         });
         // the head and the offset are both printed: a second either way
-        const t =
+        const run =
           after !== undefined
-            ? runs.find((x) => Math.abs(x - burstAt! - after) <= 1200)
-            : runs.filter((x) => x <= burstAt! + 1000).pop();
-        if (t === undefined) continue;
+            ? runs.find((x) => Math.abs(tsOf(x) - burstAt! - after) <= 1200)
+            : runs.filter((x) => tsOf(x) <= burstAt! + 1000).pop();
+        if (run === undefined) continue;
+        const t = tsOf(run) as number;
         ctx.bump("unseenEndOpener");
-        const first = firstOpener(ctx, u, id, t);
+        const first = firstOpener(ctx, u, id, t, run.logLine?.lineIndex);
         if (!first) continue;
         const gap = (tsOf(first) - t) / 1000;
         if (s > gap + 0.1)

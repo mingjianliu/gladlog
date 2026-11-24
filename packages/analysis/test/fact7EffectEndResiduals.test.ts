@@ -314,6 +314,21 @@ describe("fact7 unseenEndOpener — what ends a stealth nobody saw end", () => {
         2,
       ),
     ).toBe(ms(67.3));
+    // a cast row of the application's millisecond with no row index says
+    // nothing about its order (codex 85-mac-minifix-T261-1 #2)
+    const polyNoIndex = {
+      ...(press("118", 67.3) as object),
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: ms(67.3) },
+    } as never;
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder([polyNoIndex]),
+        ms(67.3),
+        GREATER_INVISIBILITY,
+        units(polyDebuff),
+        2,
+      ),
+    ).toBe(ms(67.3));
     // a press on another unit is not this debuff's press
     expect(
       holderFirstOwnActionAfterMs(

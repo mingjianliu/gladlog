@@ -215,7 +215,7 @@ export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
  * `STEALTH_KEPT_BY_ALLOWED_PRESS_IDS` aura, a press stealth allows.
  *
  * With `units`, also a debuff the holder put on another unit
- * (`holderOpenerDebuffAfterMs`): an unseen unit's cast row is not always
+ * (`openerDebuffBeforeMs`): an unseen unit's cast row is not always
  * written, and its opener then shows only as the aura it landed (fact7 D59).
  */
 export function holderFirstOwnActionAfterMs(
@@ -229,24 +229,7 @@ export function holderFirstOwnActionAfterMs(
    * 20.000, a Healing Surge START below it in the same millisecond) */
   afterLine?: number,
 ): number {
-  // unnamed, the application's row is the holder's APPLIED of `auraId` at
-  // `afterMs` itself
-  const fromLine =
-    afterLine ??
-    (auraId
-      ? (holder.auraEvents ?? []).find(
-          (a) =>
-            a.spellId === auraId &&
-            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-            a.logLine.timestamp === afterMs,
-        )?.logLine.lineIndex
-      : undefined);
-  const after = (t: number, line: number | undefined): boolean =>
-    t > afterMs ||
-    (t === afterMs &&
-      fromLine !== undefined &&
-      line !== undefined &&
-      line > fromLine);
+  const after = rowAfterApplication(holder, afterMs, auraId, afterLine);
   const ownPress = auraId
     ? new Set([auraId, ...castsOfEffectAura(auraId)])
     : undefined;
@@ -326,8 +309,63 @@ export function holderFirstOwnActionAfterMs(
     if (after(t, d.logLine.lineIndex) && t < first) first = t;
   }
   return units
-    ? holderOpenerDebuffAfterMs(holder, after, first, units, allowed)
+    ? openerDebuffBeforeMs(holder, after, first, units, allowed)
     : first;
+}
+
+/**
+ * "Logged after the application": a row of a later millisecond, or of
+ * `afterMs` itself logged below the application's row (`afterLine`; unnamed,
+ * the holder's APPLIED of `auraId` at `afterMs`). With no row index on
+ * either side, no row of `afterMs` is after it.
+ */
+function rowAfterApplication(
+  holder: Partial<Pick<ICombatUnit, "auraEvents">>,
+  afterMs: number,
+  auraId: string | undefined,
+  afterLine: number | undefined,
+): (t: number, line: number | undefined) => boolean {
+  const fromLine =
+    afterLine ??
+    (auraId
+      ? (holder.auraEvents ?? []).find(
+          (a) =>
+            a.spellId === auraId &&
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.logLine.timestamp === afterMs,
+        )?.logLine.lineIndex
+      : undefined);
+  return (t, line) =>
+    t > afterMs ||
+    (t === afterMs &&
+      fromLine !== undefined &&
+      line !== undefined &&
+      line > fromLine);
+}
+
+/**
+ * The debuff-opener leg of `holderFirstOwnActionAfterMs` alone (log ms, or
+ * Infinity): the first debuff the holder landed on another unit after the
+ * application of `auraId` at `afterMs` (row order inside that millisecond)
+ * that says it acted (`openerDebuffBeforeMs`). Exported for scan5
+ * effectEnd's `unseenEndOpener`, which checks the burst ledger's printed
+ * length against exactly this reading (codex 85-mac-minifix-T261-1 #1).
+ */
+export function holderOpenerDebuffAfterMs(
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "auraEvents">>,
+  afterMs: number,
+  auraId: string,
+  units: readonly ICombatUnit[],
+  afterLine?: number,
+): number {
+  return openerDebuffBeforeMs(
+    holder,
+    rowAfterApplication(holder, afterMs, auraId, afterLine),
+    Infinity,
+    units,
+    stealthAllowsPress(auraId),
+  );
 }
 
 /**
@@ -381,7 +419,7 @@ const stealthAllowsPress =
  * before Greater Invisibility, its debuff written below the invisibility).
  */
 
-function holderOpenerDebuffAfterMs(
+function openerDebuffBeforeMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents">,
   after: (t: number, line: number | undefined) => boolean,
   firstMs: number,
@@ -430,7 +468,12 @@ function holderOpenerDebuffAfterMs(
           pressIds.has(c.spellId) &&
           c.destUnitId === u.id &&
           c.logLine.timestamp === t &&
-          !after(c.logLine.timestamp, c.logLine.lineIndex),
+          !after(c.logLine.timestamp, c.logLine.lineIndex) &&
+          // above the application only on its own row index: a cast row of
+          // the application's millisecond with none says nothing about its
+          // order (codex 85-mac-minifix-T261-1 #2)
+          (c.logLine.lineIndex !== undefined ||
+            !after(c.logLine.timestamp, Infinity)),
       );
       if (!ownLanding) first = t;
     }
