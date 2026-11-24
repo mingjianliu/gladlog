@@ -1,4 +1,4 @@
-import { mkdirSync,mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -82,7 +82,7 @@ it("send:resume 成功,消息追加并落盘;重开服务能读回(续聊)", asy
     matchesDir: dir,
     chatRunner: chatRunner as never,
   });
-  const r = await svc.send({ matchId: "m1", question: "问" });
+  const r = await svc.send({ matchId: "m1", question: "问", lang: "zh" });
   expect(r).toEqual({ status: "ok", reply: "教练回答" });
   expect(chatRunner.mock.calls[0]![0]).toMatchObject({
     backend: "claudeCli",
@@ -120,11 +120,12 @@ it("send:resume 失败且无 seed → need-reseed;带 seed → 播种新 session
     chatRunner: chatRunner as never,
     seedClient: seedClient as never,
   });
-  const r1 = await svc.send({ matchId: "m1", question: "问" });
+  const r1 = await svc.send({ matchId: "m1", question: "问", lang: "zh" });
   expect(r1).toEqual({ status: "need-reseed" });
   const r2 = await svc.send({
     matchId: "m1",
     question: "问",
+    lang: "zh",
     seed: { richContext: "CTX", spec: "Holy Paladin", findingsSummary: "F1" },
   });
   expect(r2.status).toBe("ok");
@@ -144,8 +145,8 @@ it("并发守卫:同场在飞时再 send 得 busy", async () => {
     matchesDir: dir,
     chatRunner: chatRunner as never,
   });
-  const p1 = svc.send({ matchId: "m1", question: "a" });
-  const r2 = await svc.send({ matchId: "m1", question: "b" });
+  const p1 = svc.send({ matchId: "m1", question: "a", lang: "zh" });
+  const r2 = await svc.send({ matchId: "m1", question: "b", lang: "zh" });
   expect(r2.status).toBe("busy");
   release();
   await p1;
@@ -161,7 +162,7 @@ it("每 CLI 各一条线程:切后端显示各自历史", async () => {
     matchesDir: dir,
     chatRunner: chatRunner as never,
   });
-  await svc.send({ matchId: "m1", question: "问" });
+  await svc.send({ matchId: "m1", question: "问", lang: "zh" });
   backend = "agy"; // agy has no analysis session → not-ready (and no thread either)
   expect((await svc.getState("m1")).status).toBe("not-ready");
   backend = "claudeCli";
@@ -180,7 +181,7 @@ it("AI 自查开关是分析会话的身份:切换后分析面板显示未分析
   expect((await svc.getState("m1")).status).toBe("ready");
   selfReview = true;
   expect((await svc.getState("m1")).status).toBe("not-ready");
-  expect(await svc.send({ matchId: "m1", question: "q" })).toEqual({
+  expect(await svc.send({ matchId: "m1", question: "q", lang: "zh" })).toEqual({
     status: "not-ready",
   });
   seedAnalysisCache(dir, "m1", {
@@ -211,13 +212,16 @@ it("自查成功但没抓到自查会话的结果:问教练可用,第一问不�
     seedClient: seedClient as never,
   });
   expect((await svc.getState("m1")).status).toBe("ready");
-  expect(await svc.send({ matchId: "m1", question: "问" })).toEqual({
-    status: "need-reseed",
-  });
+  expect(await svc.send({ matchId: "m1", question: "问", lang: "zh" })).toEqual(
+    {
+      status: "need-reseed",
+    },
+  );
   expect(chatRunner).not.toHaveBeenCalled();
   const r2 = await svc.send({
     matchId: "m1",
     question: "问",
+    lang: "zh",
     seed: { richContext: "CTX", spec: "Holy Paladin", findingsSummary: "F1" },
   });
   expect(r2.status).toBe("ok");
@@ -250,8 +254,76 @@ it("存了空串会话的未自查 / 自查失败结果:仍是 not-ready(codex 5
       matchesDir: dir,
     });
     expect((await svc.getState("m1")).status).toBe("not-ready");
-    expect(await svc.send({ matchId: "m1", question: "q" })).toEqual({
+    expect(
+      await svc.send({ matchId: "m1", question: "q", lang: "zh" }),
+    ).toEqual({
       status: "not-ready",
     });
   }
+});
+
+it("send 带上发送时固定的语言;与 main 要写的线程语言不一致 → 拒绝,不写任何线程(codex B2#1)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chat-"));
+  seedAnalysisCache(dir, "m1", { sessionId: "sid-a" });
+  const chatRunner = vi.fn(async () => "reply");
+  const seedClient = vi.fn();
+  let language: "zh" | "en" = "en";
+  const svc = createCoachChatService({
+    getSettings: () => ({ ...settings(), language }),
+    matchesDir: dir,
+    chatRunner: chatRunner as never,
+    seedClient: seedClient as never,
+  });
+  // pinned zh at send time, settings now en: the en thread must not be seeded
+  const r = await svc.send({
+    matchId: "m1",
+    question: "问",
+    lang: "zh",
+    seed: { richContext: "CTX", spec: "Holy Paladin", findingsSummary: "F1" },
+  });
+  expect(r).toEqual({ status: "lang-mismatch" });
+  expect(seedClient).not.toHaveBeenCalled();
+  expect(chatRunner).not.toHaveBeenCalled();
+  expect(existsSync(join(dir, "m1", "coachChat.en.json"))).toBe(false);
+  // missing language is refused too
+  expect(
+    await (svc.send as (i: unknown) => Promise<unknown>)({
+      matchId: "m1",
+      question: "q",
+    }),
+  ).toEqual({ status: "lang-mismatch" });
+  language = "zh";
+  expect(
+    (await svc.send({ matchId: "m1", question: "问", lang: "zh" })).status,
+  ).toBe("ok");
+});
+
+it("当前语言没有线程、另一种语言有:getState 把它作为只读历史带语言返回(codex A#5 / B2#6)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chat-"));
+  seedAnalysisCache(dir, "m1", { sessionId: "sid-a" });
+  const zh = createCoachChatService({
+    getSettings: settings,
+    matchesDir: dir,
+    chatRunner: (async () => "中文回答") as never,
+  });
+  await zh.send({ matchId: "m1", question: "问", lang: "zh" });
+  // en: no en analysis session, no en thread → not-ready, carrying the zh history
+  const en = createCoachChatService({
+    getSettings: () => ({ ...settings(), language: "en" as const }),
+    matchesDir: dir,
+  });
+  const st = await en.getState("m1");
+  expect(st.status).toBe("not-ready");
+  expect((st as { history?: unknown }).history).toEqual({
+    contentLang: "zh",
+    model: "claude-sonnet-5",
+    messages: [
+      expect.objectContaining({ role: "user", content: "问" }),
+      expect.objectContaining({ role: "assistant", content: "中文回答" }),
+    ],
+  });
+  // zh itself: its own thread, no history field
+  const zhSt = await zh.getState("m1");
+  expect(zhSt.status).toBe("ready");
+  expect((zhSt as { history?: unknown }).history).toBeUndefined();
 });

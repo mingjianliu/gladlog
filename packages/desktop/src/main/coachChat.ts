@@ -37,19 +37,32 @@ export type ChatMessage = {
   content: string;
   at: number;
 };
+/** This backend's thread in the other language's chat file, shown read-only
+ * with a language label when the current language has no thread yet (spec
+ * §6.13, codex A#5). New sends still go to the current language's thread. */
+export type ChatHistory = {
+  contentLang: Language;
+  model: string;
+  messages: ChatMessage[];
+};
 export type ChatState =
   | { status: "unsupported" } // the current backend is not a CLI
-  | { status: "not-ready" } // this CLI has neither an analysis of this round carrying a sessionId nor an existing thread
+  | { status: "not-ready"; history?: ChatHistory } // this CLI has neither an analysis of this round carrying a sessionId nor an existing thread
   | {
       status: "ready";
       backend: string;
       model: string;
       messages: ChatMessage[];
       busy: boolean;
+      /** Only when `messages` is empty (no current-language thread). */
+      history?: ChatHistory;
     };
 export type ChatSendResult =
   | { status: "ok"; reply: string }
   | { status: "need-reseed" } // resume failed and this call carried no seed: the renderer builds a seed and calls again
+  // the language pinned when the user sent is not the language of the thread
+  // main would write (the setting changed in between): nothing was written
+  | { status: "lang-mismatch" }
   | { status: "busy" | "unsupported" | "not-ready" }
   | { status: "error"; message: string };
 type ChatSeed = {
@@ -161,6 +174,10 @@ export function createCoachChatService(deps: {
   send(input: {
     matchId: string;
     question: string;
+    /** The UI language pinned when the user pressed send; the retry after
+     * need-reseed reuses it. Refused when missing or not the language of the
+     * thread main would write (codex B2#1). */
+    lang: Language;
     seed?: ChatSeed;
   }): Promise<ChatSendResult>;
   cancel(matchId: string): Promise<void>;
@@ -272,6 +289,19 @@ export function createCoachChatService(deps: {
           messages: thread.messages,
           busy: inFlight.has(matchId),
         };
+      // No thread in this language: this backend's thread from the other
+      // language, as read-only labelled history (spec §6.13).
+      const otherLang: Language = lang === "zh" ? "en" : "zh";
+      const otherThread = readDoc(chatPath(deps.matchesDir, matchId, otherLang))
+        .threads[backend];
+      const history: ChatHistory | undefined =
+        otherThread && otherThread.messages.length > 0
+          ? {
+              contentLang: otherLang,
+              model: otherThread.model,
+              messages: otherThread.messages,
+            }
+          : undefined;
       const sess = findAnalysisSession(
         deps.matchesDir,
         matchId,
@@ -279,23 +309,31 @@ export function createCoachChatService(deps: {
         backend,
         selfReviewOn,
       );
-      if (!sess) return { status: "not-ready" };
+      if (!sess)
+        return history
+          ? { status: "not-ready", history }
+          : { status: "not-ready" };
       return {
         status: "ready",
         backend,
         model: sess.model,
         messages: [],
         busy: inFlight.has(matchId),
+        ...(history ? { history } : {}),
       };
     },
 
     async send(input: {
       matchId: string;
       question: string;
+      lang: Language;
       seed?: ChatSeed;
     }): Promise<ChatSendResult> {
       const { backend, lang, cmd, isCli, selfReviewOn } = ctx();
       if (!isCli) return { status: "unsupported" };
+      // The thread written below is this language's: a question (and seed)
+      // pinned in another language, or untagged, must not land in it.
+      if (input.lang !== lang) return { status: "lang-mismatch" };
       if (inFlight.has(input.matchId)) return { status: "busy" };
       const path = chatPath(deps.matchesDir, input.matchId, lang);
       const doc = readDoc(path);

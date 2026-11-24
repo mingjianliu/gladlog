@@ -3,22 +3,31 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { CHAT_STOPPED_MESSAGE } from "../../../../shared/chatProtocol";
+import type { Language } from "../../../../shared/i18n/index";
 import { bridge } from "../../bridge";
 import { useT } from "../../i18n/LangProvider";
 import { buildAnalysisInput } from "../derive/analysisInput";
 import { renderMarkdown } from "../derive/markdown";
 import type { ReportSource } from "../derive/types";
+import { ContentLangBadge } from "./ContentLangBadge";
 
 type ChatMessage = { role: "user" | "assistant"; content: string; at: number };
+/** The other language's thread, read-only (main/coachChat.ts ChatHistory). */
+type ChatHistory = {
+  contentLang: Language;
+  model: string;
+  messages: ChatMessage[];
+};
 type ChatState =
   | { status: "unsupported" }
-  | { status: "not-ready" }
+  | { status: "not-ready"; history?: ChatHistory }
   | {
       status: "ready";
       backend: string;
       model: string;
       messages: ChatMessage[];
       busy: boolean;
+      history?: ChatHistory;
     };
 
 /**
@@ -76,8 +85,11 @@ export function CoachChatCard({
          mount / matchId change */
     }
     return () => off?.();
+    // `lang`: main reads the chat file of the current language, so a switch
+    // must re-read it (codex B2#6) -- otherwise the old language's messages
+    // stay on screen unlabelled.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId]);
+  }, [matchId, lang]);
 
   useEffect(() => {
     if (msgsRef.current)
@@ -99,6 +111,11 @@ export function CoachChatCard({
    * owns the draft.
    */
   async function doSend(question: string, fromDraft: boolean) {
+    // The language is pinned at send (codex B2#1): the need-reseed retry
+    // reuses it, and main refuses it when it is no longer the language of the
+    // thread it would write -- a switch mid-flight must not put this
+    // question, or a seed from the other language, into the new thread.
+    const sendLang: Language = lang;
     setPending(question);
     setFailed(null);
     // Fix for the in-flight draft being wiped (final review F6a): the clear
@@ -110,7 +127,7 @@ export function CoachChatCard({
     // only when this send came from the draft (fromDraft) — see the note above.
     if (fromDraft) setDraft("");
     try {
-      let r = await bridge().chat.send({ matchId, question });
+      let r = await bridge().chat.send({ matchId, question, lang: sendLang });
       if (r.status === "need-reseed") {
         await ensureAnalysisData();
         const input = buildAnalysisInput(source, matchId);
@@ -119,9 +136,9 @@ export function CoachChatCard({
           contentLang?: string;
         } | null;
         // getCached may hand back the other language's result for display
-        // (spec §6.13); a coach thread in this language must not be seeded
-        // with it.
-        const sameLang = (cached?.contentLang ?? lang) === lang;
+        // (spec §6.13); a coach thread in the pinned language must not be
+        // seeded with it.
+        const sameLang = (cached?.contentLang ?? sendLang) === sendLang;
         const findingsSummary =
           ((sameLang ? cached?.findings : undefined) ?? [])
             .map((f, i) => `${i + 1}. ${f.title} — ${f.explanation ?? ""}`)
@@ -134,6 +151,7 @@ export function CoachChatCard({
         r = await bridge().chat.send({
           matchId,
           question,
+          lang: sendLang,
           seed: {
             richContext: input.richContext,
             spec: input.spec,
@@ -184,20 +202,46 @@ export function CoachChatCard({
       </div>
     );
   }
-  if (chatState.status === "not-ready") {
-    return (
-      <div className="coach-chat-card" data-testid="coach-chat-card">
-        <div className="coach-chat-empty">{t("report.chat.notReady")}</div>
-      </div>
-    );
-  }
-
   // Coach replies are Markdown (see derive/markdown): they routinely come back
   // with **bold** / headings / lists / tables, which used to reach the user as
   // literal characters. The user's own turn stays plain text — what they typed
   // is what they should see, not something re-interpreted as markup.
   const renderCoachReply = (content: string) =>
     renderMarkdown(content, rich ? (s: string) => rich(s) : undefined);
+  const renderMessage = (m: ChatMessage, i: number) => (
+    <div
+      key={i}
+      className={
+        m.role === "user"
+          ? "coach-chat-msg coach-chat-msg--user"
+          : "coach-chat-msg coach-chat-msg--coach"
+      }
+    >
+      {m.role === "assistant" ? renderCoachReply(m.content) : m.content}
+    </div>
+  );
+  // The other language's conversation (spec §6.13): shown as stored, read-only,
+  // under its language label; new sends start this language's thread.
+  const history = chatState.history;
+  const historyBlock = history ? (
+    <div
+      className="coach-chat-history"
+      data-testid="coach-chat-history"
+      data-content-lang={history.contentLang}
+    >
+      <ContentLangBadge contentLang={history.contentLang} />
+      {history.messages.map(renderMessage)}
+    </div>
+  ) : null;
+
+  if (chatState.status === "not-ready") {
+    return (
+      <div className="coach-chat-card" data-testid="coach-chat-card">
+        {historyBlock && <div className="coach-chat-msgs">{historyBlock}</div>}
+        <div className="coach-chat-empty">{t("report.chat.notReady")}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="coach-chat-card" data-testid="coach-chat-card">
@@ -205,18 +249,8 @@ export function CoachChatCard({
         {chatState.backend} · {chatState.model}
       </div>
       <div className="coach-chat-msgs" ref={msgsRef} tabIndex={0}>
-        {chatState.messages.map((m, i) => (
-          <div
-            key={i}
-            className={
-              m.role === "user"
-                ? "coach-chat-msg coach-chat-msg--user"
-                : "coach-chat-msg coach-chat-msg--coach"
-            }
-          >
-            {m.role === "assistant" ? renderCoachReply(m.content) : m.content}
-          </div>
-        ))}
+        {historyBlock}
+        {chatState.messages.map(renderMessage)}
         {pending && (
           <div className="coach-chat-msg coach-chat-msg--user">{pending}</div>
         )}

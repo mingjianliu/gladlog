@@ -384,6 +384,9 @@ export interface GladlogApi {
     send(input: {
       matchId: string;
       question: string;
+      /** UI language pinned when the user sent (reused by the need-reseed
+       * retry); main answers lang-mismatch when it is not the thread's. */
+      lang: Language;
       seed?: {
         richContext: string;
         spec: string;

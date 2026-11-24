@@ -780,6 +780,18 @@ pre {
   gap: 6px;
   padding: 4px 2px;
 }
+/* 另一种语言的聊天记录(spec §6.13):只读,带语言标签,和当前语言的对话隔开 */
+.coach-chat-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--ink-2);
+  opacity: 0.8;
+}
+.coach-chat-history .rpt-content-lang {
+  align-self: flex-start;
+}
 .coach-chat-msg {
   max-width: 80%;
   padding: 6px 10px;

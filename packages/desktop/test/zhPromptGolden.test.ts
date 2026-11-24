@@ -149,6 +149,7 @@ async function captureZhPrompts(): Promise<Record<string, string>> {
     await svc.send({
       matchId: "golden-1",
       question: "我这场为什么输了?",
+      lang: "zh",
       seed: {
         richContext: input.richContext,
         spec: input.spec,

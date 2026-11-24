@@ -12,6 +12,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -29,7 +30,7 @@ import {
 } from "vitest";
 
 import { StatsDashboard } from "../src/renderer/src/components/StatsDashboard";
-import { LangProvider } from "../src/renderer/src/i18n/LangProvider";
+import { LangProvider, useT } from "../src/renderer/src/i18n/LangProvider";
 import { CoachChatCard } from "../src/renderer/src/report/components/CoachChatCard";
 import { ContentLangBadge } from "../src/renderer/src/report/components/ContentLangBadge";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
@@ -501,5 +502,166 @@ describe("问教练重新播种不带另一种语言的 findings", () => {
 
   it("对照:同语言的结果照常写进播种摘要", async () => {
     expect(await seedSummaryFor("en")).toContain("死亡");
+  });
+});
+
+describe("问教练:发送时固定语言 + 另一种语言的历史(codex B2#1 / A#5 / B2#6)", () => {
+  /** Exposes the provider's setLang so a case can switch mid-flight. */
+  let switchLang: ((l: Language) => Promise<boolean>) | null = null;
+  function LangHandle() {
+    switchLang = useT().setLang;
+    return null;
+  }
+
+  it("need-reseed 重试沿用发送时的语言:两次 send 都带 zh,即使中途切到 en;回退判断按固定语言", async () => {
+    vi.mocked(buildAnalysisInput).mockReturnValue(fakeInput as never);
+    const send = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        await switchLang!("en"); // the user switches while the CLI resumes
+        return { status: "need-reseed" };
+      })
+      .mockResolvedValueOnce({ status: "lang-mismatch" });
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      settings: {
+        get: async () => ({ language: "zh" }),
+        save: async (p: unknown) => p,
+      },
+      chat: {
+        getState: async () => ({
+          status: "ready",
+          backend: "claude-cli",
+          model: "m",
+          messages: [],
+          busy: false,
+        }),
+        send,
+        cancel: async () => {},
+      },
+      analysis: {
+        getCached: async () => ({ ...zhResult, contentLang: "zh" }),
+        onDone: () => () => {},
+      },
+    };
+    render(
+      <LangProvider firstRunPicker={false}>
+        <LangHandle />
+        <CoachChatCard
+          source={{ units: {}, startInfo: {} } as unknown as ReportSource}
+          matchId="m1"
+        />
+      </LangProvider>,
+    );
+    fireEvent.change(await screen.findByRole("textbox"), {
+      target: { value: "为什么?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls.map((c) => c[0].lang)).toEqual(["zh", "zh"]);
+    // pinned zh: the zh result is this language's, so it seeds
+    expect(send.mock.calls[1]![0].seed.findingsSummary).toContain("死亡");
+  });
+
+  it("en 模式下只有 zh 的聊天记录:作为只读历史显示并带语言标签;not-ready 时无输入框", async () => {
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      settings: { get: async () => ({ language: "en" }) },
+      chat: {
+        getState: async () => ({
+          status: "not-ready",
+          history: {
+            contentLang: "zh",
+            model: "m",
+            messages: [
+              { role: "user", content: "为什么输了?", at: 1 },
+              { role: "assistant", content: "因为没交保命。", at: 1 },
+            ],
+          },
+        }),
+        send: vi.fn(),
+        cancel: async () => {},
+      },
+      analysis: { onDone: () => () => {} },
+    };
+    const { container } = render(
+      <LangProvider firstRunPicker={false}>
+        <CoachChatCard
+          source={{ units: {}, startInfo: {} } as unknown as ReportSource}
+          matchId="m1"
+        />
+      </LangProvider>,
+    );
+    expect(await screen.findByText("为什么输了?")).toBeTruthy();
+    expect(screen.getByText("因为没交保命。")).toBeTruthy();
+    expect(screen.getByTestId("content-lang-badge").textContent).toBe(
+      "Analyzed in Chinese",
+    );
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(visibleCjk(container)).toEqual([]);
+  });
+
+  it("ready 且有另一种语言的历史:历史带标签在上,新发送照常走当前语言", async () => {
+    const send = vi.fn().mockResolvedValue({ status: "ok", reply: "x" });
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      settings: { get: async () => ({ language: "en" }) },
+      chat: {
+        getState: async () => ({
+          status: "ready",
+          backend: "claude-cli",
+          model: "m",
+          messages: [],
+          busy: false,
+          history: {
+            contentLang: "zh",
+            model: "m",
+            messages: [{ role: "user", content: "旧问题", at: 1 }],
+          },
+        }),
+        send,
+        cancel: async () => {},
+      },
+      analysis: { onDone: () => () => {} },
+    };
+    render(
+      <LangProvider firstRunPicker={false}>
+        <CoachChatCard
+          source={{ units: {}, startInfo: {} } as unknown as ReportSource}
+          matchId="m1"
+        />
+      </LangProvider>,
+    );
+    expect(await screen.findByText("旧问题")).toBeTruthy();
+    expect(screen.getByTestId("content-lang-badge")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Ask the coach a question"), {
+      target: { value: "why?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send.mock.calls[0]![0].lang).toBe("en");
+  });
+
+  it("语言切换时卡片重新取聊天状态", async () => {
+    const getState = vi.fn().mockResolvedValue({ status: "not-ready" });
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      settings: {
+        get: async () => ({ language: "zh" }),
+        save: async (p: unknown) => p,
+      },
+      chat: { getState, send: vi.fn(), cancel: async () => {} },
+      analysis: { onDone: () => () => {} },
+    };
+    render(
+      <LangProvider firstRunPicker={false}>
+        <LangHandle />
+        <CoachChatCard
+          source={{ units: {}, startInfo: {} } as unknown as ReportSource}
+          matchId="m1"
+        />
+      </LangProvider>,
+    );
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await switchLang!("en");
+    });
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
   });
 });
