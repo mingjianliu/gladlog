@@ -76,6 +76,9 @@ export const zhReportReplay = {
     "血量画曲线;伤害/治疗/承伤/被治疗按每秒堆叠柱显示(全场口径,时间窗只高亮不裁剪)",
   "report.timeline.bandBurst": "击杀尝试 on {name}(团队伤害 {k}k)",
   "report.timeline.bandVuln": "{name} 脆弱且未被惩罚",
+  // the timeline's dampening-lane tooltip (zh kept byte-identical to the
+  // pre-i18n "Dampening N%", distinct from the replay badge's report.replay.damp)
+  "report.timeline.dampLane": "Dampening {pct}%",
   "report.timeline.clickReplay": "(点击回放)",
   "report.timeline.flowTotal": "{name} — 全场{metric} {amount}",
   "report.timeline.flowEmpty": "本场无「{metric}」数据",

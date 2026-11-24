@@ -102,7 +102,7 @@ describe("Timeline", () => {
     expect(rects[1]!.textContent).toContain("25%");
   });
 
-  it("dampening 泳道:pct=0 的段也画(透明)并带「衰减 0%」悬浮 —— 消灭开局的悬浮死区(#10 残留,2026-09-02)", () => {
+  it("dampening 泳道:pct=0 的段也画(透明)并带「Dampening 0%」悬浮 —— 消灭开局的悬浮死区(#10 残留,2026-09-02);zh 文字与改动前逐字节相同(codex B2#9)", () => {
     const data = deriveTimeline(m);
     const dampening = [
       { tS: 0, pct: 0 },
@@ -116,7 +116,7 @@ describe("Timeline", () => {
     // 0/0/10 -> two runs; the zero run is a real (hoverable) rect at opacity 0
     expect(rects).toHaveLength(2);
     expect(rects[0]!.getAttribute("opacity")).toBe("0");
-    expect(rects[0]!.textContent).toContain("衰减 0%");
+    expect(rects[0]!.textContent).toBe("Dampening 0%");
     expect(rects[1]!.textContent).toContain("10%");
   });
 
@@ -135,7 +135,7 @@ describe("Timeline", () => {
     );
     const rects = container.querySelectorAll("[data-testid='rpt-damp-lane']");
     expect(rects).toHaveLength(2);
-    expect(rects[0]!.textContent).toContain("衰减 42%");
+    expect(rects[0]!.textContent).toContain("Dampening 42%");
     // the first run starts at second 11, not at the left edge: a series that
     // started at 0 puts its first rect further left
     const fromZero = render(
@@ -158,9 +158,9 @@ describe("Timeline", () => {
     );
     const rects = container.querySelectorAll("[data-testid='rpt-damp-lane']");
     expect(rects).toHaveLength(2);
-    expect(rects[0]!.textContent).toContain("衰减 41%");
+    expect(rects[0]!.textContent).toContain("Dampening 41%");
     expect(rects[0]!.getAttribute("opacity")).toBe("0.41");
-    expect(rects[1]!.textContent).toContain("衰减 42%");
+    expect(rects[1]!.textContent).toContain("Dampening 42%");
     expect(rects[1]!.getAttribute("opacity")).toBe("0.42");
   });
 });

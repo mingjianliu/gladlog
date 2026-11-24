@@ -169,7 +169,10 @@ describe("GLOSSARY", () => {
 
 // §6.9 checks 2–4. Keys whose en value may equal the zh value (pure numbers,
 // symbols, proper nouns), each with a one-line reason. Keep it small.
-const IDENTICAL_OK: Partial<Record<MessageKey, string>> = {};
+const IDENTICAL_OK: Partial<Record<MessageKey, string>> = {
+  "report.timeline.dampLane":
+    "the zh timeline tooltip was English before i18n; zh rendering must stay byte-identical (codex B2#9)",
+};
 
 const KEYS = Object.keys(zhMessages) as MessageKey[];
 

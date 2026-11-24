@@ -85,6 +85,9 @@ export const enReportReplay = {
     "HP is drawn as curves; damage / healing / damage taken / healing taken as stacked per-second bars (whole match; a time window only highlights, it does not crop)",
   "report.timeline.bandBurst": "Kill attempt on {name} (team damage {k}k)",
   "report.timeline.bandVuln": "{name} vulnerable and unpunished",
+  // the timeline's dampening-lane tooltip (zh kept byte-identical to the
+  // pre-i18n "Dampening N%", distinct from the replay badge's report.replay.damp)
+  "report.timeline.dampLane": "Dampening {pct}%",
   "report.timeline.clickReplay": " (click to replay)",
   "report.timeline.flowTotal": "{name} — whole-match {metric} {amount}",
   "report.timeline.flowEmpty": "No “{metric}” data in this match",

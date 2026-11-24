@@ -502,7 +502,7 @@ export function Timeline({
               height={LANE_H}
               opacity={b.pct / 100}
             >
-              <title>{t("report.replay.damp", { pct: b.pct })}</title>
+              <title>{t("report.timeline.dampLane", { pct: b.pct })}</title>
             </rect>
           );
         })}
