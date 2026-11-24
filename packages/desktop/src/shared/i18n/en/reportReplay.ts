@@ -82,7 +82,7 @@ export const enReportReplay = {
   // ── Timeline.tsx ──
   "report.timeline.metricAria": "Curve metric",
   "report.timeline.metricTitle":
-    "HP is drawn as curves; damage / healing / damage taken / healing taken as stacked per-second bars (whole match; a time window only highlights, it does not crop)",
+    "One curve per unit; damage / healing / damage taken / healing taken are a {s}-second moving average of the per-second amount (whole match; a time window only highlights, it does not crop)",
   "report.timeline.bandBurst": "Kill attempt on {name} (team damage {k}k)",
   "report.timeline.bandVuln": "{name} vulnerable and unpunished",
   // the timeline's dampening-lane tooltip (zh kept byte-identical to the

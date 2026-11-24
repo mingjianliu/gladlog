@@ -7,6 +7,7 @@ import { classColor } from "../data/gameConstants";
 import {
   CURVE_METRIC_ORDER,
   type CurveMetric,
+  curveMetricLabel,
   FLOW_SMOOTH_S,
   type FlowSeriesData,
   smoothRate,
@@ -367,7 +368,7 @@ export function Timeline({
             aria-label={t("report.timeline.metricAria")}
             value={activeMetric}
             onChange={(e) => onMetric(e.target.value as CurveMetric)}
-            title={`每人一条曲线;伤害/治疗/承伤/被治疗为每秒量的 ${FLOW_SMOOTH_S} 秒滑动平均(全场口径,时间窗只高亮不裁剪)`}
+            title={t("report.timeline.metricTitle", { s: FLOW_SMOOTH_S })}
           >
             {CURVE_METRIC_ORDER.map((k) => (
               <option key={k} value={k}>
@@ -602,7 +603,13 @@ export function Timeline({
               onMouseEnter={() => setFocusUnitId(u.unitId)}
               onMouseLeave={() => setFocusUnitId(null)}
             >
-              <title>{`${shortUnitName(u.name)} — 全场${CURVE_METRIC_LABEL[activeMetric]} ${abbrevAmount(u.total)}`}</title>
+              <title>
+                {t("report.timeline.flowTotal", {
+                  name: shortUnitName(u.name),
+                  metric: curveMetricLabel(activeMetric, lang),
+                  amount: abbrevAmount(u.total, lang),
+                })}
+              </title>
             </path>
           );
         })}
@@ -872,7 +879,7 @@ export function Timeline({
                 Hidden units show nothing — they have no curve to read. */}
             {hoverBucket !== null && !hidden?.has(s.unitId) && (
               <span className="rpt-tl-legend-val" data-testid="tl-legend-val">
-                {abbrevAmount(rateAt(s.unitId))}/s
+                {abbrevAmount(rateAt(s.unitId), lang)}/s
               </span>
             )}
           </button>

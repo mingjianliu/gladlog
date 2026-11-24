@@ -73,7 +73,7 @@ export const zhReportReplay = {
   // ── Timeline.tsx ──
   "report.timeline.metricAria": "曲线指标",
   "report.timeline.metricTitle":
-    "血量画曲线;伤害/治疗/承伤/被治疗按每秒堆叠柱显示(全场口径,时间窗只高亮不裁剪)",
+    "每人一条曲线;伤害/治疗/承伤/被治疗为每秒量的 {s} 秒滑动平均(全场口径,时间窗只高亮不裁剪)",
   "report.timeline.bandBurst": "击杀尝试 on {name}(团队伤害 {k}k)",
   "report.timeline.bandVuln": "{name} 脆弱且未被惩罚",
   // the timeline's dampening-lane tooltip (zh kept byte-identical to the
