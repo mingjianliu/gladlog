@@ -70,6 +70,7 @@ function scan(o: {
   holders: Array<{ id: string; auras: any[]; casts?: any[] }>;
   debuffs: any[];
   lines: string[];
+  pets?: any[];
 }): string[] {
   const hs = o.holders.map((h) => ({
     id: h.id,
@@ -88,16 +89,22 @@ function scan(o: {
     auraEvents: o.debuffs,
   };
   const players = [...hs, e];
+  const units = [...players, ...(o.pets ?? [])];
   const out: string[] = [];
   run({
     lines: o.lines,
     rawLines: [],
     start: START,
     roundEndAt: at(600),
-    units: players,
+    legacy: {
+      startTime: START,
+      endTime: at(600),
+      units: Object.fromEntries(units.map((u) => [u.id, u])),
+    },
+    units,
     players,
     owner: e,
-    byName: new Map(players.map((p) => [p.name, p])),
+    byName: new Map(units.map((p) => [p.name, p])),
     unitOfPid: () => undefined,
     pidOf: () => undefined,
     bump: () => {},
@@ -117,10 +124,13 @@ const burst = (
   target: string,
   auraName: string,
   printed: string,
+  o: { hp?: boolean; when?: string } = {},
 ) => [
   `  Burst #1 — ${head}–${head.replace(/:\d\d$/, ":59")}`,
-  `    Target: ${target} 100% → 90%`,
-  `    Target had a major defensive up: ${auraName} active ON THE TARGET ${printed}s of this burst (already up)`,
+  o.hp === false
+    ? `    Target: ${target} | your damage 0.50M`
+    : `    Target: ${target} 100% → 90%`,
+  `    Target had a major defensive up: ${auraName} active ON THE TARGET ${printed}s of this burst (${o.when ?? "already up"})`,
 ];
 
 beforeAll(async () => {
@@ -202,5 +212,70 @@ describe("scan5 unseenEndOpener — the product's opener reading, row order kept
     });
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("Frost Nova");
+  });
+  it("a target line with no HP readings still names the target (-1c #1)", () => {
+    expect(
+      scan({
+        holders: [{ id: "h", auras: [applied("11327", "Vanish", 10, "h")] }],
+        debuffs: [debuff("1833", 10.1, "h")],
+        lines: burst("0:09", "h", "Vanish", "1.0", { hp: false }),
+      }),
+    ).toHaveLength(1);
+  });
+  it("a closed run before the burst does not hide the burst's own unclosed run (-1c #2)", () => {
+    expect(
+      scan({
+        holders: [
+          {
+            id: "h",
+            auras: [
+              applied("11327", "Vanish", 8.95, "h"),
+              removed("11327", "Vanish", 9.1, "h"),
+              applied("11327", "Vanish", 10, "h"),
+            ],
+          },
+        ],
+        debuffs: [debuff("1833", 10.1, "h")],
+        lines: burst("0:09", "h", "Vanish", "1.0", {
+          when: "pressed 0.1s after the burst opened",
+        }),
+      }),
+    ).toHaveLength(1);
+  });
+  it("a REFRESH before the logged REMOVED is a logged end: nothing to check (-1c #3)", () => {
+    expect(
+      scan({
+        holders: [
+          {
+            id: "h",
+            auras: [
+              applied("11327", "Vanish", 10, "h"),
+              aura(
+                LogEvent.SPELL_AURA_REFRESH,
+                "11327",
+                "Vanish",
+                10.3,
+                "h",
+                "h",
+                "BUFF",
+              ),
+              removed("11327", "Vanish", 11.5, "h"),
+            ],
+          },
+        ],
+        debuffs: [debuff("1833", 10.1, "h")],
+        lines: burst("0:09", "h", "Vanish", "1.5"),
+      }),
+    ).toEqual([]);
+  });
+  it("a pet of the target's name does not stand in for the target (-1c #4)", () => {
+    expect(
+      scan({
+        holders: [{ id: "h", auras: [applied("11327", "Vanish", 10, "h")] }],
+        debuffs: [debuff("1833", 10.1, "h")],
+        pets: [{ id: "pet", name: "h", reaction: 2, auraEvents: [] }],
+        lines: burst("0:09", "h", "Vanish", "1.0"),
+      }),
+    ).toHaveLength(1);
   });
 });

@@ -54,6 +54,7 @@ import {
   immunityCoversSpell,
   spellSchoolMask,
 } from "@gladlog/analysis/src/data/spellSchools";
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { stasisReplayWindows } from "@gladlog/analysis/src/utils/combatStates";
@@ -398,73 +399,102 @@ function wallHeldPastHold(ctx: IRoundCtx): void {
   }
 }
 
-const BURST_HEAD = /^\s*Burst #\d+ — (\d+:\d\d)–/;
+const BURST_HEAD = /^\s*Burst #\d+ — (\d+:\d\d)–(\d+:\d\d)/;
 const UNSEEN_LINE =
   /(.+?) active ON THE TARGET (\d+\.\d)s of this burst(?: \((already up|(?:pressed )?(<?\d+\.\d)s after))?/;
-
-const BURST_TARGET = /^\s*Target: (.+?) \d+% →/;
+/** the ledger's target line, with or without its HP readings (scan5 t114) */
+const BURST_TARGET = /^\s+Target: (.+?) (?:\d+% → |\| )/;
 
 function unseenEndOpener(ctx: IRoundCtx): void {
   // the ledger's sentence names the aura; its row sits under the burst head,
-  // below the burst's `Target:` line — the holder is that target
-  let burstAt: number | undefined;
+  // below the burst's `Target:` line — the holder is that target, a player
+  // (codex 85-mac-minifix-T261-1c #1 / #4: a target line with no HP
+  // readings; a pet of the same name)
+  let burst: { from: number; to: number } | undefined;
   let target: any;
   for (const line of ctx.lines) {
     const h = BURST_HEAD.exec(line);
     if (h) {
-      burstAt = ctx.start + secOf(h[1]!) * 1000;
+      burst = {
+        from: ctx.start + secOf(h[1]!) * 1000,
+        to: ctx.start + (secOf(h[2]!) + 1) * 1000,
+      };
       target = undefined;
     }
     const tl = BURST_TARGET.exec(line);
-    if (tl && burstAt !== undefined) target = ctx.byName.get(tl[1]!);
+    if (tl && burst) target = ctx.players.find((p: any) => p.name === tl[1]);
     const m = UNSEEN_LINE.exec(line);
-    if (!m || burstAt === undefined || !target) continue;
+    if (!m || !burst || !target) continue;
     const name = m[1]!.replace(/^.*: /, "").trim();
     const s = Number(m[2]);
     const after = m[4] ? Number(m[4].replace("<", "")) * 1000 : undefined;
     const u = target;
-    for (const id of idsNamed(u, name)) {
-      if (!SAVE_AURA_END_UNSEEN_IDS.has(id)) continue;
-      const rows = rowsOf(u, id);
-      // the line's own run first, among every run of the aura (codex
-      // 85-mac-minifix-T261-1b #1: picking among the unclosed runs only
-      // took a 0:20 Vanish for a 4:00 burst whose own run's REMOVED is
-      // logged); the head and the offset are both printed: a second either
-      // way
-      const runs = rows.filter((a) => ev(a) === APPLIED);
-      const run =
-        after !== undefined
-          ? runs.find((x) => Math.abs(tsOf(x) - burstAt! - after) <= 1200)
-          : runs.filter((x) => tsOf(x) <= burstAt! + 1000).pop();
-      if (run === undefined) continue;
-      // …then only a run whose end the log never showed
-      const next = rows[rows.indexOf(run) + 1];
-      if (next && ev(next) === REMOVED) continue;
-      const t = tsOf(run) as number;
-      ctx.bump("unseenEndOpener");
-      // the first debuff it landed on another unit after the application
-      // that opens something: the product's own reading and row
-      // (`holderOpenerDebuffAfter`, row order inside the application's
-      // millisecond — codex 85-mac-minifix-T261-1 #1, -1b #2)
-      const first: any = holderOpenerDebuffAfter(
-        u,
+    const burstAt = burst.from;
+    // the line's own run is one of the intervals the ledger itself reads
+    // (`buildAuraIntervals` on the target) that overlaps the burst — the
+    // one whose `pressed Ns after` puts the opening in the head's second,
+    // or the last one up by the head for `already up` — and only an end the interval builder could
+    // not see is checked (`inferredEnd`; codex 85-mac-minifix-T261-1b #1,
+    // -1c #2 / #3: a closed run before the burst, a REFRESH before the
+    // logged REMOVED)
+    const ivs = buildAuraIntervals(u, ctx.legacy)
+      .filter(
+        (iv) =>
+          SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId) &&
+          nameOf(iv.spellId, iv.spellName ?? "") === name &&
+          ctx.start + iv.fromS * 1000 < burst!.to &&
+          ctx.start + iv.toS * 1000 > burst!.from,
+      )
+      .map((iv) => ({ iv, fromMs: ctx.start + iv.fromS * 1000 }));
+    // `pressed Ns after`: the opening it implies (start − N) lies in the
+    // head's printed second, give or take the tenth's rounding (codex
+    // 85-mac-minifix-T261-1c #2: a run closed before a 0:09.9 opening sat
+    // nearer the floored head than the burst's own run)
+    const own =
+      after !== undefined
+        ? ivs
+            .filter(
+              (x) =>
+                x.fromMs - after >= burstAt - 100 &&
+                x.fromMs - after < burstAt + 1100,
+            )
+            .sort(
+              (x, y) =>
+                Math.abs(x.fromMs - burstAt - after) -
+                Math.abs(y.fromMs - burstAt - after),
+            )[0]
+        : ivs.filter((x) => x.fromMs <= burstAt + 1000).pop();
+    if (!own || !own.iv.inferredEnd) continue;
+    const id = own.iv.spellId;
+    // the application's own row (its index orders the rows of its
+    // millisecond)
+    const run = rowsOf(u, id).find(
+      (a) => ev(a) === APPLIED && Math.abs(tsOf(a) - own.fromMs) < 1,
+    );
+    const t = run ? (tsOf(run) as number) : own.fromMs;
+    ctx.bump("unseenEndOpener");
+    // the first debuff it landed on another unit after the application
+    // that opens something: the product's own reading and row
+    // (`holderOpenerDebuffAfter`, row order inside the application's
+    // millisecond — codex 85-mac-minifix-T261-1 #1, -1b #2)
+    const first: any = holderOpenerDebuffAfter(
+      u,
+      t,
+      id,
+      ctx.units,
+      run?.logLine?.lineIndex,
+    );
+    if (!first) continue;
+    const gap = (tsOf(first) - t) / 1000;
+    if (s > gap + 0.1)
+      ctx.violate(
+        "unseenEndOpener",
+        name,
         t,
-        id,
-        ctx.units,
-        run.logLine?.lineIndex,
+        `${u.name}#${id}#${t}`,
+        `${name} on ${u.name}: printed ${s}s, ${nameOf(first.spellId, first.spellName ?? "")} of theirs landed ${gap.toFixed(3)}s in`,
+        line,
       );
-      if (!first) continue;
-      const gap = (tsOf(first) - t) / 1000;
-      if (s > gap + 0.1)
-        ctx.violate(
-          "unseenEndOpener",
-          name,
-          t,
-          `${u.name}#${id}#${t}`,
-          `${name} on ${u.name}: printed ${s}s, ${nameOf(first.spellId, first.spellName ?? "")} of theirs landed ${gap.toFixed(3)}s in`,
-          line,
-        );
-    }
   }
 }
 
