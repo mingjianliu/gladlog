@@ -705,12 +705,25 @@ export function StatsDashboard({
                     // §6.13); the next consolidation fills in the current
                     // language lazily (see LearnedRule.description). The
                     // placeholder only shows when neither language exists.
+                    // Blank text counts as missing (codex B3fix#1: the
+                    // distillation audit accepts ""), and each badge follows
+                    // the language actually picked.
                     const otherLang = lang === "en" ? "zh" : "en";
-                    const desc =
-                      r.description[lang] ?? r.description[otherLang];
-                    const adv = r.advice[lang] ?? r.advice[otherLang];
-                    const descFallback = !r.description[lang] && !!desc;
-                    const advFallback = !r.advice[lang] && !!adv;
+                    const pick = (field: Partial<Record<Language, string>>) => {
+                      const has = (l: Language) => !!field[l]?.trim();
+                      const l = has(lang)
+                        ? lang
+                        : has(otherLang)
+                          ? otherLang
+                          : null;
+                      return l ? { text: field[l]!, lang: l } : null;
+                    };
+                    const descPick = pick(r.description);
+                    const advPick = pick(r.advice);
+                    const desc = descPick?.text;
+                    const adv = advPick?.text;
+                    const descFallback = descPick?.lang === otherLang;
+                    const advFallback = advPick?.lang === otherLang;
                     const max = Math.max(1, ...r.stats.trend);
                     return (
                       <div key={r.ruleId} className="dash-learning-rule">

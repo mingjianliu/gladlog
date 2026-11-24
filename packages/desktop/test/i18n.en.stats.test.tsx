@@ -341,4 +341,37 @@ describe("学到的规则:en 模式回退到中文描述时标语言(§6.13)", (
       rule.advice = prevAdv;
     }
   });
+
+  it("当前语言的文本是空串 / 空白:当作缺失,回退到另一种语言并标语言(codex B3fix#1)", async () => {
+    install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "en");
+    const prev = rule.description;
+    const prevAdv = rule.advice;
+    rule.description = { en: "", zh: "晚交饰品 {{hits}} 次" };
+    rule.advice = { en: "  ", zh: "早交饰品" };
+    try {
+      const { container } = render(
+        <LangProvider>
+          <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+        </LangProvider>,
+      );
+      await screen.findByText(/晚交饰品 4 次/);
+      const desc = container.querySelector(".dash-learning-desc")!;
+      const adv = container.querySelector(".dash-learning-advice")!;
+      expect(adv.textContent).toContain("早交饰品");
+      expect(desc.getAttribute("data-content-lang")).toBe("zh");
+      expect(adv.getAttribute("data-content-lang")).toBe("zh");
+      expect(
+        desc.querySelector("[data-testid=content-lang-badge]")?.textContent,
+      ).toBe("Analyzed in Chinese");
+      expect(
+        adv.querySelector("[data-testid=content-lang-badge]")?.textContent,
+      ).toBe("Analyzed in Chinese");
+      expect(container.textContent).not.toContain(
+        "(description arrives with the next consolidation)",
+      );
+    } finally {
+      rule.description = prev;
+      rule.advice = prevAdv;
+    }
+  });
 });
