@@ -18,7 +18,11 @@
  * Usage: npx tsx packages/eval/scripts/crisisProcMarkerProbe.ts --manifest <m> [--every 50]
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
-import { gridHpPct } from "@gladlog/analysis/src/utils/cooldowns";
+import { getSortedAdvancedActions } from "@gladlog/analysis/src/utils/advancedActions";
+import {
+  gridHpPct,
+  HP_SAMPLE_RADIUS_MS,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";
@@ -57,6 +61,15 @@ const CANDIDATES: Record<string, { talent: string; triggers?: string[] }> = {
   "209261": { talent: "Last Resort (Vengeance DH)" },
   "45182": { talent: "Cheat Death (Rogue) dr" },
   "45181": { talent: "Cheat Death (Rogue) icd" },
+  // T190 (2026-11-24): the rest of DB2's passive aura-316 talents
+  // (`cheatDeathTalentsFromInventory`) and their same-named logged ids
+  "1286444": { talent: "Cauterize (Mage) heal" },
+  "123982": { talent: "Purgatory (Blood DK) alt" },
+  "27827": { talent: "Spirit of Redemption (Holy Priest) form" },
+  "1265598": { talent: "Kill or Be Killed (Warrior) a" },
+  "1265600": { talent: "Kill or Be Killed (Warrior) b" },
+  "1265641": { talent: "Kill or Be Killed (Warrior) c" },
+  "1265646": { talent: "Kill or Be Killed (Warrior) d" },
 };
 // Guided Prayer: a Word of Glory 85673 cast on self at <= 25 % HP is the only
 // candidate pattern; count it separately, never treat it as detection.
@@ -78,6 +91,13 @@ interface Row {
   hpLe40: number;
   hpLe50: number;
   hpBuckets: Record<string, number>;
+  /** the unit's last HP reading strictly before the marker (a cheat-death
+   * sets the HP itself, so the grid reads its result): known / ≤ 20 % */
+  hpBeforeKnown: number;
+  hpBeforeLe20: number;
+  /** the unit died within 5 s after the marker */
+  diedWithin5s: number;
+  files: Set<string>;
   triggerCastWithin1s: number;
   noTriggerCast: number;
   units: Set<string>;
@@ -100,6 +120,10 @@ const rowOf = (id: string): Row =>
     hpLe40: 0,
     hpLe50: 0,
     hpBuckets: {},
+    hpBeforeKnown: 0,
+    hpBeforeLe20: 0,
+    diedWithin5s: 0,
+    files: new Set<string>(),
     triggerCastWithin1s: 0,
     noTriggerCast: 0,
     units: new Set<string>(),
@@ -151,6 +175,27 @@ for (const f of files) {
           const b = `${Math.floor(hp / 10) * 10}s`;
           row.hpBuckets[b] = (row.hpBuckets[b] ?? 0) + 1;
         }
+        row.files.add(f);
+        const before = getSortedAdvancedActions(u)
+          .filter(
+            (x) =>
+              x.advancedActorId === u.id &&
+              x.advancedActorMaxHp > 0 &&
+              x.logLine.timestamp < ts &&
+              ts - x.logLine.timestamp <= HP_SAMPLE_RADIUS_MS,
+          )
+          .at(-1);
+        if (before) {
+          row.hpBeforeKnown++;
+          if (before.advancedActorCurrentHp / before.advancedActorMaxHp <= 0.2)
+            row.hpBeforeLe20++;
+        }
+        if (
+          ((u.deathRecords ?? []) as any[]).some(
+            (d) => d.timestamp >= ts && d.timestamp - ts <= 5000,
+          )
+        )
+          row.diedWithin5s++;
         const trig = CANDIDATES[id]!.triggers;
         if (trig) {
           if (
@@ -185,6 +230,8 @@ for (const f of files) {
     }
   }
 }
-for (const r of Object.values(t.markers) as Row[])
+for (const r of Object.values(t.markers) as Row[]) {
   (r as any).units = r.units.size;
+  (r as any).files = r.files.size;
+}
 process.stdout.write(JSON.stringify(t, null, 2) + "\n");

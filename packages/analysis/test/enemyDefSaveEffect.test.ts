@@ -302,6 +302,9 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
         // Angelic Bulwark, the passive absorb (fact10 D25)
         applied("114214", 110, 1000),
         removed("114214", 112, 1000),
+        // Defy Fate (T190)
+        applied("404381", 120),
+        removed("404381", 128),
       ],
       healIn: [selfHeal("31616", 77)],
     });

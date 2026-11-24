@@ -454,6 +454,10 @@ export const ENEMY_PROC_SAVES: Readonly<
   // never without the heal but 31 times. One proc is one event
   // (the heal folds into an 87023 aura of the same instant).
   "1286444": { name: "Cauterize", effect: "cheat-death proc", via: "heal" },
+  // T190 (fact14 D22): Defy Fate — the talent 404195 is DB2 aura 316, mask
+  // 127, like Cheat Death and Cauterize; the log names it on the absorb row
+  // of the killing blow and puts 404381 on the evoker, self → self.
+  "404381": { name: "Defy Fate", effect: "cheat-death proc", via: "aura" },
 };
 
 /**

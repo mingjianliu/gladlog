@@ -2598,6 +2598,7 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
     expect([...ENEMY_PROC_SAVE_NAMES].sort()).toEqual([
       "Cauterize",
       "Cheat Death",
+      "Defy Fate",
       "Nature's Guardian",
     ]);
     // beside an external it is named after it, as before

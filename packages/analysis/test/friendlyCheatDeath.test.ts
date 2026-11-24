@@ -30,8 +30,10 @@ const unit = (id: string, auraEvents: unknown[]): any => ({
 
 describe("emitFriendlyCheatDeathEntries", () => {
   it("fact7 D46: a proc logged only as its heal gets its line; the heal and the debuff of one proc are one line (7acbefeb 1:09)", () => {
+    // the heal's own id (the log has no heal row under the burn's 87023:
+    // 0 of 96 on the 605 files)
     const heal = (s: number) => ({
-      spellId: "87023",
+      spellId: "1286444",
       spellName: "Cauterize",
       srcUnitId: "o",
       destUnitId: "o",
@@ -78,6 +80,43 @@ describe("emitFriendlyCheatDeathEntries", () => {
     expect(lines).toEqual([
       "2:46  [YOU] [PROC]   Cauterize (cheat-death proc)",
       "0:20  [TEAM] [PROC]   [m-R-US] (Fire Mage): Cheat Death (cheat-death proc)",
+    ]);
+  });
+
+  // T190 (fact14 D22, adc4288a 1:08): Defy Fate puts 404381 on the evoker,
+  // self → self, heals under that id for as long as it lasts, and puts the
+  // same aura on allies near it
+  it("Defy Fate: one line for the proc — not one per tick, not one per ally", () => {
+    const tick = (dest: string, s: number) => ({
+      spellId: "404381",
+      spellName: "Defy Fate",
+      srcUnitId: "o",
+      destUnitId: dest,
+      logLine: {
+        event: LogEvent.SPELL_PERIODIC_HEAL,
+        timestamp: T0 + s * 1000,
+      },
+    });
+    const owner = {
+      ...unit("o", [aura("404381", "o", "o", 68.675)]),
+      healIn: [tick("o", 68.675), tick("o", 70.9), tick("o", 73.2)],
+    };
+    const mate = {
+      ...unit("m", [aura("404381", "o", "m", 68.676)]),
+      healIn: [tick("m", 68.676), tick("m", 70.9)],
+    };
+    const lines: string[] = [];
+    emitFriendlyCheatDeathEntries({
+      owner,
+      friends: [owner, mate],
+      matchStartMs: T0,
+      matchEndSeconds: 200,
+      roundEndAtMs: T0 + 180_000,
+      pid: (n) => `[${n}]`,
+      addEntry: (_t, l) => lines.push(l),
+    });
+    expect(lines).toEqual([
+      "1:08  [YOU] [PROC]   Defy Fate (cheat-death proc)",
     ]);
   });
 });

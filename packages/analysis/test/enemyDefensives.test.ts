@@ -986,12 +986,17 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
       rowsOf("31616").map((r) => [r.effect, r.aura, r.basePoints]),
     ).toEqual([[136, 0, 40]]);
     // the talents behind the two proc auras: aura 316, mask 127
-    for (const talent of ["31230", "86949"])
+    for (const talent of ["31230", "86949", "404195"])
       expect(
         rowsOf(talent).some((r) => r.aura === 316 && r.misc0 === 0x7f),
         talent,
       ).toBe(true);
-    for (const id of [...Object.keys(ENEMY_PROC_SAVES), "31230", "86949"]) {
+    for (const id of [
+      ...Object.keys(ENEMY_PROC_SAVES),
+      "31230",
+      "86949",
+      "404195",
+    ]) {
       expect(immunitySchoolMask(id), id).toBeUndefined();
       expect(
         rowsOf(id).some((r) => r.aura === 39),
@@ -999,6 +1004,44 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
       ).toBe(false);
       expect(id in MITIGATION_TABLE, id).toBe(false);
       expect(isImmunitySaveAura(id), id).toBe(false);
+    }
+  });
+
+  // T190 (Curated-List forward check): DB2 names the cheat-death talents —
+  // a passive aura 316. Each is a proc save here, or is listed with why not.
+  // A talent a new build adds turns this red until it is read off the logs.
+  it("every DB2 passive aura-316 talent is a proc save or a documented gap", () => {
+    const rows = (
+      talentEffectInventory as unknown as {
+        rows: Array<{ spellId: string; aura: number; activation?: string }>;
+      }
+    ).rows;
+    const db2 = [
+      ...new Set(
+        rows
+          .filter((r) => r.aura === 316 && r.activation === "passive")
+          .map((r) => r.spellId),
+      ),
+    ].sort();
+    // talent → the logged marker in ENEMY_PROC_SAVES
+    const COVERED: Record<string, string> = {
+      "31230": "45182", // Cheat Death → Cheating Death
+      "86949": "87023", // Cauterize → its burn (and its heal 1286444)
+      "404195": "404381", // Defy Fate → its own aura, self → self
+    };
+    // not read: too few procs on the 605 files to tell the marker from a
+    // coincidence (crisisProcMarkerProbe 2026-11-24, 1,270 rounds); scan5
+    // t190 `cheatDeathProcNoLine` keeps flagging each proc of them
+    const GAPS = [
+      "114556", // Purgatory (Blood DK): 1 proc (116888 / 123981)
+      "1265361", // Kill or Be Killed (Warrior): 1 proc (1265598 / 1265600)
+      "209258", // Last Resort (Vengeance DH): 0 procs (209261)
+      "20711", // Spirit of Redemption (Holy Priest): 1 — the priest dies into the form
+    ];
+    expect(db2).toEqual([...Object.keys(COVERED), ...GAPS].sort());
+    for (const [talent, marker] of Object.entries(COVERED)) {
+      expect(ENEMY_PROC_SAVES[marker]?.effect, talent).toBe("cheat-death proc");
+      expect(CRISIS_PROC_ANSWERS.get(marker)?.kind, talent).toBe("cheatDeath");
     }
   });
 
@@ -1061,6 +1104,7 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
       ["Angelic Bulwark", "absorb"],
       ["Cauterize", "cheat-death proc"],
       ["Cheat Death", "cheat-death proc"],
+      ["Defy Fate", "cheat-death proc"],
       ["Feign Death", "absorb"],
       ["Nature's Guardian", "heal proc"],
       // a rider absorb shield (RIDER_ABSORB_SAVE_AURAS, user ruling 2026-10-20)

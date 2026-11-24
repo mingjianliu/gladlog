@@ -51,7 +51,8 @@ export interface CrisisProcAnswer {
 //   Golden Val'kyr 393108   aura 6/6 self, 6 ≤ 40 % (Prot only, 2 units)   → proc
 //   Cauterize 87023         aura 251/251 self, 244 ≤ 40 % (HP set to 35 %) → cheatDeath
 //   Cheat Death 45182       aura 25/25 self, 23 in the 0s bucket (7 % HP)  → cheatDeath
-// Rejected: Defy Fate (8 events, 1 unit, heals allies too), Purgatory (1),
+// Rejected: Defy Fate (8 events, 1 unit, heals allies too — listed since T190,
+// 2026-11-24: its self → self aura is the marker), Purgatory (1),
 // Last Resort 209261 (0), Battle-Scarred Veteran (0), Elixir of Determination
 // (2), Whirling Steel (15, only 2 ≤ 40 %), Dream Guide (hand-out buff),
 // Guided Prayer (no sibling id).
@@ -143,6 +144,22 @@ export const CRISIS_PROC_ANSWERS: ReadonlyMap<string, CrisisProcAnswer> =
         kind: "cheatDeath",
         via: "aura",
         triggers: new Set(["45182"]),
+      },
+    ],
+    // Defy Fate (Evoker, talent 404195 — DB2 aura 316 on every school):
+    // a killing blow is absorbed under the talent's id and the evoker puts
+    // 404381 "Defy Fate" on itself (and on allies near it, as a heal over
+    // time) with the Empty Hourglass marker 404369. The self → self aura is
+    // the marker; its ticks are heals under the same id. Rejected 2026-09-17
+    // on 8 events of one unit; T190 (fact14 D22, adc4288a 1:08) read it again
+    // on the 605 files — see the entry in `ENEMY_PROC_SAVES`.
+    [
+      "404381",
+      {
+        name: "Defy Fate",
+        kind: "cheatDeath",
+        via: "aura",
+        triggers: new Set(["404381"]),
       },
     ],
   ]);

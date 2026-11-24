@@ -119,7 +119,7 @@ describe("ruling D8: the effect saves sit in no immunity / wall set another read
     ...Object.keys(ENEMY_PROC_SAVES),
   ];
   // Feign Death's cast, and the talents behind the three procs
-  const UNLOGGED = ["5384", "30884", "31230", "86949"];
+  const UNLOGGED = ["5384", "30884", "31230", "86949", "404195"];
 
   beforeAll(async () => {
     await ensureAnalysisData();
@@ -130,6 +130,8 @@ describe("ruling D8: the effect saves sit in no immunity / wall set another read
       "1286444",
       "202748",
       "31616",
+      // Defy Fate (T190: the same DB2 aura 316 as Cheat Death and Cauterize)
+      "404381",
       "45182",
       "87023",
     ]);
