@@ -1269,39 +1269,47 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
   // B192 review 3 (b4112ca9 r1 0:39): Well-Honed Instincts' Frenzied
   // Regeneration — the aura and the proc's marker 382912 in one millisecond,
   // no cast row — is the talent's cast, not a press: `self-saved (…)`. The
-  // druid's own press of it stays `popped`.
+  // druid's own press of it stays `popped` — and so does a proc's activation
+  // with the druid's own press of it inside the span too (review 4, 36-3
+  // 0:30 then 0:32).
+  const frCast = (atS: number): any => ({
+    spellId: "22842",
+    srcUnitId: "e1",
+    destUnitId: "e1",
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
   it.each([
-    [false, "self-saved \\(Frenzied Regeneration\\)"],
-    [true, "popped Frenzied Regeneration"],
+    ["proc", "self-saved \\(Frenzied Regeneration\\)"],
+    ["press", "popped Frenzied Regeneration"],
+    ["proc then press", "popped Frenzied Regeneration"],
   ])(
-    "Frenzied Regeneration inside the span, pressed=%s → FAILED: %s",
-    async (pressed, cause) => {
+    "Frenzied Regeneration inside the span, %s → FAILED: %s",
+    async (kind, cause) => {
       await ensureAnalysisData();
+      const proc = kind !== "press";
       const a = attempt(
         unit("e1", {
           auraEvents: [
             ...stunAuras("e1", KIDNEY, 10, 5),
             auraOn("22842", "e1", 12),
-            ...(pressed ? [] : [auraOn("382912", "e1", 12)]),
+            ...(proc ? [auraOn("382912", "e1", 12)] : []),
+            ...(kind === "proc then press" ? [auraOn("22842", "e1", 14)] : []),
           ],
-          spellCastEvents: pressed
-            ? [
-                {
-                  spellId: "22842",
-                  srcUnitId: "e1",
-                  logLine: {
-                    event: LogEvent.SPELL_CAST_SUCCESS,
-                    timestamp: ms(12),
-                    parameters: [],
-                  },
-                },
-              ]
-            : [],
+          spellCastEvents:
+            kind === "press"
+              ? [frCast(12)]
+              : kind === "proc then press"
+                ? [frCast(14)]
+                : [],
         }),
       );
       expect(a.attribution?.selfSaved).toEqual(["Frenzied Regeneration"]);
       expect(text(a)).toMatch(new RegExp(`FAILED: ${cause}$`, "m"));
-      expect(text(a).includes(KILL_ATTEMPTS_PROC_LEGEND)).toBe(!pressed);
+      expect(text(a).includes(KILL_ATTEMPTS_PROC_LEGEND)).toBe(kind === "proc");
     },
   );
 

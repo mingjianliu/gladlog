@@ -2715,7 +2715,15 @@ function attributeFailure(
       );
       if (!stillUp) continue;
     }
-    if (selfSaved.includes(c.spellName)) continue;
+    if (selfSaved.includes(c.spellName)) {
+      // a press of the save that counts for the span too is stated: a proc's
+      // own activation reads `self-saved (X)` only when no press of X counts
+      // (B192 review 4 — 36-3 0:30 / 130-1 0:52: Well-Honed Instincts'
+      // Frenzied Regeneration, the druid's own press of it 1–2 s on)
+      const k = c.procOwned ? -1 : selfSavedByProc.indexOf(c.spellName);
+      if (k >= 0) selfSavedByProc.splice(k, 1);
+      continue;
+    }
     if (!absorbCovers(c.spellId)) continue;
     selfSaved.push(c.spellName);
     selfSavedAtS.push(c.atSeconds);
