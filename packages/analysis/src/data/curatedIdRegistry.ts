@@ -364,6 +364,7 @@ import {
   PER_PRESS_STACK_COOLDOWNS,
   STACKED_RATE_CARRIERS,
   TIME_SPIRAL_FREE_PRESSES,
+  UNPRICED_COOLDOWN_TALENTS,
   UP_TO_COOLDOWN_REDUCTIONS,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
@@ -1506,6 +1507,17 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         r.talentSpellId,
         r.auraId,
       ]),
+    ],
+  ),
+  t(
+    "UNPRICED_COOLDOWN_TALENTS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(UNPRICED_COOLDOWN_TALENTS),
+      ...Object.values(UNPRICED_COOLDOWN_TALENTS).map(
+        (r) => r.talentSpellId,
+      ),
     ],
   ),
   t("STACKED_RATE_CARRIERS", "data/talentScriptedCooldowns.ts", "aura", () =>

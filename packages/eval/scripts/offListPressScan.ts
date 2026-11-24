@@ -159,7 +159,9 @@ for (const f of files) {
             t: p.timeSeconds,
           }),
         );
-      } else if (next) {
+      } else if (next && !p.cooldownUnpriced) {
+        // (a press whose cooldown the model does not price states no
+        // return — T244, `cooldownUnpriced`: nothing printed to check)
         a.backChecked++;
         if (next.timeSeconds < p.readyAgainAtSeconds - CD_INSTANT_SLACK_S) {
           a.backAfterNextPress++;

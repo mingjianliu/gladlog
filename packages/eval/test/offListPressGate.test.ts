@@ -60,6 +60,36 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
+describe("offListPressLine — a line with no detail suffix (T244)", () => {
+  // an Eminence holder's Transcendence: Transfer prints the press alone
+  const monk = (ms: number[]) => ({
+    id: "p1",
+    name: "Monk",
+    spellCastEvents: ms.map((t) => cast("119996", t)),
+    auraEvents: [],
+  });
+  const LINE =
+    "0:28  [PRESS]   1(MMonk) (Mistweaver Monk): Transcendence: Transfer";
+
+  it("is checked against the log like any other: its press is there", () => {
+    expect(scan(monk([28_300]), [LINE])).toEqual([]);
+  });
+
+  it("a second copy of it with one press in the log is noPress", () => {
+    const seen = scan(monk([28_300]), [LINE, LINE]);
+    expect(seen.map((v) => v.kind)).toEqual(["noPress"]);
+    expect(seen[0]!.detail).toBe("Transcendence: Transfer at 0:28");
+  });
+
+  it("a `(free press)` suffix alone is read as the suffix, not the name", () => {
+    const seen = scan(monk([28_300, 33_100]), [
+      LINE,
+      "0:33  [PRESS]   1(MMonk) (Mistweaver Monk): Transcendence: Transfer (free press)",
+    ]);
+    expect(seen).toEqual([]);
+  });
+});
+
 describe("offListPressLine — the next press", () => {
   it("free status belongs to the press its line names, not to its second", () => {
     // Sprint at 0:10, a Time-Spiral-free one at 1:10.1, an ordinary at 1:10.8

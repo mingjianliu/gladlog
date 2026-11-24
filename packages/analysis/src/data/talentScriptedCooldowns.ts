@@ -2427,6 +2427,32 @@ export const TIME_SPIRAL_FREE_PRESSES: Readonly<
   "375258": { spellIds: ["6544"], note: "Warrior — Heroic Leap" },
 };
 /**
+ * A talent whose effect on a spell's cooldown the log does not let the
+ * model price — keyed by the spell. A `[PRESS]` line of a holder states the
+ * press and no cooldown (pipeline T244, codex 85-tk-L1-T244-1 / -1b).
+ * Eminence 353584 (Mistweaver): Transcendence: Transfer can be cast while
+ * stunned, "cooldown reduced by 15 sec if you are not". DB2: one dummy aura
+ * (SpellEffect 885458, aura 4, no mask, base points -15000) — a server
+ * script. The corpus does not agree with one reading: 5ca963aa r4, a
+ * stunned press 0:32.261, the free return unstunned 0:34.638, the next paid
+ * press accepted 1:04.642 (30.0 s after the RETURN); d430e832 r1, an
+ * unstunned press 0:48.961 with no return, "Not yet recovered" 43.7 s later
+ * (no 30 s); 0b15235a, unstunned 5:44.755, stunned return 5:49.218, "Not
+ * yet recovered" at 6:25.246. Re-press gaps past the 10 s free window,
+ * holders by COMBATANT_INFO: downloaded logs — holders 61, 5 inside
+ * 30–44.5 s, non-holders 58, none under 45.4 s. So 45 s is wrong for some
+ * presses and 30 s for others, and which is not established.
+ */
+export const UNPRICED_COOLDOWN_TALENTS: Readonly<
+  Record<string, { talentSpellId: string; note: string }>
+> = {
+  "119996": {
+    talentSpellId: "353584",
+    note: "Eminence — Transcendence: Transfer's cooldown is 30 or 45 s by a rule the log does not settle",
+  },
+};
+
+/**
  * A talent that shortens a press's OWN cooldown by the stacks of a buff the
  * holder had up just before it (GH #183) — keyed by the spell. Cycle of
  * Hatred 258887 (Havoc): "Activating Eye Beam reduces the cooldown of your

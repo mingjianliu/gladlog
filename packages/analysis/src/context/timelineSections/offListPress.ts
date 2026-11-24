@@ -99,15 +99,18 @@ export function emitOffListPressEntries(
         }`,
       );
     const cd = Math.round(p.cooldownSeconds * 10) / 10;
-    parts.push(
-      p.equipped
-        ? `${p.equipped} equipped, ${seconds(cd)} cd each`
-        : p.charges > 1
-          ? `${p.charges} charges, ${seconds(cd)} cd`
-          : `${seconds(cd)} cd`,
-    );
+    // T244: a cooldown the model cannot price for this unit (Eminence on
+    // Transcendence: Transfer) is not stated, nor its return
+    if (!p.cooldownUnpriced)
+      parts.push(
+        p.equipped
+          ? `${p.equipped} equipped, ${seconds(cd)} cd each`
+          : p.charges > 1
+            ? `${p.charges} charges, ${seconds(cd)} cd`
+            : `${seconds(cd)} cd`,
+      );
     if (p.free) parts.push("free press");
-    if (p.readyAgainAtSeconds !== null)
+    if (p.readyAgainAtSeconds !== null && !p.cooldownUnpriced)
       parts.push(
         cdWholeSecond(p.readyAgainAtSeconds) > sec
           ? // T111 / R47: a haste-scaled cooldown is back sooner than its
@@ -124,7 +127,7 @@ export function emitOffListPressEntries(
                 ? "ready again"
                 : "reset, ready again",
       );
-    const what = `${name} (${parts.join(", ")})`;
+    const what = parts.length ? `${name} (${parts.join(", ")})` : name;
     const line =
       p.unit.id === owner.id
         ? `${fmtTime(p.timeSeconds)}  [YOU] ${OFF_LIST_PRESS_TAG}   ${what}`

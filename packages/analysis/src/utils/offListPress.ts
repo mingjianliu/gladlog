@@ -27,6 +27,7 @@ import { BUFF_FADE_EARLY_TOLERANCE_S } from "../context/timelineHelpers";
 import { NO_CAST_LOG_PRESS_IDS } from "../data/auraActivation";
 import { effectAurasOfCast } from "../data/castEffectAuras";
 import { classMetadata } from "../data/classSpells";
+import { healerSaveCdStripDefensive } from "../data/healerSaveCd";
 import {
   PRESS_CHAIN_HANDOVER_MS,
   PRESS_EFFECT_CHAIN_AURAS,
@@ -37,7 +38,11 @@ import {
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
   PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT,
 } from "../data/spellEffectData";
-import { timeSpiralEchoMs } from "../data/talentScriptedCooldowns";
+import { SpellTag } from "../data/spellTypes";
+import {
+  timeSpiralEchoMs,
+  UNPRICED_COOLDOWN_TALENTS,
+} from "../data/talentScriptedCooldowns";
 import {
   buffDurationIsFloorForCaster,
   buffFullDurationForCaster,
@@ -53,13 +58,18 @@ import { isStasisReplayCast } from "./combatStates";
 import {
   canonicalSpellId,
   type IMajorCooldownInfo,
+  playerTalentIdSets,
   pressReadyAgainAtSeconds,
+  specToString,
+  spellAliasIds,
   unitCooldownEntry,
+  unitCooldownLedger,
   unreleasedHoldMs,
 } from "./cooldowns";
 import { isEffectHolderUnit } from "./effectHolder";
 import { SAVE_CAST_AURA_PAIR_S } from "./enemyDefensives";
 import { isResyncBatchAt } from "./hiddenPress";
+import { logInstantOf } from "./logEra";
 import {
   OFFENSIVE_CD_SPELL_IDS,
   OFFENSIVE_PRESS_FACT_IDS,
@@ -166,6 +176,56 @@ export function isOffListPressId(id: string): boolean {
   );
 }
 
+/**
+ * Pipeline T244: a roster press this unit's own ledger does not carry — the
+ * `[PRESS]` line's to print as well. `isRosterPressId` asks the hand rosters,
+ * not the unit: a healer's generated save roster drops a catalog `Defensive`
+ * tag it rules out (`healerSaveCdStripDefensive` — an escape, CC relief, a
+ * button measured below the door), and a spell with no other tag then leaves
+ * that unit's ledger altogether (Transcendence: Transfer 119996 on a
+ * Mistweaver: 71 teammate presses on the 605 files with no line anywhere —
+ * no `[TEAM] [CD]`, and no `[PRESS]` because the catalog still lists it).
+ * Keyed on that mechanism and on the resolved ledger (`unitCooldownLedger`),
+ * with every other condition of `isOffListPressId`.
+ */
+export function isLedgerDroppedRosterPress(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+  id: string,
+): boolean {
+  if (
+    !isRosterPressId(id) ||
+    !(
+      (effectiveCooldownSeconds(id) ?? 0) >= PRESS_LINE_MIN_CD_SECONDS ||
+      PRESS_LINE_WHITELIST_IDS.has(id)
+    ) ||
+    TRINKET_LINE_IDS.has(id) ||
+    FILLED_HEAL_IDS.has(id) ||
+    OFFENSIVE_PRESS_FACT_IDS.has(id)
+  )
+    return false;
+  const strip = healerSaveCdStripDefensive(specToString(unit.spec));
+  const canon = canonicalSpellId(id);
+  if (!strip.has(id) && !strip.has(canon)) return false;
+  // …and the strip is what took it off the ledger: `Defensive` was the
+  // catalog's only tag (`extractMajorCooldowns` removes the row then). A
+  // stripped id with another tag stays a ledger row unless something else
+  // drops it — an unpicked talent, a form re-shift — and that is no press
+  // for this line (codex 85-tk-L1-T244-1 #2)
+  const tags = classMetadata
+    .find((c) => c.unitClass === unit.class)
+    ?.abilities.find((a) => a.spellId === id || a.spellId === canon)?.tags;
+  if (!tags?.length || !tags.every((t) => t === SpellTag.Defensive))
+    return false;
+  const at = logInstantOf(combat, combat.startTime);
+  return !unitCooldownLedger(unit, combat).some(
+    (cd) =>
+      cd.spellId === id ||
+      cd.spellId === canon ||
+      spellAliasIds(cd.spellId, at).includes(id),
+  );
+}
+
 const FIRST_UNIT = /(?:^|[\s(])(\d+)\(/;
 const BY_UNIT = /^ \((?:by|from) (\d+)\(/;
 const OWNED_BY_UNIT = /(\d+)\([^)]*\)'s (?:\w+'s )?$/;
@@ -249,6 +309,10 @@ export interface IOffListPress {
   /** the model's cooldown for this unit (talents and charges resolved) */
   cooldownSeconds: number;
   charges: number;
+  /** the unit holds a talent whose effect on this cooldown the model
+   * cannot price (`UNPRICED_COOLDOWN_TALENTS`): the line states the press
+   * and neither `cooldownSeconds` nor a return */
+  cooldownUnpriced?: true;
   /** when the model gives a press back (`pressReadyAgainAtSeconds`); the
    * press's own second = a charge is still in hand; null = the model does
    * not count this row as a press of its entry */
@@ -285,7 +349,20 @@ function upToPress(entry: IMajorCooldownInfo, t: number): IMajorCooldownInfo {
   const keep = (c: { timeSeconds: number }) => c.timeSeconds <= t + 0.05;
   return {
     ...entry,
-    casts: entry.casts.filter(keep),
+    // T244: the press that opens a free-recast window (Escape from Reality:
+    // Transcendence: Transfer again within 10 s) has spent its cooldown — the
+    // window is one more press, not a reset. `cdAvailableAt` answers "in
+    // hand" inside the window, which is right for readiness and would print
+    // the opener `reset, ready again`: 51 of the 71 teammate Transfers of the
+    // 605 files, 31 of them with no second press. The line states when the
+    // cooldown it spent is back; the free press, when made, has its own line.
+    casts: entry.casts
+      .filter(keep)
+      .map((c) =>
+        c.freeRecastUntil !== undefined
+          ? { ...c, freeRecastUntil: undefined }
+          : c,
+      ),
     ...(entry.sharedCasts
       ? { sharedCasts: entry.sharedCasts.filter(keep) }
       : {}),
@@ -930,6 +1007,23 @@ export function pressDuration(
   return undefined;
 }
 
+/** Does the unit hold a talent that changes this spell's cooldown by a rule
+ * the model cannot price (`UNPRICED_COOLDOWN_TALENTS`)? */
+export function holdsUnpricedCooldownTalent(
+  unit: ICombatUnit,
+  spellId: string,
+): boolean {
+  const row =
+    UNPRICED_COOLDOWN_TALENTS[spellId] ??
+    UNPRICED_COOLDOWN_TALENTS[canonicalSpellId(spellId)];
+  if (!row) return false;
+  const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(unit);
+  return (
+    pvpTalentIds.has(row.talentSpellId) ||
+    !!talentedSpellIds?.has(row.talentSpellId)
+  );
+}
+
 /** The round's off-list presses of every player, in time order. */
 export function extractOffListPresses(
   players: readonly ICombatUnit[],
@@ -945,7 +1039,14 @@ export function extractOffListPresses(
         continue;
       const at = c.logLine.timestamp;
       if (at < combat.startTime || at > roundEndAtMs) continue;
-      if (!isOffListPressId(c.spellId) || isNoPressRow(c, rows)) continue;
+      if (
+        !(
+          isOffListPressId(c.spellId) ||
+          isLedgerDroppedRosterPress(unit, combat, c.spellId)
+        ) ||
+        isNoPressRow(c, rows)
+      )
+        continue;
       // Stasis replaying a stored spell: its copy, not a press (the ledger's
       // own reading, `isStasisReplayCast`)
       if (isStasisReplayCast(unit, c.spellId, at)) continue;
@@ -988,6 +1089,9 @@ export function extractOffListPresses(
           )?.baseCooldownSeconds ?? entry.cooldownSeconds,
         charges: entry.charges ?? 1,
         readyAgainAtSeconds: pressReadyAgainAtSeconds(upToPress(entry, t), t),
+        ...(holdsUnpricedCooldownTalent(unit, c.spellId)
+          ? { cooldownUnpriced: true as const }
+          : {}),
         ...(entry.casts.some(
           (k) =>
             k.freeRecast && !k.unreleased && Math.abs(k.timeSeconds - t) < 0.05,

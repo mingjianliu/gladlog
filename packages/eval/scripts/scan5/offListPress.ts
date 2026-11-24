@@ -100,8 +100,11 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "pressLastsCutShort|no cause row | enemy | other",
 ]);
 
+/** the detail suffix is absent on a press whose cooldown is not priced
+ * (T244: an Eminence holder's Transcendence: Transfer prints the press
+ * alone) — the line is still a press to find in the log */
 const PRESS_LINE =
-  /^\s*(\d+:\d\d)\s+(\[YOU\] )?\[PRESS\]\s+(?:(\d+)\([^)]*\) \([^)]*\): )?(.+) \(([^()]*)\)\s*$/;
+  /^\s*(\d+:\d\d)\s+(\[YOU\] )?\[PRESS\]\s+(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?)(?: \(([^()]*)\))?\s*$/;
 /** the back time may sit this far before the next press: a floored row */
 const BACK_SLACK_MS = 2000;
 /** an aura's logged life this far past the printed length is beyond it */
@@ -251,7 +254,7 @@ function matchPressLines(ctx: IRoundCtx): {
         Math.floor((tsOf(c) - ctx.start) / 1000) === second &&
         !unreleasedHoldMs(unit, String(c.spellId), [tsOf(c)]).length,
     )[k];
-    if (press && /\bfree press\b/.test(m[5]!)) freeRows.add(press);
+    if (press && /\bfree press\b/.test(m[5] ?? "")) freeRows.add(press);
     matched.push({ line, m, second, unit, presses, press });
   }
   return { matched, freeRows };
@@ -277,7 +280,7 @@ function backBeforeNext(
 ): IBackBeforeNext | undefined {
   if (!unit || !press) return undefined;
   const at = tsOf(press);
-  const back = /back (\d+:\d\d)/.exec(m[5]!)?.[1];
+  const back = /back (\d+:\d\d)/.exec(m[5] ?? "")?.[1];
   if (!back) return undefined;
   const backMs = ctx.start + secOf(back) * 1000;
   // the row itself, not its time: another player's free press in the
@@ -331,7 +334,7 @@ export function run(ctx: IRoundCtx): void {
     const { line, m, second, unit, press } = one;
     ctx.bump("offListPressLine");
     const name = m[4]!;
-    const fields = m[5]!;
+    const fields = m[5] ?? "";
     const at0 = ctx.start + second * 1000;
     if (!unit || !press) {
       ctx.violate(
