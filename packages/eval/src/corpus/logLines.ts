@@ -25,19 +25,24 @@ export function readLogBytes(path: string): Buffer {
 }
 
 /** Calls `onLine` for each line of `buf`, in order, as `buf.toString("utf8")
- * .split("\n")` would produce them. */
+ * .split("\n")` would produce them. Throws (ERR_STRING_TOO_LONG) on a single
+ * line past V8's string limit -- the caller decides what that file is. */
 export function forEachLogLine(
   buf: Buffer,
   onLine: (line: string) => void,
 ): void {
   let start = 0;
   for (;;) {
-    const nl = buf.indexOf(0x0a, start);
-    if (nl === -1) {
-      onLine(buf.toString("utf8", start));
+    // Search and decode views from `start`, never pass `start` as an
+    // offset: `buf.indexOf(0x0a, start)` clamps it to 2^31 - 1, so past
+    // 2 GiB the walk found the same newline forever (codex review).
+    const rest = buf.subarray(start);
+    const rel = rest.indexOf(0x0a);
+    if (rel === -1) {
+      onLine(rest.toString("utf8"));
       return;
     }
-    onLine(buf.toString("utf8", start, nl));
-    start = nl + 1;
+    onLine(rest.subarray(0, rel).toString("utf8"));
+    start += rel + 1;
   }
 }

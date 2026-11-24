@@ -118,18 +118,18 @@ for (const f of files) {
   // Line by line off the Buffer, never one whole-file string (GH #228: a log
   // decompressing past V8's 536,870,888-char string limit was "unreadable"
   // on every machine). The raw-streams file pass rides the same walk.
-  let bytes: Buffer;
+  const streams = args.rawStreams ? rawStreamsAbsoluteCollector() : null;
   try {
-    bytes = readLogBytes(p);
+    // a single line past the string limit throws here: that file is
+    // unreadable, the rest of the manifest still runs (codex review)
+    forEachLogLine(readLogBytes(p), (line) => {
+      parser.push(line);
+      streams?.push(line);
+    });
   } catch {
     unreadable.push(f);
     continue;
   }
-  const streams = args.rawStreams ? rawStreamsAbsoluteCollector() : null;
-  forEachLogLine(bytes, (line) => {
-    parser.push(line);
-    streams?.push(line);
-  });
   parser.end();
   // An empty file reads as no raw text at all (the old `text` was "" →
   // falsy → no streams), not as an unavailable pass.
