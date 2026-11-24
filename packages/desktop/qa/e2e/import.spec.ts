@@ -1,16 +1,20 @@
 import { _electron as electron, expect, test } from "@playwright/test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import { rmSync, writeFileSync } from "fs";
 import { join } from "path";
 
 // A relative path rather than the package name: @gladlog/parser's main points at
 // src/index.ts and there is no exports map, so Node cannot resolve deep
 // subpaths (Playwright runs under Node ESM, not through Vite).
 import { synthArenaLog } from "../../../parser/src/testing/synthLog";
-import { BOOT_TIMEOUT_MS, MAIN_ENTRY, matchRows } from "../support/launch";
+import {
+  BOOT_TIMEOUT_MS,
+  freshUserData,
+  MAIN_ENTRY,
+  matchRows,
+} from "../support/launch";
 
 test("链路1:导入日志 → 比赛列表 → 三视图都有内容", async () => {
-  const userData = mkdtempSync(join(tmpdir(), "gladlog-e2e-"));
+  const userData = freshUserData("gladlog-e2e-");
   const logPath = join(userData, "WoWCombatLog-e2e.txt");
   writeFileSync(logPath, synthArenaLog(), "utf-8");
 

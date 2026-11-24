@@ -1,19 +1,17 @@
 import { _electron as electron, expect, test } from "@playwright/test";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
-import { tmpdir } from "os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 
 // A relative path rather than the package name: @gladlog/parser's main points
 // at src/index.ts and there is no exports map, so Node cannot resolve deep
 // subpaths (Playwright runs under Node ESM, not through Vite).
 import { synthArenaLog } from "../../../parser/src/testing/synthLog";
-import { BOOT_TIMEOUT_MS, MAIN_ENTRY, matchRows } from "../support/launch";
+import {
+  BOOT_TIMEOUT_MS,
+  freshUserData,
+  MAIN_ENTRY,
+  matchRows,
+} from "../support/launch";
 
 /**
  * C3 export fidelity (image path): export renders **the same renderer** in an
@@ -23,7 +21,7 @@ import { BOOT_TIMEOUT_MS, MAIN_ENTRY, matchRows } from "../support/launch";
  * viewport).
  */
 test("链路4:导出图片 → 整页 PNG 落盘且尺寸为全文高度", async () => {
-  const userData = mkdtempSync(join(tmpdir(), "gladlog-e2e-img-"));
+  const userData = freshUserData("gladlog-e2e-img-");
   const logPath = join(userData, "WoWCombatLog-e2e.txt");
   writeFileSync(logPath, synthArenaLog(), "utf-8");
 

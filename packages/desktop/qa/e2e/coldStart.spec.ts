@@ -1,10 +1,8 @@
 import { _electron as electron, expect, test } from "@playwright/test";
-import { mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { rmSync } from "fs";
 
 import { BUDGET_MS, reportBudget } from "../budgets";
-import { BOOT_TIMEOUT_MS, MAIN_ENTRY } from "../support/launch";
+import { BOOT_TIMEOUT_MS, freshUserData, MAIN_ENTRY } from "../support/launch";
 
 /**
  * Cold start budget: from `launch()` until the first screen is interactive.
@@ -20,7 +18,7 @@ import { BOOT_TIMEOUT_MS, MAIN_ENTRY } from "../support/launch";
 test("应用冷启动在预算内(未锁定时只测量)", async () => {
   const samples: number[] = [];
   for (let i = 0; i < 3; i++) {
-    const userData = mkdtempSync(join(tmpdir(), "gladlog-e2e-cold-"));
+    const userData = freshUserData("gladlog-e2e-cold-");
     const t0 = Date.now();
     const app = await electron.launch({
       args: [MAIN_ENTRY],

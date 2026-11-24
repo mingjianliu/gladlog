@@ -5,7 +5,8 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
-import { readdirSync } from "fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -20,6 +21,19 @@ export const MAIN_ENTRY = resolve(
  *  2026-07-19 switch of big JSON to JSON.parse; before that it was ~25s). 15s
  *  leaves ample headroom for slow CI runners. */
 export const BOOT_TIMEOUT_MS = 15_000;
+
+/** A fresh userData dir with the UI language already chosen (zh). A fresh
+ * install otherwise opens on the first-run language picker (spec §6.7), which
+ * sits in front of the onboarding screen every journey starts from. */
+export function freshUserData(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  writeFileSync(
+    join(dir, "settings.json"),
+    JSON.stringify({ language: "zh" }),
+    "utf-8",
+  );
+  return dir;
+}
 
 export async function launchApp(
   userData: string,

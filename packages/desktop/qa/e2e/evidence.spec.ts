@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import { rmSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import { synthArenaLog } from "../../../parser/src/testing/synthLog";
 import {
   BOOT_TIMEOUT_MS,
   firstMatchId,
+  freshUserData,
   importLog,
   launchApp,
   openAiView,
@@ -14,7 +14,7 @@ import {
 import { seedAnalysis } from "../support/seedAnalysis";
 
 test("链路2:点 finding 深挖 chip → 回放跳到该时刻", async () => {
-  const userData = mkdtempSync(join(tmpdir(), "gladlog-e2e-"));
+  const userData = freshUserData("gladlog-e2e-");
   const logPath = join(userData, "WoWCombatLog-e2e.txt");
   writeFileSync(logPath, synthArenaLog(), "utf-8");
 
