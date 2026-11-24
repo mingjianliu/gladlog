@@ -149,6 +149,51 @@ export function hiddenAuraLifeMs(
     : Infinity;
 }
 
+/**
+ * Is the aura of `row` — an APPLIED of the unit's own aura on itself, one of
+ * `rows` (the unit's own rows, re-broadcasts dropped) — already up just
+ * before it: the log re-listing an aura still running, not a new
+ * application? An aura is up only within its life (`hiddenAuraLifeMs`: the
+ * official, caster-resolved length + the lost-REMOVED slack) from the row
+ * that started its run — an APPLIED made while it was not up, or its latest
+ * REFRESH — or until its REMOVED, whichever comes first; never until a
+ * REMOVED the log does not show. An APPLIED while it is up (the unit's
+ * re-listing batch) re-states the run and does not restart its clock.
+ * Pipeline T259 (8416188b r1: Frenzied Regeneration pressed 20:01:57.596,
+ * no REMOVED, re-listed in a 19-row batch at 58.885; the Well-Honed
+ * Instincts proc at 20:02:02.347 was read as that run re-listed and lost its
+ * line). A row not among `rows` is not up.
+ */
+export function ownAuraUpBeforeRow<
+  R extends {
+    spellId?: string | null;
+    logLine: { event: string; timestamp: number };
+  },
+>(caster: unknown, rows: readonly R[], row: R): boolean {
+  const id = row.spellId;
+  if (!id) return false;
+  const life = (ms: number) => hiddenAuraLifeMs(id, caster, ms);
+  let runAt: number | undefined;
+  for (const b of rows) {
+    if (b === row) {
+      return (
+        runAt !== undefined && row.logLine.timestamp <= runAt + life(runAt)
+      );
+    }
+    if (b.spellId !== id) continue;
+    const t = b.logLine.timestamp;
+    const ev = b.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_REMOVED) runAt = undefined;
+    else if (ev === LogEvent.SPELL_AURA_REFRESH) runAt = t;
+    else if (
+      ev === LogEvent.SPELL_AURA_APPLIED &&
+      (runAt === undefined || t > runAt + life(runAt))
+    )
+      runAt = t;
+  }
+  return false;
+}
+
 /** A same-named id that is a press of its own — the form variants of one
  * button (Stampeding Roar 106898 / bear 77761 / cat 77764: each an 8 s aura
  * with the 120 s cooldown in DB2). The ledger's variant-press rule

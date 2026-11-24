@@ -92,6 +92,7 @@ import {
   hiddenPressCandidates,
   hiddenPressMs,
   isResyncBatchAt,
+  ownAuraUpBeforeRow,
 } from "./hiddenPress";
 import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
@@ -1418,21 +1419,14 @@ export function selfSaveCasts(
   for (const id of SELF_SAVE_IDS)
     for (const a of pressIdsOf(id))
       if (!castOfAura.has(a)) castOfAura.set(a, id);
-  // an APPLIED of an aura the unit already had up (an earlier APPLIED of it,
-  // no REMOVED since)
-  const ownRows = (enemy.auraEvents ?? []).filter(
-    (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
+  // an APPLIED of an aura the unit already had up — within its life from
+  // the row that started its run, not until a REMOVED the log never showed
+  // (`ownAuraUpBeforeRow`, T259)
+  const ownRows = dropAuraRebroadcasts(
+    (enemy.auraEvents ?? []).filter(
+      (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
+    ),
   );
-  const relistedWhileUp = (a: (typeof ownRows)[number]): boolean => {
-    let up = false;
-    for (const b of ownRows) {
-      if (b === a) return up;
-      if (b.spellId !== a.spellId) continue;
-      if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) up = false;
-      else if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) up = true;
-    }
-    return false;
-  };
   const pressMsByCast = new Map<string, number[]>();
   for (const a of dropAuraRebroadcasts(enemy.auraEvents ?? [])) {
     if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
@@ -1453,9 +1447,11 @@ export function selfSaveCasts(
     // on top of it, with its own line (18e3feae r4: the proc 0:41 at 41 %,
     // the press 0:42). Once: a re-listing of the aura still up is the same
     // activation (codex 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588,
-    // re-listed with its marker at 5:06.232).
+    // re-listed with its marker at 5:06.232) — up within its life only, not
+    // until a REMOVED (T259, 8416188b r1: the press 4.75 s earlier logged no
+    // REMOVED, and the proc lost its line).
     if (isProcOwnActivationAt(enemy, castId, ms)) {
-      if (relistedWhileUp(a)) continue;
+      if (ownAuraUpBeforeRow(enemy, ownRows, a)) continue;
     } else {
       if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
       const presses =

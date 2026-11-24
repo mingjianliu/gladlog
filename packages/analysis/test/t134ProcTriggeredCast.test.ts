@@ -17,7 +17,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { unitCooldownEntry } from "../src/utils/cooldowns";
 import { isAvailableAt } from "../src/utils/deathOutcomeAnalysis";
 import { selfSaveCasts } from "../src/utils/enemyDefensives";
-import { hiddenPressMs } from "../src/utils/hiddenPress";
+import { hiddenPressMs, ownAuraUpBeforeRow } from "../src/utils/hiddenPress";
 import {
   isProcOwnActivationAt,
   ownProcMarkers,
@@ -163,5 +163,54 @@ describe("selfSaveCasts: a re-listed proc aura (codex 85-tk-CD-T134-1 #1)", () =
       makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, FR, at(s), "p1", "p1", "BUFF");
     const u = druid([], [304.588, 306.233], [fr(304.588), fr(306.232)]);
     expect(selfSaveCasts(u, START).map((c) => c.atSeconds)).toEqual([304.588]);
+  });
+});
+
+describe("selfSaveCasts: an aura is up only within its life, not until a REMOVED (T259)", () => {
+  const fr = (s: number, ev = LogEvent.SPELL_AURA_APPLIED) =>
+    makeAuraEvent(ev, FR, at(s), "p1", "p1", "BUFF");
+  it("8416188b r1 shape: pressed, no REMOVED, re-listed in a batch 1.3 s later, the proc 4.75 s after the press — its line stays", () => {
+    // pressed 117.596 (cast row + aura), re-listed 118.885, the proc 122.347
+    // with its marker and no cast row; DB2 3 s (+1 s lost-REMOVED slack)
+    const u = druid([117.596], [122.347], [
+      fr(117.596),
+      fr(118.885),
+      fr(122.347),
+    ]);
+    expect(
+      selfSaveCasts(u, START).map((c) => [c.atSeconds, !!c.noPressLogged]),
+    ).toEqual([
+      [117.596, false],
+      [122.347, true],
+    ]);
+  });
+  it("a re-listing does not restart the run's clock: the proc 3.5 s after the re-listing, 4.75 s after the press, is new", () => {
+    const u = druid([], [122.347], [fr(117.596), fr(118.885), fr(122.347)]);
+    expect(ownAuraUpBeforeRow(u, u.auraEvents, u.auraEvents[2]!)).toBe(false);
+    expect(ownAuraUpBeforeRow(u, u.auraEvents, u.auraEvents[1]!)).toBe(true);
+  });
+  it("inside the life (+1 s slack) of the run's start it is still the same activation", () => {
+    const u = druid([], [100, 103.9], [fr(100), fr(103.9)]);
+    expect(selfSaveCasts(u, START).map((c) => c.atSeconds)).toEqual([100]);
+    const v = druid([], [100, 104.1], [fr(100), fr(104.1)]);
+    expect(selfSaveCasts(v, START).map((c) => c.atSeconds)).toEqual([
+      100, 104.1,
+    ]);
+  });
+  it("a REFRESH restarts the run; a REMOVED ends it", () => {
+    const u = druid([], [100, 106], [
+      fr(100),
+      fr(103, LogEvent.SPELL_AURA_REFRESH),
+      fr(106),
+    ]);
+    expect(selfSaveCasts(u, START).map((c) => c.atSeconds)).toEqual([100]);
+    const v = druid([], [100, 101.5], [
+      fr(100),
+      fr(101, LogEvent.SPELL_AURA_REMOVED),
+      fr(101.5),
+    ]);
+    expect(selfSaveCasts(v, START).map((c) => c.atSeconds)).toEqual([
+      100, 101.5,
+    ]);
   });
 });
