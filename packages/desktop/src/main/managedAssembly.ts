@@ -287,6 +287,10 @@ async function doAssemble(deps: AssembleManagedRecordingDeps): Promise<void> {
     // recorder.ts's attemptManagedStart using probe() instead of trusting a
     // non-throwing call's mere completion).
     const health = await backend.probe();
+    // Shut down while configureSession() was still running (app quit during
+    // startup, GH #213 review): the session is over -- no "not ready"
+    // status, no WoW watcher for a backend that will never record.
+    if (health.disposed) return;
     if (!health.ready) {
       deps.emitStatus({
         enabled: s.recordingEnabled,

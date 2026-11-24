@@ -27,6 +27,12 @@ export interface BackendHealth {
   /** 采集源是否真的挂上了画面(黑帧探针的结果)。 */
   sourceActive: boolean;
   lastError: string | null;
+  /** true once the backend has been shut down for good (managed OBS, GH
+   * #213: shutdown() is terminal). A caller still finishing setup work that
+   * began before the shutdown -- the managed assembly's configureSession()
+   * during app quit -- stops there instead of reporting "not ready" or
+   * starting the WoW watcher. Absent = not disposed. */
+  disposed?: boolean;
 }
 
 export interface CaptureBackend {

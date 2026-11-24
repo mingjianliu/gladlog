@@ -1438,6 +1438,27 @@ describe("shutdown 与在途连接(GH #213)", () => {
     expect((await backend.probe()).lastError).toBe(before);
   });
 
+  it("配置途中 shutdown:配置的后半段不把会话标成配好、不跑截图探针,probe 报 disposed(复审四)", async () => {
+    let releaseItem!: () => void;
+    fake.handlers.GetSceneItemId = () =>
+      new Promise((r) => {
+        releaseItem = () => r({ sceneItemId: 7 });
+      });
+    const backend = makeBackend();
+    const conf = backend.configureSession();
+    await vi.waitFor(() =>
+      expect(order(fake)).toContain("call:GetSceneItemId"),
+    );
+    await backend.shutdown();
+    releaseItem();
+    await conf;
+    expect(order(fake)).not.toContain("call:SaveSourceScreenshot");
+    const health = await backend.probe();
+    expect(health.disposed).toBe(true);
+    expect(health.ready).toBe(false);
+    expect(health.encoder).toBeNull();
+  });
+
   it("shutdown 之后每个入口都不再连 OBS(shutdown 是终态;复审三 #1)", async () => {
     const backend = makeBackend();
     await backend.configureSession();

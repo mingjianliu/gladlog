@@ -65,6 +65,7 @@ class Harness {
       encoder: string | null;
       sourceActive: boolean;
       lastError: string | null;
+      disposed?: boolean;
     }>;
   }) {
     this.installed = opts?.installed ?? true;
@@ -275,6 +276,27 @@ describe("assembleManagedRecording (task-5b Step 1 测试矩阵)", () => {
     expect(h.statuses).toHaveLength(1); // the ONLY status pushed comes from the probe check
     expect(h.statuses[0]?.lastError).toContain("ECONNREFUSED");
     expect(h.statuses[0]?.connected).toBe(false);
+  });
+
+  it("配置途中 backend 被 shutdown(启动时退出应用,GH #213):不推「未就绪」、不起 WoW 监视", async () => {
+    const h = new Harness({
+      installed: true,
+      probe: async () => {
+        h.order.push("probe");
+        return {
+          ready: false,
+          encoder: null,
+          sourceActive: false,
+          lastError: null,
+          disposed: true,
+        };
+      },
+    });
+    await assembleManagedRecording(h.deps);
+    expect(h.order).toContain("probe");
+    expect(h.statuses).toEqual([]);
+    expect(h.order).not.toContain("createWowProcessWatch");
+    expect(h.order).not.toContain("watch.start");
   });
 
   it("④ managedActive=false(三种子情形:未启用/external/非win32)→ 全程零调用", async () => {

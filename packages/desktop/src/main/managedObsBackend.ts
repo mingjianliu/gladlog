@@ -827,6 +827,7 @@ export function createManagedObsBackend(
       encoder,
       sourceActive,
       lastError,
+      ...(disposed ? { disposed: true } : {}),
     };
   }
 
@@ -901,6 +902,10 @@ export function createManagedObsBackend(
     }
     await fitCaptureToCanvas();
     await ensureAudioWired();
+    // A shutdown() during the steps above disposed the backend (GH #213
+    // review): marking it configured would bring back `encoder` and run the
+    // capture probe on no connection.
+    if (disposed) return;
     sessionConfigured = true;
     encoder = PINNED_ENCODER;
     await captureProbe();
