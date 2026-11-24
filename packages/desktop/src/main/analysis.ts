@@ -1798,14 +1798,19 @@ export function createAnalysisService(deps: {
       // in-flight run/deepen -- the global version would also abort another
       // match the user is manually analyzing (agy flash review F1).
       if (matchId !== undefined) {
-        if (generations.has(matchId)) generations.set(matchId, ++genSeq);
+        // Drop the entry outright: generation values are never reused, so
+        // an in-flight round sees "not current" exactly as with a bumped
+        // value -- and nothing is left behind when that round then exits
+        // through a stale-generation return that skips its own reaping (a
+        // stream rejecting after the cancel; codex review of GH #230).
+        generations.delete(matchId);
         running.delete(matchId);
         runningMeta.delete(matchId); // 与 running 同生命周期(agy review #3:漏删则每个取消过的场泄一个对象)
         return;
       }
-      // Cancel everything: a fresh value for every match's generation, so
-      // every running run/deepen loop aborts on its next tick.
-      for (const id of generations.keys()) generations.set(id, ++genSeq);
+      // Cancel everything: every running run/deepen loop aborts on its next
+      // tick (same reasoning as the targeted cancel above).
+      generations.clear();
       running.clear();
       runningMeta.clear();
     },

@@ -144,7 +144,13 @@ export function StructuredAnalysisPanel({
   // checked displayedSlotKey === activeKey, it would deep-dive the previous
   // slot's result.findings into the active slot during that interim state.
   const resultOwnerRef = useRef<"active" | "other">("active");
-  const displayedSlotKey = selectedSlotKey ?? activeKey;
+  // The shown result is a round whose cache write failed (GH #230: done with
+  // `persisted: false`). It belongs to no saved slot, so no tab is
+  // highlighted -- otherwise the still-active older slot's tab would sit over
+  // this text and clicking it would be a no-op. Any tab click, new result or
+  // match/language switch clears it.
+  const [unsaved, setUnsaved] = useState(false);
+  const displayedSlotKey = unsaved ? null : (selectedSlotKey ?? activeKey);
   // UI language, which is also the coach reply language (spec §6.12): the main
   // side injects it into the system prompt and caches per language key, so the
   // cache query below re-runs when it changes. GH #26 root cause (2026-09-02):
@@ -315,6 +321,7 @@ export function StructuredAnalysisPanel({
     // Match/language switch: back to "follow activeKey"; the slot summary is
     // backfilled by the query below.
     setSelectedSlotKey(null);
+    setUnsaved(false);
     setDisplayEmpty(null); // match/language switch: the old match's placeholder state must not carry over
     slotRequestRef.current = null;
     resultOwnerRef.current = "active";
@@ -430,6 +437,7 @@ export function StructuredAnalysisPanel({
           result: unknown;
           slotKey?: string;
           contentLang?: Language;
+          persisted?: false;
         }) => {
           if (d.matchId !== matchId) return;
           // A round pinned to another language (started before a language
@@ -459,6 +467,11 @@ export function StructuredAnalysisPanel({
           // newest slot", regardless of which model ran it, so owner is
           // constantly "active" here; no branching on d.slotKey.
           resultOwnerRef.current = "active";
+          // Except an unsaved round (GH #230): not the active slot's content
+          // (that slot is still the older one on disk), so no auto deep dive
+          // -- main would refuse it anyway, its findings not being the slot's.
+          if (d.persisted === false) resultOwnerRef.current = "other";
+          setUnsaved(d.persisted === false);
           // contentLang rides on the event, not inside the stored result: a
           // round started before a language switch finishes in the language
           // it started in (Review Focus 4) and is labelled as such.
@@ -733,6 +746,7 @@ export function StructuredAnalysisPanel({
   const handleSelectSlot = (key: string) => {
     if (key === displayedSlotKey) return;
     const forMatch = matchId;
+    setUnsaved(false);
     setSelectedSlotKey(key);
     slotRequestRef.current = key;
     void bridge()

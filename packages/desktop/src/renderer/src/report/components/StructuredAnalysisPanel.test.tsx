@@ -104,7 +104,9 @@ describe("StructuredAnalysisPanel", () => {
       ...result,
       selfReview: {
         status: "reviewed",
-        original: [{ ...result.findings[0], explanation: "第30秒阵亡,没人管。" }],
+        original: [
+          { ...result.findings[0], explanation: "第30秒阵亡,没人管。" },
+        ],
       },
     };
     fx.analysis.getState.mockResolvedValue(stateOf(reviewed));
@@ -537,6 +539,48 @@ describe("多模型槽 tab 切换(Task 3)", () => {
       getDoneCb()?.({ matchId: "m1", result: freshResult });
     });
     expect(await screen.findByText(/刚跑完的最新结果/)).toBeTruthy();
+  });
+
+  it("没写进缓存的一轮(persisted:false):不高亮任何 tab,点仍激活的旧槽能切回去(GH #230)", async () => {
+    const { getDoneCb } = twoSlotFixture();
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await screen.findByText(/第30秒阵亡/);
+    const tabs = await screen.findByTestId("analysis-slot-tabs");
+    const activeTabs = () =>
+      within(tabs)
+        .getAllByRole("button")
+        .filter((b) => b.className.split(/\s+/).includes("active"));
+    expect(activeTabs()).toHaveLength(1); // agy:pro, the active slot
+    act(() => {
+      (getDoneCb() as unknown as (d: Record<string, unknown>) => void)?.({
+        matchId: "m1",
+        result: {
+          findings: [
+            {
+              eventIds: ["e3"],
+              severity: "high",
+              category: "survival",
+              title: "没存下的",
+              explanation: "这一轮写盘失败了。",
+            },
+          ],
+          dropped: 0,
+          hadNarration: true,
+        },
+        persisted: false,
+      });
+    });
+    await screen.findByText(/这一轮写盘失败了/);
+    // getState still says agy:pro is active (nothing was written)
+    await waitFor(() => expect(activeTabs()).toHaveLength(0));
+    fireEvent.click(within(tabs).getAllByRole("button")[1]); // agy:pro
+    expect(await screen.findByText(/第30秒阵亡/)).toBeTruthy();
+    expect(activeTabs()).toHaveLength(1);
   });
 
   it("onDone 后重新拉取 getState,tab 条按最新槽摘要更新(agy flash 复核 F2)", async () => {

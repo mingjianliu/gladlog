@@ -1354,7 +1354,10 @@ describe("deepen 幂等守卫(周度复核 P2#4)", () => {
     ]);
     let releaseOldDive!: () => void;
     const oldDiveStuck = new Promise<void>((r) => (releaseOldDive = r));
-    // Call order: 1 run, 2 old deep dive (stuck), 3 re-analysis, 4 new deep dive.
+    let releaseNewDive!: () => void;
+    const newDiveStuck = new Promise<void>((r) => (releaseNewDive = r));
+    // Call order: 1 run, 2 old deep dive (stuck), 3 re-analysis, 4 new deep
+    // dive (held open while the old one exits).
     let calls = 0;
     const emitted: Array<{ ch: string; p: any }> = [];
     const s = createAnalysisService({
@@ -1366,6 +1369,7 @@ describe("deepen 幂等守卫(周度复核 P2#4)", () => {
             const n = ++calls;
             return (async function* () {
               if (n === 2) await oldDiveStuck;
+              if (n === 4) await newDiveStuck;
               yield { delta: n === 2 || n === 4 ? divePayload : runReply };
             })();
           },
@@ -1404,13 +1408,23 @@ describe("deepen 幂等守卫(周度复核 P2#4)", () => {
     await vi.waitFor(() => expect(calls).toBe(2));
     await s.run(input); // lands while the old deep dive still waits
     emitted.length = 0;
-    await dive(); // the panel's deep dive for the new result
-    expect(calls).toBe(4); // not dropped: a model call was made
-    const done = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
-    expect(done.p.result.deepened).toBe(true);
-    expect(done.p.result.findings[0].deepDive).toBeDefined();
+    const newDive = dive(); // the panel's deep dive for the new result
+    await vi.waitFor(() => expect(calls).toBe(4)); // not dropped
+    // The superseded one exits first: no done, and its finally must not free
+    // the guard the new one now holds.
     releaseOldDive();
-    await oldDive; // exits as superseded, writes nothing
+    await oldDive;
+    expect(emitted.filter((e) => e.ch === "gladlog:analysis:done")).toEqual(
+      [],
+    );
+    await dive(); // a duplicate trigger while the new one is in flight
+    expect(calls).toBe(4);
+    releaseNewDive();
+    await newDive;
+    const dones = emitted.filter((e) => e.ch === "gladlog:analysis:done");
+    expect(dones).toHaveLength(1);
+    expect(dones[0]!.p.result.deepened).toBe(true);
+    expect(dones[0]!.p.result.findings[0].deepDive).toBeDefined();
     const cached = (await s.getCached("m1"))!;
     expect(cached.deepened).toBe(true);
     expect(cached.findings[0].deepDive).toBeDefined();
@@ -2013,6 +2027,22 @@ describe("代际条目回收(周度复核 P3#9)", () => {
     await p;
     expect(s.__generationCount()).toBe(0); // reaped once it lands
     expect((await s.getState("m1")).cached).not.toBeNull(); // not wrongly aborted
+  });
+
+  it("取消后流才报错:不留世代条目(codex 复审 GH #230)", async () => {
+    const rejects: Array<(e: Error) => void> = [];
+    const s = await mkSvc(async function* () {
+      await new Promise<void>((_, rej) => rejects.push(rej));
+      yield { delta: "[]" };
+    });
+    const a = s.run(input("m1"));
+    const b = s.run(input("m2"));
+    await vi.waitFor(() => expect(rejects).toHaveLength(2));
+    await s.cancel("m1");
+    await s.cancel();
+    for (const r of rejects) r(new Error("stream aborted"));
+    await Promise.all([a, b]);
+    expect(s.__generationCount()).toBe(0);
   });
 
   // GH #230 enabler: generation values used to be a per-match count starting
