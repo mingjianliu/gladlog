@@ -9,22 +9,28 @@
  * re-stating batch at 58.885, the proc at 20:02:02.347 — the head printed no
  * line for it (T134's re-listing test had no time bound).
  *
- *  - `procActivationNoLine`: per owner context, every NEW proc activation —
- *    of a proc whose spell is a save a line states (`SELF_SAVE_IDS`) —
- *    the marker's APPLIED (self → self) while the marker is not already up
- *    (no earlier APPLIED of it within its DB2 length with no REMOVED since:
- *    the lockout makes a second proc inside it impossible, so such a row is
- *    the log re-listing the marker), beside an APPLIED of an aura the proc
- *    casts within the proc's pairing — and no SPELL_CAST_SUCCESS of that
- *    spell around it (a press line covers it then). A violation when no
- *    press line (`[ENEMY DEF]`, `[YOU] [PROC]`, …) naming the spell on that
- *    unit lies within 1 s. Kind `<side>/<spell>`. Checked = such
- *    activations. Truth from the marker and the log rows only, never
- *    through `selfSaveCasts`.
+ *  - `procActivationNoLine`: per owner context, every NEW proc activation
+ *    on an enemy (the `[ENEMY DEF]` lines `selfSaveCasts` feeds) of a proc
+ *    whose spell is a save a line states (`SELF_SAVE_IDS`): the marker's
+ *    APPLIED (self → self) while the marker is not already up — no APPLIED
+ *    that started a run of it within its DB2 length before, with no REMOVED
+ *    since (the lockout makes a second proc inside it impossible, so such a
+ *    row is the log re-listing the marker; a run past its length is over,
+ *    and the next APPLIED starts a new one) — beside an APPLIED of an aura
+ *    the proc casts within the proc's pairing. A violation when no
+ *    `[ENEMY DEF]` line naming the spell with the no-press tag
+ *    (`ENEMY_DEF_NO_PRESS_TAG`) on that unit lies within 1 s: the proc's
+ *    own line, whatever press stands beside it (18e3feae r4: the proc 0:41,
+ *    the player's press 0:42 with its own line — codex 85-mac-minifix-T259-1
+ *    #2). Kind `enemy/<spell>`. Checked = such activations. Truth from the
+ *    marker and the log rows only, never through `selfSaveCasts`.
  */
 import { CRISIS_PROC_ANSWERS } from "@gladlog/analysis/src/data/crisisProcAnswers";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
-import { SELF_SAVE_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  ENEMY_DEF_NO_PRESS_TAG,
+  SELF_SAVE_IDS,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { PROC_OWN_ACTIVATION_PAIR_MS } from "@gladlog/analysis/src/utils/procTriggeredCast";
 
 import {
@@ -34,29 +40,24 @@ import {
   type IRoundCtx,
   nameOf,
   REMOVED,
-  successesOf,
   tsOf,
 } from "./ctx";
 
 export const CHECKS = ["procActivationNoLine"] as const;
 
 const TIMED = /^\s*(\d+):(\d\d)\s/;
-const PRESS_LINE =
-  /\[(YOU|TEAM)\] \[(CD|CC|PROC|CAST)\]|\[ENEMY (CD|DEF|UTILITY|HEAL CD)\]/;
 const FIRST_PID = /(?:^|\s)(\d+)\(/;
-/** a cast row this close to the proc is a press, with its own line */
-const PRESS_BEFORE_MS = 3000;
-const PRESS_AFTER_MS = 1500;
 
 export function run(ctx: IRoundCtx): void {
   if (!ctx.owner) return;
   const timed: { t: number; text: string }[] = [];
   for (const l of ctx.lines) {
     const m = TIMED.exec(l);
-    if (m && PRESS_LINE.test(l))
+    if (m && l.includes("[ENEMY DEF]") && l.includes(ENEMY_DEF_NO_PRESS_TAG))
       timed.push({ t: +m[1]! * 60 + +m[2]!, text: l });
   }
   for (const u of ctx.players as any[]) {
+    if (u.info?.teamId === ctx.owner.info?.teamId) continue;
     const rows = (u.auraEvents ?? []) as any[];
     for (let i = 0; i < rows.length; i++) {
       const m = rows[i];
@@ -73,7 +74,11 @@ export function run(ctx: IRoundCtx): void {
         const b = rows[k];
         if (b.spellId !== m.spellId || b.destUnitId !== u.id) continue;
         if (ev(b) === REMOVED) upSince = undefined;
-        else if (ev(b) === APPLIED && upSince === undefined) upSince = tsOf(b);
+        else if (
+          ev(b) === APPLIED &&
+          (upSince === undefined || tsOf(b) - upSince > lockMs)
+        )
+          upSince = tsOf(b);
       }
       if (upSince !== undefined && ms - upSince <= lockMs) continue;
       for (const id of def.triggers) {
@@ -89,39 +94,22 @@ export function run(ctx: IRoundCtx): void {
             Math.abs(tsOf(a) - ms) <= PROC_OWN_ACTIVATION_PAIR_MS,
         );
         if (!aura) continue;
-        if (
-          successesOf(u).some(
-            (c) =>
-              String(c.spellId) === id &&
-              tsOf(c) >= ms - PRESS_BEFORE_MS &&
-              tsOf(c) <= ms + PRESS_AFTER_MS,
-          )
-        )
-          continue;
         ctx.bump("procActivationNoLine");
         const name = nameOf(id);
         const t = Math.floor((ms - ctx.start) / 1000);
-        const isOwner = u.id === ctx.owner.id;
         const named = timed.some(
           (l) =>
             Math.abs(l.t - t) <= 1 &&
             l.text.includes(name) &&
-            (isOwner
-              ? l.text.includes("[YOU]")
-              : ctx.unitOfPid(FIRST_PID.exec(l.text)?.[1])?.id === u.id),
+            ctx.unitOfPid(FIRST_PID.exec(l.text)?.[1])?.id === u.id,
         );
         if (named) continue;
-        const side = isOwner
-          ? "owner"
-          : u.info?.teamId === ctx.owner.info?.teamId
-            ? "ally"
-            : "enemy";
         ctx.violate(
           "procActivationNoLine",
-          `${side}/${name}`,
+          `enemy/${name}`,
           ms,
           `${ctx.roundKey}|${u.id}|${id}|${t}`,
-          `${side}: ${def.name} cast ${name} on ${u.name} at ${fmtS(t)} (no cast row), no line`,
+          `enemy: ${def.name} cast ${name} on ${u.name} at ${fmtS(t)} (no cast row), no line`,
         );
       }
     }

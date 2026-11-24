@@ -18,6 +18,7 @@ import {
   effectAurasOfCast,
 } from "../data/castEffectAuras";
 import { HASTE_DURATION_SPELL_IDS } from "../data/channeledGenerated";
+import { CRISIS_PROC_ANSWERS } from "../data/crisisProcAnswers";
 import { allSchoolsDoorPct, wallDoorPct } from "../data/mitigationComponents";
 import {
   DEFLECTION_IDS,
@@ -97,7 +98,10 @@ import {
 import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { CHANNEL_STOPPED_MAX_SHARE } from "./kickAudit";
-import { isProcOwnActivationAt } from "./procTriggeredCast";
+import {
+  isProcOwnActivationAt,
+  PROC_OWN_ACTIVATION_PAIR_MS,
+} from "./procTriggeredCast";
 import { toRenderSecond } from "./renderGrid";
 import {
   INVISIBLE_FACT_LINE_IDS,
@@ -1419,14 +1423,15 @@ export function selfSaveCasts(
   for (const id of SELF_SAVE_IDS)
     for (const a of pressIdsOf(id))
       if (!castOfAura.has(a)) castOfAura.set(a, id);
-  // an APPLIED of an aura the unit already had up — within its life from
-  // the row that started its run, not until a REMOVED the log never showed
-  // (`ownAuraUpBeforeRow`, T259)
+  // the unit's own rows on itself, for "was this aura already up just
+  // before this row" (`ownAuraUpBeforeRow`, T259)
   const ownRows = dropAuraRebroadcasts(
     (enemy.auraEvents ?? []).filter(
       (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
     ),
   );
+  // the proc markers already stated, one activation each
+  const statedMarkers = new Set<(typeof ownRows)[number]>();
   const pressMsByCast = new Map<string, number[]>();
   for (const a of dropAuraRebroadcasts(enemy.auraEvents ?? [])) {
     if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
@@ -1445,13 +1450,35 @@ export function selfSaveCasts(
     // stated whatever stands beside it: the hidden-press reading refuses it
     // (a re-stating batch), and a press a second later is the player's own
     // on top of it, with its own line (18e3feae r4: the proc 0:41 at 41 %,
-    // the press 0:42). Once: a re-listing of the aura still up is the same
-    // activation (codex 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588,
-    // re-listed with its marker at 5:06.232) — up within its life only, not
-    // until a REMOVED (T259, 8416188b r1: the press 4.75 s earlier logged no
-    // REMOVED, and the proc lost its line).
+    // the press 0:42). Once per activation, and the activation is the
+    // proc's MARKER, read as a new one only when it was not already up
+    // (`ownAuraUpBeforeRow`: within its life from its run's start, not until
+    // a REMOVED the log never showed — T259). Well-Honed Instincts' marker
+    // is its own 120 s lockout, so a marker inside it is the log re-listing
+    // it (codex 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588, re-listed
+    // with its marker at 5:06.232), and the aura beside it is no activation
+    // — a press's own aura there has its cast row's line (codex
+    // 85-mac-minifix-T259-1 #1). The saved aura's own clock is not asked:
+    // 8416188b r1, pressed 20:01:57.596 with no REMOVED, re-listed 58.885,
+    // the proc 20:02:02.347 lost its line to "still up".
     if (isProcOwnActivationAt(enemy, castId, ms)) {
-      if (ownAuraUpBeforeRow(enemy, ownRows, a)) continue;
+      const markers = ownRows.filter((b) => {
+        const def = b.spellId ? CRISIS_PROC_ANSWERS.get(b.spellId) : undefined;
+        return (
+          def?.via === "aura" &&
+          def.triggers.has(castId) &&
+          b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          Math.abs(b.logLine.timestamp - ms) <= PROC_OWN_ACTIVATION_PAIR_MS
+        );
+      });
+      if (markers.length > 0) {
+        const fresh = markers.find(
+          (m) =>
+            !statedMarkers.has(m) && !ownAuraUpBeforeRow(enemy, ownRows, m),
+        );
+        if (!fresh) continue;
+        statedMarkers.add(fresh);
+      } else if (ownAuraUpBeforeRow(enemy, ownRows, a)) continue; // a heal marker
     } else {
       if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
       const presses =

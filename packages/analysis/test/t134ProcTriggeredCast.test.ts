@@ -169,48 +169,68 @@ describe("selfSaveCasts: a re-listed proc aura (codex 85-tk-CD-T134-1 #1)", () =
 describe("selfSaveCasts: an aura is up only within its life, not until a REMOVED (T259)", () => {
   const fr = (s: number, ev = LogEvent.SPELL_AURA_APPLIED) =>
     makeAuraEvent(ev, FR, at(s), "p1", "p1", "BUFF");
+  const lines = (u: ReturnType<typeof druid>) =>
+    selfSaveCasts(u, START).map((c) => [c.atSeconds, !!c.noPressLogged]);
   it("8416188b r1 shape: pressed, no REMOVED, re-listed in a batch 1.3 s later, the proc 4.75 s after the press — its line stays", () => {
     // pressed 117.596 (cast row + aura), re-listed 118.885, the proc 122.347
-    // with its marker and no cast row; DB2 3 s (+1 s lost-REMOVED slack)
-    const u = druid([117.596], [122.347], [
-      fr(117.596),
-      fr(118.885),
-      fr(122.347),
-    ]);
-    expect(
-      selfSaveCasts(u, START).map((c) => [c.atSeconds, !!c.noPressLogged]),
-    ).toEqual([
+    // with its marker and no cast row
+    const u = druid(
+      [117.596],
+      [122.347],
+      [fr(117.596), fr(118.885), fr(122.347)],
+    );
+    expect(lines(u)).toEqual([
       [117.596, false],
       [122.347, true],
     ]);
   });
-  it("a re-listing does not restart the run's clock: the proc 3.5 s after the re-listing, 4.75 s after the press, is new", () => {
-    const u = druid([], [122.347], [fr(117.596), fr(118.885), fr(122.347)]);
-    expect(ownAuraUpBeforeRow(u, u.auraEvents, u.auraEvents[2]!)).toBe(false);
-    expect(ownAuraUpBeforeRow(u, u.auraEvents, u.auraEvents[1]!)).toBe(true);
-  });
-  it("inside the life (+1 s slack) of the run's start it is still the same activation", () => {
-    const u = druid([], [100, 103.9], [fr(100), fr(103.9)]);
-    expect(selfSaveCasts(u, START).map((c) => c.atSeconds)).toEqual([100]);
-    const v = druid([], [100, 104.1], [fr(100), fr(104.1)]);
-    expect(selfSaveCasts(v, START).map((c) => c.atSeconds)).toEqual([
-      100, 104.1,
+  it("a first marker 3.5 s after a press with no REMOVED is a new proc — the saved aura's clock is not asked (codex 85-mac-minifix-T259-1 #1)", () => {
+    const u = druid([100], [103.5], [fr(100), fr(103.5)]);
+    expect(lines(u)).toEqual([
+      [100, false],
+      [103.5, true],
     ]);
   });
-  it("a REFRESH restarts the run; a REMOVED ends it", () => {
-    const u = druid([], [100, 106], [
-      fr(100),
-      fr(103, LogEvent.SPELL_AURA_REFRESH),
-      fr(106),
+  it("a press beside a re-listed marker is the press, not a proc (codex 85-mac-minifix-T259-1 #1)", () => {
+    // proc 100 (no REMOVED of either), pressed 130.000, a batch at 130.050
+    // re-lists the aura and the marker still inside its 120 s lockout
+    const u = druid([130], [100, 130.05], [fr(100), fr(130), fr(130.05)]);
+    expect(lines(u)).toEqual([
+      [100, true],
+      [130, false],
     ]);
-    expect(selfSaveCasts(u, START).map((c) => c.atSeconds)).toEqual([100]);
-    const v = druid([], [100, 101.5], [
-      fr(100),
-      fr(101, LogEvent.SPELL_AURA_REMOVED),
-      fr(101.5),
-    ]);
-    expect(selfSaveCasts(v, START).map((c) => c.atSeconds)).toEqual([
-      100, 101.5,
-    ]);
+  });
+  it("the marker's lockout ends at its life: a marker past it is a new proc, one inside it a re-listing", () => {
+    // 382912: 120 s, + the 1 s lost-REMOVED slack
+    expect(
+      lines(druid([], [100, 220.9], [fr(100), fr(220.9)])).map((x) => x[0]),
+    ).toEqual([100]);
+    expect(
+      lines(druid([], [100, 221.1], [fr(100), fr(221.1)])).map((x) => x[0]),
+    ).toEqual([100, 221.1]);
+  });
+  it("one marker is one activation: a second aura row beside it states nothing more", () => {
+    const u = druid([], [100], [fr(100), fr(100.02)]);
+    expect(lines(u)).toEqual([[100, true]]);
+  });
+  it("ownAuraUpBeforeRow: a re-listing does not restart the run's clock; a REFRESH does; a REMOVED ends it", () => {
+    const u = druid([], []);
+    const rowsOf = (...xs: ReturnType<typeof fr>[]) =>
+      makeUnit("p1", { auraEvents: xs }).auraEvents;
+    const rows = rowsOf(fr(117.596), fr(118.885), fr(122.347));
+    // FR 3 s + 1 s slack, from the run's start 117.596
+    expect(ownAuraUpBeforeRow(u, rows, rows[1]!)).toBe(true);
+    expect(ownAuraUpBeforeRow(u, rows, rows[2]!)).toBe(false);
+    const r2 = rowsOf(fr(100), fr(103, LogEvent.SPELL_AURA_REFRESH), fr(106));
+    expect(ownAuraUpBeforeRow(u, r2, r2[2]!)).toBe(true);
+    const r3 = rowsOf(fr(100), fr(101, LogEvent.SPELL_AURA_REMOVED), fr(101.5));
+    expect(ownAuraUpBeforeRow(u, r3, r3[2]!)).toBe(false);
+    // inside the life
+    const r4 = rowsOf(fr(100), fr(103.9));
+    expect(ownAuraUpBeforeRow(u, r4, r4[1]!)).toBe(true);
+    const r5 = rowsOf(fr(100), fr(104.1));
+    expect(ownAuraUpBeforeRow(u, r5, r5[1]!)).toBe(false);
+    // a row not among the rows is not up
+    expect(ownAuraUpBeforeRow(u, r4, rowsOf(fr(103))[0]!)).toBe(false);
   });
 });
