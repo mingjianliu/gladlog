@@ -50,14 +50,14 @@ describe("scan5/pressEffect activationsInSecond", () => {
     expect(activationsInSecond(rows, [], [], 60_000)).toHaveLength(1);
   });
   it("B192 review 3, 11dfa802 r3: one press goes to one activation — the nearest", () => {
-    // APPLIED .906, press .907, REFRESH .921, marker .922
+    // APPLIED .906, press .907, REFRESH .921 (the producer's proc row; marker .922)
     const acts = activationsInSecond(
       [
         { event: A, ts: 57_906 },
         { event: R, ts: 57_921 },
       ],
       [57_907],
-      [57_922],
+      [57_921],
       57_000,
     );
     expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
@@ -79,6 +79,38 @@ describe("scan5/pressEffect activationsInSecond", () => {
     );
     expect(acts).toEqual([{ refresh: false, pressed: false, proc: true }]);
     expect(isProcOwnNoPressLine(0, 1, acts)).toBe(true);
+  });
+  it("B192 review 7 (constructed): a press 1 ms before the proc's row is never the proc's", () => {
+    // APPLIED .170, press .199, REFRESH + fresh marker .200 (the producer's proc row)
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 10_170 },
+        { event: R, ts: 10_200 },
+      ],
+      [10_199],
+      [10_200],
+      10_000,
+    );
+    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(true);
+    expect(isProcOwnNoPressLine(0, 2, acts)).toBe(false);
+  });
+  it("B192 review 7 (constructed): a re-listed marker is no proc — the press's REFRESH stays pressed", () => {
+    // proc 10.000 (the producer's proc row); 11.000 cast + REFRESH + a re-listed marker
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 10_000 },
+        { event: R, ts: 11_000 },
+      ],
+      [11_000],
+      [10_000],
+      11_000,
+    );
+    expect(acts).toEqual([{ refresh: true, pressed: true, proc: false }]);
+    expect(isProcOwnNoPressLine(0, 1, acts)).toBe(false);
   });
 });
 
