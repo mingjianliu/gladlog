@@ -23,14 +23,15 @@ const druid = activationsInSecond(
     { event: A, ts: 113_197 },
   ],
   [113_198],
+  [113_937],
   113_000,
 );
 
 describe("scan5/pressEffect activationsInSecond", () => {
   it("orders the second's APPLIED / REFRESH rows and marks which a press explains", () => {
     expect(druid).toEqual([
-      { refresh: false, pressed: true },
-      { refresh: true, pressed: false },
+      { refresh: false, pressed: true, proc: false },
+      { refresh: true, pressed: false, proc: true },
     ]);
   });
   it("a REFRESH beside a press, or followed by one, is pressed (D27 163de8f1 1:00)", () => {
@@ -39,14 +40,31 @@ describe("scan5/pressEffect activationsInSecond", () => {
       { event: R, ts: 60_932 },
     ];
     for (const p of [60_932, 60_960, 61_400])
-      expect(activationsInSecond(sotf, [p], 60_000)[1]!.pressed).toBe(true);
+      expect(activationsInSecond(sotf, [p], [], 60_000)[1]!.pressed).toBe(true);
   });
   it("only rows inside the line's second count", () => {
     const rows = [
       { event: A, ts: 60_100 },
       { event: R, ts: 61_200 },
     ];
-    expect(activationsInSecond(rows, [], 60_000)).toHaveLength(1);
+    expect(activationsInSecond(rows, [], [], 60_000)).toHaveLength(1);
+  });
+  it("B192 review 3, 11dfa802 r3: one press goes to one activation — the nearest", () => {
+    // APPLIED .906, press .907, REFRESH .921, marker .922
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 57_906 },
+        { event: R, ts: 57_921 },
+      ],
+      [57_907],
+      [57_922],
+      57_000,
+    );
+    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(true);
   });
 });
 
@@ -59,6 +77,19 @@ describe("scan5/pressEffect isProcOwnNoPressLine", () => {
   });
   it("B192 review 2: tags swapped — the press's tagged line is not exempt", () => {
     expect(isProcOwnNoPressLine(0, 2, druid)).toBe(false);
+  });
+  it("B192 review 3 (constructed): an unmarked REFRESH a press missed by 83 ms exempts nothing", () => {
+    // Blur: APPLIED 130.167 + cast .168; cast .570, its REFRESH .653
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 130_167 },
+        { event: R, ts: 130_653 },
+      ],
+      [130_168, 130_570],
+      [],
+      130_000,
+    );
+    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(false);
   });
   it("lines and activations that do not pair one to one exempt nothing", () => {
     expect(isProcOwnNoPressLine(1, 3, druid)).toBe(false);

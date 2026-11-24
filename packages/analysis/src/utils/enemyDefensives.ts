@@ -1367,6 +1367,10 @@ export function selfSaveCasts(
   spellName: string;
   unseenPress?: true;
   noPressLogged?: true;
+  /** the activation is its proc's own (`isProcOwnActivationAt` with the
+   * proc's row: Well-Honed Instincts' Frenzied Regeneration) — nobody
+   * pressed it (B192 review 3: KILL ATTEMPTS read it `popped`) */
+  procOwned?: true;
 }> {
   const out: Array<{
     atSeconds: number;
@@ -1374,6 +1378,7 @@ export function selfSaveCasts(
     spellName: string;
     unseenPress?: true;
     noPressLogged?: true;
+    procOwned?: true;
   }> = [];
   for (const cast of enemy.spellCastEvents ?? []) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -1529,9 +1534,13 @@ export function selfSaveCasts(
     // (codex 85-mac-minifix-T259-1 #1 / -1b #1), or an activation the log
     // shows with no press — stated as such, as before (-1b #2: a press made
     // unseen beside a still-running marker, its earlier run REMOVED).
+    let procOwned = false;
     if (isProcOwnActivationAt(enemy, castId, ms)) {
       const procAt = procRunAt.get(a.spellId!);
-      if (procRows.has(a)) procRunAt.set(a.spellId!, ms);
+      if (procRows.has(a)) {
+        procRunAt.set(a.spellId!, ms);
+        procOwned = true;
+      }
       // beside a fresh marker but not its row: the press's own aura (its
       // cast row has the line) or an echo of the activation
       else if (markerNear(freshMarkers, castId, ms)) continue;
@@ -1554,6 +1563,7 @@ export function selfSaveCasts(
       spellId: castId,
       spellName: getEnglishSpellName(castId, a.spellName ?? ""),
       noPressLogged: true,
+      ...(procOwned ? { procOwned: true as const } : {}),
     });
   }
   return out.sort((a, b) => a.atSeconds - b.atSeconds);

@@ -1266,6 +1266,45 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
     },
   );
 
+  // B192 review 3 (b4112ca9 r1 0:39): Well-Honed Instincts' Frenzied
+  // Regeneration — the aura and the proc's marker 382912 in one millisecond,
+  // no cast row — is the talent's cast, not a press: `self-saved (…)`. The
+  // druid's own press of it stays `popped`.
+  it.each([
+    [false, "self-saved \\(Frenzied Regeneration\\)"],
+    [true, "popped Frenzied Regeneration"],
+  ])(
+    "Frenzied Regeneration inside the span, pressed=%s → FAILED: %s",
+    async (pressed, cause) => {
+      await ensureAnalysisData();
+      const a = attempt(
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn("22842", "e1", 12),
+            ...(pressed ? [] : [auraOn("382912", "e1", 12)]),
+          ],
+          spellCastEvents: pressed
+            ? [
+                {
+                  spellId: "22842",
+                  srcUnitId: "e1",
+                  logLine: {
+                    event: LogEvent.SPELL_CAST_SUCCESS,
+                    timestamp: ms(12),
+                    parameters: [],
+                  },
+                },
+              ]
+            : [],
+        }),
+      );
+      expect(a.attribution?.selfSaved).toEqual(["Frenzied Regeneration"]);
+      expect(text(a)).toMatch(new RegExp(`FAILED: ${cause}$`, "m"));
+      expect(text(a).includes(KILL_ATTEMPTS_PROC_LEGEND)).toBe(!pressed);
+    },
+  );
+
   it("ruling D8: a Nature's Guardian heal on itself inside the span → self-saved (it was immunity-baited); outside it → not a cause", async () => {
     await ensureAnalysisData();
     const inside = attempt(
@@ -2224,27 +2263,24 @@ describe("extractKillAttempts — broke out with a racial / class ability", () =
         ?.primary,
     ).toBe("broke-out");
     const ibfAura: any = {
-          spellId: "48792",
-          spellName: "Icebound Fortitude",
-          srcUnitId: "e1",
-          srcUnitName: "e1",
-          destUnitId: "e1",
-          destUnitName: "e1",
-          timestamp: ms(12),
-          logLine: {
-            event: LogEvent.SPELL_AURA_APPLIED,
-            timestamp: ms(12),
-            parameters: [],
-          },
-          auraType: "BUFF",
-        };
+      spellId: "48792",
+      spellName: "Icebound Fortitude",
+      srcUnitId: "e1",
+      srcUnitName: "e1",
+      destUnitId: "e1",
+      destUnitName: "e1",
+      timestamp: ms(12),
+      logLine: {
+        event: LogEvent.SPELL_AURA_APPLIED,
+        timestamp: ms(12),
+        parameters: [],
+      },
+      auraType: "BUFF",
+    };
     const dkWith = (stunS: number) =>
       unit("e1", {
         spec: "252",
-        auraEvents: [
-          ...stunAuras("e1", KIDNEY, 10, stunS),
-          ibfAura,
-        ],
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, stunS), ibfAura],
         spellCastEvents: [press("48792", 12)],
       });
     // the stun came off at the press (12 s): the legend's order names the

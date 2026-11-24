@@ -12,6 +12,7 @@
  *    SPELL_MISSED on its target, with no aura of the name on the unit around
  *    it. 9121b496 0:20: Touch of Karma, MISS on the warrior, no Karma aura.
  */
+import { CRISIS_PROC_ANSWERS } from "@gladlog/analysis/src/data/crisisProcAnswers";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { ENEMY_DEF_TAG_RE_SRC } from "@gladlog/analysis/src/utils/enemyDefensives";
 
@@ -33,18 +34,27 @@ const LINE = new RegExp(
 );
 const spellOf = (rest: string): string =>
   /^(.+?)(?: \(| \[|$)/.exec(rest)?.[1] ?? rest;
+/** How far a proc's marker sits from the aura row it put up: one log batch
+ * (the analysis side's `PROC_OWN_ACTIVATION_PAIR_MS`, read here off the rows). */
+const PROC_MARKER_PAIR_MS = 100;
+
 /** The aura's activations (APPLIED / REFRESH rows) inside the line's second,
- * in log order, each marked pressed when a press of the name stands within 50
- * ms of it or in `PRESS_AFTER_MS` after it. An unpressed REFRESH is an
- * activation of its own: 11346ea9 r1 1:53 (T259 / B192), Frenzied
- * Regeneration APPLIED .197 with the druid's press at .198, then at .937 a
- * REFRESH carrying the Well-Honed Instincts marker 382912 (the proc). */
+ * in log order. Each press of the name is given to ONE activation: the
+ * nearest one it can explain (within 50 ms of it, or in `PRESS_AFTER_MS`
+ * after it). An activation is a proc's when a marker of a proc that casts the
+ * spell (`CRISIS_PROC_ANSWERS`, the lookup) is given to it, each marker to
+ * the nearest activation within `PROC_MARKER_PAIR_MS`. 11346ea9 r1 1:53 (T259 / B192): Frenzied
+ * Regeneration APPLIED .197, the druid's press .198, then a REFRESH at .937
+ * beside the Well-Honed Instincts marker 382912 (the proc). 11dfa802 r3
+ * (B192 review 3): APPLIED .906, press .907, REFRESH .921, marker .922 — the
+ * press is the APPLIED's alone. */
 export function activationsInSecond(
   auras: readonly { event: string; ts: number }[],
   pressTs: readonly number[],
+  markerTs: readonly number[],
   lo: number,
-): { refresh: boolean; pressed: boolean }[] {
-  return auras
+): { refresh: boolean; pressed: boolean; proc: boolean }[] {
+  const acts = auras
     .filter(
       (a) =>
         (a.event === APPLIED || a.event === REFRESH) &&
@@ -53,27 +63,65 @@ export function activationsInSecond(
     )
     .sort((x, y) => x.ts - y.ts)
     .map((a) => ({
+      ts: a.ts,
       refresh: a.event === REFRESH,
-      pressed: pressTs.some(
-        (p) =>
-          Math.abs(p - a.ts) <= 50 || (p >= a.ts && p <= a.ts + PRESS_AFTER_MS),
-      ),
+      pressed: false,
+      proc: false,
     }));
+  // each press, then each marker, goes to ONE activation: the nearest it fits
+  const give = (
+    ts: readonly number[],
+    fits: (t: number, a: { ts: number }) => boolean,
+    key: "pressed" | "proc",
+  ) => {
+    for (const t of [...ts].sort((x, y) => x - y)) {
+      const best = acts
+        .filter((a) => !a[key] && fits(t, a))
+        .sort((x, y) => Math.abs(t - x.ts) - Math.abs(t - y.ts))[0];
+      if (best) best[key] = true;
+    }
+  };
+  give(
+    pressTs,
+    (p, a) =>
+      Math.abs(p - a.ts) <= 50 || (p >= a.ts && p <= a.ts + PRESS_AFTER_MS),
+    "pressed",
+  );
+  give(markerTs, (m, a) => Math.abs(m - a.ts) <= PROC_MARKER_PAIR_MS, "proc");
+  return acts.map(({ refresh, pressed, proc }) => ({ refresh, pressed, proc }));
 }
 
 /** Whether the `[no press logged]` line at position `pos` (0-based, in
  * rendered order) among the `lineCount` lines of a unit's spell in one second
  * is a proc's own line: only when the lines and the second's activations pair
- * one to one in order and the activation at `pos` is an unpressed REFRESH.
- * B192 review: both lines tagged flags the press's; the tags swapped (press
- * tagged, proc untagged) flags the press's too. */
+ * one to one in order and the activation at `pos` is a proc's (its marker
+ * beside it) that no press was given to. B192 reviews: both lines tagged, or
+ * the tags swapped, flags the press's line; an unmarked REFRESH a press
+ * missed by 83 ms exempts nothing (review 3, constructed). */
 export function isProcOwnNoPressLine(
   pos: number,
   lineCount: number,
-  activations: readonly { refresh: boolean; pressed: boolean }[],
+  activations: readonly { pressed: boolean; proc: boolean }[],
 ): boolean {
   const a = activations[pos];
-  return lineCount === activations.length && !!a && a.refresh && !a.pressed;
+  return lineCount === activations.length && !!a && a.proc && !a.pressed;
+}
+
+/** The unit's own markers of a proc that casts one of `auras`' spells. */
+function procMarkerTs(unit: any, auras: readonly any[]): number[] {
+  const ids = new Set(auras.map((a) => String(a.spellId)));
+  return ((unit.auraEvents ?? []) as any[])
+    .filter((m) => {
+      const def = CRISIS_PROC_ANSWERS.get(String(m.spellId ?? ""));
+      return (
+        def?.via === "aura" &&
+        [...def.triggers].some((t) => ids.has(t)) &&
+        m.srcUnitId === unit.id &&
+        m.destUnitId === unit.id &&
+        (ev(m) === APPLIED || ev(m) === REFRESH)
+      );
+    })
+    .map(tsOf);
 }
 
 export function run(ctx: IRoundCtx): void {
@@ -116,6 +164,7 @@ export function run(ctx: IRoundCtx): void {
           activationsInSecond(
             auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
             presses.map(tsOf),
+            procMarkerTs(unit, auras),
             lo,
           ),
         )

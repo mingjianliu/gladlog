@@ -225,6 +225,11 @@ export interface IKillAttemptAttribution {
    * proc), which were `immunityBaited` before it. */
   selfSaved: string[];
   selfSavedAtS: number[];
+  /** the `selfSaved` names whose kept activation was its proc's own
+   * (`selfSaveCasts`' `procOwned`: Well-Honed Instincts' Frenzied
+   * Regeneration) — worded as a proc, `self-saved (X)`, not `popped X`
+   * (B192 review 3, b4112ca9 r1 0:39) */
+  selfSavedByProc?: string[];
   outhealed: boolean;
   primary:
     | "trinketed"
@@ -1727,13 +1732,19 @@ function failureText(
       // a purpose (Dark Pact, Alter Time, Spirit Walk … are pressed at full
       // health as often as not). A proc (`ENEMY_PROC_SAVE_NAMES`: Nature's
       // Guardian, Cheat Death, Cauterize) keeps `self-saved (X)`: nobody
-      // pressed it. Which attempts name either, and when they are hidden
+      // pressed it — and so does a talent's own cast of a save
+      // (`selfSavedByProc`: Well-Honed Instincts' Frenzied Regeneration, B192
+      // review 3). Which attempts name either, and when they are hidden
       // behind a wall, is `attributeFailure`'s and unchanged — these stay in
       // the self-save's place of the order, after the wall and the external.
       const own = attr.selfSaved.map((_, i) => i);
       const clauseOf = (verb: (names: string) => string, pressed: boolean) => {
         const idx = own.filter(
-          (i) => !ENEMY_PROC_SAVE_NAMES.has(attr.selfSaved[i]!) === pressed,
+          (i) =>
+            !(
+              ENEMY_PROC_SAVE_NAMES.has(attr.selfSaved[i]!) ||
+              attr.selfSavedByProc?.includes(attr.selfSaved[i]!)
+            ) === pressed,
         );
         return idx.length
           ? verb(
@@ -1798,7 +1809,7 @@ const KILL_ATTEMPT_PROC_WORD = "self-saved (";
  */
 export const KILL_ATTEMPTS_POPPED_LEGEND =
   "  `popped X` = X went up on the target from the target itself: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which; a wall a talent or proc put up with no press of it reads `[no press logged]` on its [ENEMY DEF] line). The word states that it went up — not why, and not that it saved anyone.";
-export const KILL_ATTEMPTS_PROC_LEGEND = `  \`self-saved (X)\` = a passive of the target fired (${[...ENEMY_PROC_SAVE_NAMES].join(" / ")}) — nobody pressed it.`;
+export const KILL_ATTEMPTS_PROC_LEGEND = `  \`self-saved (X)\` = a passive of the target fired (${[...ENEMY_PROC_SAVE_NAMES].join(" / ")}), or a talent cast X for it (Well-Honed Instincts' Frenzied Regeneration; its timeline line reads \`[no press logged]\`) — nobody pressed it.`;
 
 /**
  * Renders the [KILL ATTEMPTS] prompt block. All attempts render (no silent
@@ -2325,6 +2336,7 @@ function attributeFailure(
   const ownUpAccounts: IAccountedSave[] = [];
   const selfSaved: string[] = [];
   const selfSavedAtS: number[] = [];
+  const selfSavedByProc: string[] = [];
   // One name per spell: a shapeshift-type defensive re-applies its aura
   // whenever the form refreshes (Ancient of Lore 473909 in S2 archive match
   // ad329f4a: 3 casts, 23 SPELL_AURA_APPLIED, same-millisecond REMOVED+APPLIED
@@ -2707,6 +2719,7 @@ function attributeFailure(
     if (!absorbCovers(c.spellId)) continue;
     selfSaved.push(c.spellName);
     selfSavedAtS.push(c.atSeconds);
+    if (c.procOwned) selfSavedByProc.push(c.spellName);
   }
 
   // User ruling D8 (2026-10-10, re-opening A25): "KILL ATTEMPTS 不再对这四个
@@ -2808,6 +2821,7 @@ function attributeFailure(
       : {}),
     selfSaved,
     selfSavedAtS,
+    ...(selfSavedByProc.length ? { selfSavedByProc } : {}),
     outhealed,
     primary,
   };
