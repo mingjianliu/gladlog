@@ -405,9 +405,12 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
       expect(other.stderr).toContain("does not hold a finished walk");
       expect(keptDirs(cap)).toEqual([kept]);
 
-      // no worker runs: a walk could not read these
+      // no worker runs: a walk of these, their owner line gone, fails (above)
       for (let i = 1; i <= 5; i++)
-        chmodSync(join(cap, "s0", "context", `${i}-1-1.txt`), 0o000);
+        writeFileSync(
+          join(cap, "s0", "context", `${i}-1-1.txt`),
+          `/nowhere/${i}\n`,
+        );
       const joined = runner(
         cap,
         out,

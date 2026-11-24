@@ -27,6 +27,7 @@
  * `coverage.json` for `verify/coverSet.ts`.
  */
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   mkdirSync,
@@ -34,12 +35,14 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { deserialize, serialize } from "node:v8";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -369,7 +372,8 @@ async function main(): Promise<void> {
     "coverage-gaps.json",
   ])
     rmSync(join(OUT!, name), { force: true });
-  const expected = contextFiles().length;
+  const selected = contextFiles();
+  const expected = selected.length;
   if (expected === 0) {
     console.error(`verify: no contexts under ${DIR}`);
     process.exit(1);
@@ -382,11 +386,26 @@ async function main(): Promise<void> {
   } catch {
     // a capture that did not pass, or a hand-made one
   }
+  // which contexts, in walk order, and the archive each names on its first
+  // line: `--files N` of the same capture laid out in other shards is another
+  // selection under the same capture hash
+  const order = createHash("sha256");
+  const head = Buffer.alloc(4096);
+  for (const f of selected) {
+    const fd = openSync(join(DIR!, f.shard, "context", f.name), "r");
+    const n = readSync(fd, head, 0, head.length, 0);
+    closeSync(fd);
+    const line = head.subarray(0, n).toString("utf8").split("\n", 1)[0];
+    order.update(`${f.shard}/${f.name}\t${line}\n`);
+  }
   const walk = JSON.stringify({
     capture: resolve(DIR!),
     captureHash,
-    archiveDir: ARCHIVE_DIR && resolve(ARCHIVE_DIR),
+    // the directory a relative archive path is read against: the working
+    // directory when the flag is absent
+    archiveDir: resolve(ARCHIVE_DIR),
     contexts: expected,
+    selection: order.digest("hex"),
     files: FILES ?? null,
     chunks: CHUNKS,
     scans: specs.map((s) => s.name),
@@ -413,11 +432,19 @@ async function main(): Promise<void> {
   const tmp = JOIN_FROM
     ? resolve(JOIN_FROM)
     : mkdtempSync(join(dirname(resolve(OUT!)), ".verify-"));
-  // the verdict removes the kept directory, and the reports with it
-  if (!relative(tmp, resolve(OUT!)).startsWith("..")) {
-    console.error(`verify: --out is inside --join-from ${tmp}`);
-    process.exit(2);
+  // the verdict removes the kept directory, and reports inside it with it
+  // (the directories themselves, whatever the two paths spell)
+  if (JOIN_FROM) {
+    const rel = relative(realpathSync(tmp), realpathSync(OUT!));
+    if (rel === "" || !(rel === ".." || rel.startsWith(`..${sep}`))) {
+      console.error(`verify: --out is inside --join-from ${tmp}`);
+      process.exit(2);
+    }
   }
+  /** this process's staging directory, beside `--out` (one file system, so
+   * publishing is a rename) and never inside a kept walk; gone when the
+   * process ends, however it ends */
+  const stage = mkdtempSync(join(dirname(resolve(OUT!)), ".verify-out-"));
   /** the walk is on disk, whole: from here only a verdict removes it */
   let walked = Boolean(JOIN_FROM);
   /** the run reached its verdict, published or refused */
@@ -426,6 +453,7 @@ async function main(): Promise<void> {
    * in the join (or a signal during it) leaves is the walk, for
    * `--join-from`. Everything else leaves nothing, as before. */
   const dropTmp = (): void => {
+    rmSync(stage, { recursive: true, force: true });
     if (walked && !judged)
       console.error(
         `verify: the walk finished and the join did not; kept its states, join them with --join-from ${tmp}`,
@@ -464,17 +492,12 @@ async function main(): Promise<void> {
       });
     });
   try {
-    // this process's own: a join that threw left half a report in the kept
-    // directory, and a second join of it must not share a staging directory
-    reportDir = join(tmp, `out-${process.pid}`);
-    rmSync(reportDir, { recursive: true, force: true });
-    mkdirSync(reportDir);
+    reportDir = stage;
     const paths = Array.from({ length: CHUNKS }, (_, k) =>
       join(tmp, `w${k}.bin`),
     );
-    const stopWatch = watchMemory(children, () => {
-      stopping = true;
-    });
+    // the one shutdown: it also kills, after 5 s, a worker SIGTERM left
+    const stopWatch = watchMemory(children, () => void stopWorkers());
     try {
       let next = 0;
       let dead = false;
