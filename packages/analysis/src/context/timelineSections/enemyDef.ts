@@ -225,7 +225,19 @@ export function emitEnemyDefEntries(
             targetUnit,
             // the cast that put an aura up, when logged — not the aura
             matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000),
-            { spellId: d.spellId, srcUnitId: enemy.id },
+            // …named by its own cast and presser when they are not the
+            // aura's and the carrier's (T189: a team proc's trigger heals
+            // under the trigger's id, from the monk)
+            {
+              spellId: d.spellId,
+              srcUnitId: d.pressSrcUnitId ?? enemy.id,
+              ...(d.pressSpellId !== undefined
+                ? { pressSpellId: d.pressSpellId }
+                : {}),
+              ...(d.pressLineIndex !== undefined
+                ? { pressLineIndex: d.pressLineIndex }
+                : {}),
+            },
           )
         : null;
       let line: string;

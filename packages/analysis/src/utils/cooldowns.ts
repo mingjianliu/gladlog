@@ -2035,7 +2035,21 @@ export const PRESS_HP_LINE_TAGS: readonly string[] = [
 export function hpAtPress(
   unit: ICombatUnit,
   pressMs: number,
-  cast: { spellId: string; srcUnitId: string },
+  cast: {
+    spellId: string;
+    srcUnitId: string;
+    /** the press's cast spell, when the reader asks with the aura it put up
+     * and the two differ (T189, fact14 D12: Peaceweaver 353319 is put up by
+     * Restoral 388615, whose own heal carries Restoral's id — 65145d1c r0
+     * read the healed 100 % for a 94 % press) */
+    pressSpellId?: string;
+    /** the log line of the press's cast row, when another unit pressed it
+     * (a team proc read on a carrier): the unit's reading of the press's ms
+     * logged before that row is the HP at the press, as before its own cast
+     * row (ruling 2026-10-23; codex 85-tk-L1-T189-1 #1, 517810f2 r6 0:42 —
+     * a Garrote tick 85 % in Restoral's ms read 87 %) */
+    pressLineIndex?: number;
+  },
 ): number | null {
   let cutMs = pressMs;
   /** the line of the press's earliest own direct heal */
@@ -2045,12 +2059,15 @@ export function hpAtPress(
   // Breath is pressed as 355936 and heals as 355941, its DB2-named effect)
   // or a heal of the press's own name (Holy Prism 114165 heals as 114871,
   // no aura of it in the cast→effect table)
-  const isOwnEffect = (h: { spellId?: string | null }) =>
-    h.spellId === cast.spellId ||
+  const isEffectOf = (pressId: string, h: { spellId?: string | null }) =>
+    h.spellId === pressId ||
     (!!h.spellId &&
-      (effectAuraViaName(cast.spellId, h.spellId) ||
+      (effectAuraViaName(pressId, h.spellId) ||
         getEnglishSpellName(h.spellId, "") ===
-          getEnglishSpellName(cast.spellId, "")));
+          getEnglishSpellName(pressId, "")));
+  const isOwnEffect = (h: { spellId?: string | null }) =>
+    isEffectOf(cast.spellId, h) ||
+    (cast.pressSpellId !== undefined && isEffectOf(cast.pressSpellId, h));
   // …a heal under the press's own id in its ms names the press's heal: a
   // trigger guess (below) stands down — fact8 D14, an Embrace the Shadow proc
   // logged before Desperate Prayer's aura read as the prayer's own heal
@@ -2143,6 +2160,10 @@ export function hpAtPress(
     const triggeredByPress =
       !periodic &&
       !ownHealAtPress &&
+      // a press named by its own cast, read on another unit (a team proc's
+      // carrier): its heal is known by id, another heal of the presser's
+      // before the aura row is no guess to make (codex 85-tk-L1-T189-1 #2)
+      !(cast.pressSpellId !== undefined && cast.srcUnitId !== unit.id) &&
       h.srcUnitId === cast.srcUnitId &&
       (auraRowAfter ||
         (pressAuraRows.some((a) => a.logLine.timestamp === t) &&
@@ -2204,19 +2225,22 @@ export function hpAtPress(
   // press), so they never count; neither does a document whose samples
   // carry no line (stored before 2026-10-24).
   const pressLine =
-    cutMs === pressMs && cast.srcUnitId === unit.id
-      ? (unit.spellCastEvents ?? []).find(
-          (c) =>
-            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            !!c.spellId &&
-            // the press by its cast id, or by the aura it put up — the
-            // [ENEMY DEF] reader asks with the aura (codex 20-F17-10 #1,
-            // 9bf3a95f r3 1:27.448: Blur 198589 cast, 212800 aura — 62 %
-            // read for a 42 % press)
-            isCastOrEffect(c.spellId, cast.spellId) &&
-            c.logLine.timestamp === pressMs,
-        )?.logLine.lineIndex
-      : undefined;
+    cutMs !== pressMs
+      ? undefined
+      : cast.srcUnitId !== unit.id
+        ? cast.pressLineIndex
+        : (unit.spellCastEvents ?? []).find(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              !!c.spellId &&
+              // the press by its cast id, or by the aura it put up — the
+              // [ENEMY DEF] reader asks with the aura (codex 20-F17-10 #1,
+              // 9bf3a95f r3 1:27.448: Blur 198589 cast, 212800 aura — 62 %
+              // read for a 42 % press)
+              (isCastOrEffect(c.spellId, cast.spellId) ||
+                c.spellId === cast.pressSpellId) &&
+              c.logLine.timestamp === pressMs,
+          )?.logLine.lineIndex;
   const loggedBeforePress = (a: (typeof actions)[number]) =>
     pressLine !== undefined &&
     a.logLine.lineIndex !== undefined &&

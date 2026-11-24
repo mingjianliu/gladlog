@@ -479,7 +479,8 @@ export function ownPressedShieldSpansMs(
     if (
       presses.length > 0 &&
       presses.every(
-        (c) => c.logLine.timestamp > loggedStartMs + AURA_BEFORE_CAST_ROW_MAX_MS,
+        (c) =>
+          c.logLine.timestamp > loggedStartMs + AURA_BEFORE_CAST_ROW_MAX_MS,
       ) &&
       !(caster.spellCastEvents ?? []).some(
         (c) =>
@@ -1786,6 +1787,15 @@ export interface IEnemyDefensiveEvent {
    * Undefined when no such cast is logged (a proc / an aura-only press):
    * the line falls back to `atSeconds`. */
   pressSeconds?: number;
+  /** The press's cast spell when it is not `spellId` — an aura kind prints
+   * its aura, and the cast that put it up can be another spell (Restoral
+   * 388615 for Peaceweaver 353319, Vanish 1856 for 11327). With
+   * `pressSrcUnitId` (the presser, when not `casterId`: a team proc's
+   * carrier), what `hpAtPress` needs to know the press's own heal (T189). */
+  pressSpellId?: string;
+  pressSrcUnitId?: string;
+  /** the log line of another unit's press row (set with `pressSrcUnitId`) */
+  pressLineIndex?: number;
   /** fact1215 C5 (2026-10-18): a wall aura with no press of it logged — not
    * of the button, not of a cast whose effect it is (`castsOfEffectAura`) —
    * is a copy a talent or proc put up (Smoke Screen's 3 s Survival of the
@@ -2728,19 +2738,21 @@ export function enemyDefensiveEventsUncached(
       : e;
   /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
    * of an aura kind (`pressSeconds`, F-E11). */
-  const castSecondsOf = (srcUnitName: string, spellId: string): number[] =>
+  const castRowsOf = (srcUnitName: string, spellId: string) =>
     (
       (srcUnitName === enemy.name
         ? enemy
         : enemies.find((e) => e.name === srcUnitName)
       )?.spellCastEvents ?? []
-    )
-      .filter(
-        (c) =>
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          c.spellId === spellId,
-      )
-      .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
+    ).filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.spellId === spellId,
+    );
+  const castSecondsOf = (srcUnitName: string, spellId: string): number[] =>
+    castRowsOf(srcUnitName, spellId).map(
+      (c) => (c.logLine.timestamp - combat.startTime) / 1000,
+    );
 
   // fact3 D35: a wall pressed while its holder was unseen is a press, not
   // a copy a talent put up (`hiddenPressMs`)
@@ -2793,15 +2805,23 @@ export function enemyDefensiveEventsUncached(
         -dMs <= PRESS_TO_AURA_MAX_S * 1000
       );
     };
-    const press = [
-      ...castSecondsOf(enemy.name, tableId),
-      ...(tableId === iv.spellId ? [] : castSecondsOf(enemy.name, iv.spellId)),
+    /** the casts that can be this aura's press: second, spell, presser */
+    const pressRowsOf = (srcUnitName: string, spellId: string) =>
+      castRowsOf(srcUnitName, spellId).map((c) => ({
+        t: (c.logLine.timestamp - combat.startTime) / 1000,
+        spellId,
+        srcUnitName,
+        lineIndex: c.logLine.lineIndex,
+      }));
+    const pressRow = [
+      ...pressRowsOf(enemy.name, tableId),
+      ...(tableId === iv.spellId ? [] : pressRowsOf(enemy.name, iv.spellId)),
       // a cast whose effect this aura is (Vanish 1856 → 11327)
       ...castsOfEffectAura(iv.spellId)
         .filter((id) => id !== tableId && id !== iv.spellId)
-        .flatMap((id) => castSecondsOf(enemy.name, id)),
+        .flatMap((id) => pressRowsOf(enemy.name, id)),
       ...(teamProcTriggers ?? []).flatMap((id) =>
-        castSecondsOf(iv.srcUnitName, id),
+        pressRowsOf(iv.srcUnitName, id),
       ),
     ]
       // the cast line can also be logged a few ms AFTER its aura (review of
@@ -2810,13 +2830,45 @@ export function enemyDefensiveEventsUncached(
       // in whole log milliseconds: 10.05 - 10 is 0.05000000000000071 in
       // floating point, which rejected a cast exactly 50 ms after its aura
       .filter(
-        (t) => putUp(t) || pressRefreshedCopy(enemy, iv, t, combat.startTime),
+        (r) =>
+          putUp(r.t) || pressRefreshedCopy(enemy, iv, r.t, combat.startTime),
       )
-      .reduce(
-        (best, t) =>
-          Math.abs(t - iv.fromS) < Math.abs(best - iv.fromS) ? t : best,
-        Number.POSITIVE_INFINITY,
+      .reduce<ReturnType<typeof pressRowsOf>[number] | undefined>(
+        (best, r) =>
+          best === undefined ||
+          Math.abs(r.t - iv.fromS) < Math.abs(best.t - iv.fromS)
+            ? r
+            : best,
+        undefined,
       );
+    const press = pressRow?.t ?? Number.POSITIVE_INFINITY;
+    // T189 (fact14 D12): the press is a cast of another spell than the aura
+    // (Restoral for Peaceweaver, Vanish for 11327), on a carrier of a team
+    // proc another unit's — the HP reader is told which cast and whose
+    // (`hpAtPress`: the press's own heal carries the cast's id and source)
+    const pressSrc =
+      pressRow && pressRow.srcUnitName !== enemy.name
+        ? // the aura's own source by id, when the log gives it (two units
+          // can share a name)
+          (enemies.find(
+            (e) => e.id === iv.srcUnitId && e.name === pressRow.srcUnitName,
+          ) ?? enemies.find((e) => e.name === pressRow.srcUnitName))
+        : undefined;
+    const pressIdentity = {
+      ...(pressRow && pressRow.spellId !== iv.spellId
+        ? { pressSpellId: pressRow.spellId }
+        : {}),
+      ...(pressSrc
+        ? {
+            pressSrcUnitId: pressSrc.id,
+            // another unit's cast row: the carrier's reading of that ms
+            // logged before it is the HP at the press (ruling 2026-10-23)
+            ...(pressRow?.lineIndex !== undefined
+              ? { pressLineIndex: pressRow.lineIndex }
+              : {}),
+          }
+        : {}),
+    };
     // fact9 D13 (1eb4dd55 r1 0:42): the press found is one that REFRESHED a
     // copy already up (`pressRefreshedCopy` — Exhilaration's Survival of the
     // Fittest at 0:42.06, the hunter's own press at 0:43.17). Two lines, as
@@ -2871,6 +2923,7 @@ export function enemyDefensiveEventsUncached(
         ...common,
         atSeconds: press,
         pressSeconds: press,
+        ...pressIdentity,
         observedSeconds: iv.toS - press,
         ...earlyEndOf(enemy, pressed, iv.spellId),
       });
@@ -2878,7 +2931,9 @@ export function enemyDefensiveEventsUncached(
     }
     out.push({
       atSeconds: iv.fromS,
-      ...(Number.isFinite(press) ? { pressSeconds: press } : {}),
+      ...(Number.isFinite(press)
+        ? { pressSeconds: press, ...pressIdentity }
+        : {}),
       spellId: iv.spellId,
       spellName: saveName ?? getEnglishSpellName(iv.spellId, iv.spellName),
       casterName: enemy.name,

@@ -370,6 +370,12 @@ describe("D17 — Peaceweaver is an immunity-kind save with its DB2 mask (ruling
       spellName: "Restoral",
     });
     expect(event(monk).procSource).toBeUndefined();
+    // T189: the press is named by its own cast and presser, for the HP reader
+    expect(event(monk).pressSpellId).toBe(RESTORAL);
+    expect(event(monk).pressSrcUnitId).toBeUndefined();
+    expect(event(ally).pressSpellId).toBe(RESTORAL);
+    expect(event(ally).pressSrcUnitId).toBe("monk");
+    expect(event(monk).pressLineIndex).toBeUndefined();
 
     const lines: string[] = [];
     emitEnemyDefEntries({

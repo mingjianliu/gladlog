@@ -566,3 +566,138 @@ describe("hpAtPress — fact8 D14: the press's own heal is the cut", () => {
     expect(hpAtPress(u, T0 + 72_002, { spellId: FR, srcUnitId: "P" })).toBe(67);
   });
 });
+
+// T189 (fact14 D12, 65145d1c r0 1:51): Peaceweaver 353319 is put up by a
+// Restoral press. Restoral's heal on the monk is logged 1 ms before its cast
+// row and before the aura; asked with the aura alone, the line read the
+// healed 100 % for a 94 % press.
+describe("hpAtPress — T189: the press is a cast of another spell than the aura", () => {
+  const PEACEWEAVER = "353319";
+  const RESTORAL = "388615";
+  const row = (t: number, line: number, event = LogEvent.SPELL_HEAL) => ({
+    timestamp: T0 + t,
+    parameters: [],
+    event,
+    lineIndex: line,
+  });
+  const hp = (id: string, t: number, cur: number, line: number) => ({
+    ...sample(id, t, cur),
+    logLine: { ...sample(id, t, cur).logLine, lineIndex: line },
+  });
+  const carrier = (id: string) => ({
+    ...unit(
+      [hp(id, 110.9, 937, 19855), hp(id, 110.983, 1000, 19866)],
+      [{ ...heal(RESTORAL, "monk", 110.983), logLine: row(110_983, 19866) }],
+    ),
+    id,
+    auraEvents: [
+      {
+        spellId: PEACEWEAVER,
+        srcUnitId: "monk",
+        logLine: row(110_984, 19872, LogEvent.SPELL_AURA_APPLIED),
+      },
+    ] as never,
+  });
+  it("the trigger's own heal before the cast row is the press's heal — on the presser", () => {
+    expect(
+      hpAtPress(carrier("monk"), T0 + 110_984, {
+        spellId: PEACEWEAVER,
+        srcUnitId: "monk",
+        pressSpellId: RESTORAL,
+      }),
+    ).toBe(94);
+  });
+  it("…and on a carrier the monk's press covered", () => {
+    expect(
+      hpAtPress(carrier("ally"), T0 + 110_984, {
+        spellId: PEACEWEAVER,
+        srcUnitId: "monk",
+        pressSpellId: RESTORAL,
+      }),
+    ).toBe(94);
+  });
+  it("control: asked with the aura alone, the healed reading stands", () => {
+    expect(
+      hpAtPress(carrier("monk"), T0 + 110_984, {
+        spellId: PEACEWEAVER,
+        srcUnitId: "monk",
+      }),
+    ).toBe(100);
+  });
+  // codex 85-tk-L1-T189-1 #1 (517810f2 r6 0:42): a Garrote tick leaves the
+  // carrier at 85 % in the ms of the monk's Restoral, logged before its cast
+  // row; the heal lands 1 ms later
+  it("a carrier's reading of the press's ms logged before the presser's cast row counts", () => {
+    const u = {
+      ...unit(
+        [
+          hp("ally", 42.0, 870, 2900),
+          hp("ally", 42.258, 850, 2966),
+          hp("ally", 42.259, 1000, 2980),
+        ],
+        [{ ...heal(RESTORAL, "monk", 42.259), logLine: row(42_259, 2980) }],
+      ),
+      id: "ally",
+    };
+    const cast = {
+      spellId: PEACEWEAVER,
+      srcUnitId: "monk",
+      pressSpellId: RESTORAL,
+    };
+    expect(hpAtPress(u, T0 + 42_258, { ...cast, pressLineIndex: 2977 })).toBe(
+      85,
+    );
+    // a reading logged after the cast row carries the press: not counted
+    expect(hpAtPress(u, T0 + 42_258, { ...cast, pressLineIndex: 2960 })).toBe(
+      87,
+    );
+    expect(hpAtPress(u, T0 + 42_258, cast)).toBe(87);
+  });
+  // codex 85-tk-L1-T189-1 #2: the monk's Vivify just before the aura row is
+  // not the press's heal
+  it("another heal of the presser's before the aura row is no trigger guess on a carrier", () => {
+    const u = {
+      ...unit(
+        [
+          hp("ally", 110.9, 600, 100),
+          hp("ally", 110.983, 700, 110),
+          hp("ally", 110.985, 1000, 120),
+        ],
+        [
+          { ...heal("116670", "monk", 110.983), logLine: row(110_983, 110) },
+          { ...heal(RESTORAL, "monk", 110.985), logLine: row(110_985, 120) },
+        ],
+      ),
+      id: "ally",
+      auraEvents: [
+        {
+          spellId: PEACEWEAVER,
+          srcUnitId: "monk",
+          logLine: row(110_983, 111, LogEvent.SPELL_AURA_APPLIED),
+        },
+      ] as never,
+    };
+    expect(
+      hpAtPress(u, T0 + 110_984, {
+        spellId: PEACEWEAVER,
+        srcUnitId: "monk",
+        pressSpellId: RESTORAL,
+        pressLineIndex: 115,
+      }),
+    ).toBe(70);
+  });
+  it("another unit's heal of the press's spell is not this press", () => {
+    const u = carrier("ally");
+    const other = {
+      ...heal(RESTORAL, "other", 110.983),
+      logLine: row(110_983, 19866),
+    };
+    expect(
+      hpAtPress({ ...u, healIn: [other] as never }, T0 + 110_984, {
+        spellId: PEACEWEAVER,
+        srcUnitId: "monk",
+        pressSpellId: RESTORAL,
+      }),
+    ).toBe(100);
+  });
+});
