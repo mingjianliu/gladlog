@@ -276,6 +276,13 @@ export function createManagedObsBackend(
    * `connected` already true and issued its requests mid-NotReady (or, before
    * `connected` was set, opened a second connect on the same client). */
   let connecting: Promise<boolean> | null = null;
+  /** Bumped by every shutdown() (GH #213). A connectFresh() that began before
+   * a shutdown finds the value moved after one of its awaits and backs out:
+   * it disconnects any client it created and returns false, instead of
+   * bringing the backend back to life (a pending ensureProcess() resolving
+   * after shutdown used to create a client and carry on to StartRecord) or
+   * leaking a handshake that completed after shutdown cleared `client`. */
+  let epoch = 0;
   let listenersAttached = false;
   let continuousActive = false;
   let sessionConfigured = false;
@@ -371,7 +378,11 @@ export function createManagedObsBackend(
     // 规则 1:监听必须在 StartRecord 之前挂好 —— attachListeners() 的所有调用点
     // 都在任何 call("StartRecord") 之前(ensureConnected 里),这里不重复断言,
     // fake 测试按调用顺序断言。
+    // Only the live client's events count (GH #213): a connection dropped by
+    // shutdown() or by the readiness cleanup keeps its listeners, and a late
+    // event from it must not open or split a chunk.
     c.on("RecordStateChanged", (data) => {
+      if (client !== c) return;
       const outputState = data.outputState;
       const outputPath = data.outputPath;
       if (
@@ -384,6 +395,7 @@ export function createManagedObsBackend(
       }
     });
     c.on("RecordFileChanged", (data) => {
+      if (client !== c) return;
       const newOutputPath = data.newOutputPath;
       if (typeof newOutputPath === "string" && newOutputPath.length > 0) {
         handleChunkSplitEvent(newOutputPath);
@@ -513,7 +525,24 @@ export function createManagedObsBackend(
     return connecting;
   }
 
+  /** A connection a shutdown() overtook (GH #213): disconnect it, best
+   * effort, and make sure it is not left as the live client. */
+  async function dropOvertaken(c: ManagedObsWs): Promise<void> {
+    if (client === c) {
+      client = null;
+      connected = false;
+      listenersAttached = false;
+    }
+    try {
+      await withTimeout(c.disconnect(), CALL_TIMEOUT_MS, "disconnect");
+    } catch {
+      /* best effort: the socket may never have opened */
+    }
+  }
+
   async function connectFresh(): Promise<boolean> {
+    const myEpoch = epoch;
+    const overtaken = () => epoch !== myEpoch;
     let proc: { wsUrl: string; wsPassword: string };
     try {
       proc = await deps.ensureProcess();
@@ -523,6 +552,7 @@ export function createManagedObsBackend(
       });
       return false;
     }
+    if (overtaken()) return false; // shutdown() ran during the process lookup
     if (!client) client = makeClient();
     const c = client;
     attachListeners(c);
@@ -533,12 +563,28 @@ export function createManagedObsBackend(
         "connect",
       );
     } catch (err) {
+      if (overtaken()) {
+        await dropOvertaken(c);
+        return false;
+      }
       lastError = t("errors.obs.connectFailed", { error: errMessage(err) });
       return false;
     }
-    if (client !== c) return false; // shutdown() ran during the connect
+    // shutdown() ran during the handshake: it skipped the disconnect
+    // (`connected` was still false) and cleared `client`, so this socket is
+    // ours to close.
+    if (overtaken() || client !== c) {
+      await dropOvertaken(c);
+      return false;
+    }
     connected = true;
-    if (await waitObsReady(c)) return client === c;
+    if (await waitObsReady(c)) {
+      if (overtaken()) {
+        await dropOvertaken(c);
+        return false;
+      }
+      return client === c;
+    }
     // Never ready: drop this connection instead of keeping it as "connected".
     // The backend has no ConnectionClosed handling, so a socket that died
     // during the wait (OBS crashed while loading) would otherwise be reused
@@ -761,6 +807,7 @@ export function createManagedObsBackend(
   }
 
   async function shutdown(): Promise<void> {
+    epoch++;
     const c = client;
     if (c && connected) {
       try {

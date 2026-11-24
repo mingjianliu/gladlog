@@ -1190,3 +1190,70 @@ describe("ensureConnected — OBS 就绪等待(NotReady 207,2026-11-12 黑屏的
     expect((await backend.probe()).ready).toBe(true); // B survives
   });
 });
+
+// GH #213: shutdown() had no fence against a connect already in flight.
+describe("shutdown 与在途连接(GH #213)", () => {
+  it("进程查找还没回来时 shutdown:查找回来后不建连接、不开录,probe 不 ready", async () => {
+    let resolveProc!: (v: { wsUrl: string; wsPassword: string }) => void;
+    ensureProcess.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveProc = r;
+        }),
+    );
+    let made = 0;
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => {
+        made++;
+        return fake;
+      },
+      now,
+    });
+    const start = backend.startContinuous();
+    await vi.waitFor(() => expect(ensureProcess).toHaveBeenCalledTimes(1));
+    await backend.shutdown();
+    resolveProc({ wsUrl: "ws://127.0.0.1:4466", wsPassword: "pw" });
+    await start;
+    expect(made).toBe(0);
+    expect(fake.connectCalls).toHaveLength(0);
+    expect(order(fake)).not.toContain("call:StartRecord");
+    expect((await backend.probe()).ready).toBe(false);
+  });
+
+  it("握手途中 shutdown:握手完成后这条连接被断开,迟到的事件不开分片", async () => {
+    let finishHandshake!: () => void;
+    fake.connect = async (url: string, password: string) => {
+      fake.connectCalls.push({ url, password });
+      await new Promise<void>((r) => {
+        finishHandshake = r;
+      });
+    };
+    const backend = makeBackend();
+    const opened: string[] = [];
+    backend.onChunkOpened((c) => opened.push(c.videoPath));
+    const start = backend.startContinuous();
+    await vi.waitFor(() => expect(fake.connectCalls).toHaveLength(1));
+    await backend.shutdown();
+    expect(fake.disconnectCalls).toBe(0); // shutdown skipped it: not connected yet
+    finishHandshake();
+    await start;
+    expect(fake.disconnectCalls).toBe(1); // closed by the overtaken connect
+    expect(order(fake)).not.toContain("call:StartRecord");
+    fake.emit("RecordStateChanged", {
+      outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
+      outputPath: "/rec/late.mp4",
+    });
+    expect(opened).toEqual([]);
+    expect((await backend.probe()).ready).toBe(false);
+  });
+
+  it("shutdown 之后再连:新一轮照常连上(栅栏只挡 shutdown 之前开始的连接)", async () => {
+    const backend = makeBackend();
+    await backend.shutdown();
+    await backend.configureSession();
+    expect(fake.connectCalls).toHaveLength(1);
+    expect((await backend.probe()).ready).toBe(true);
+  });
+});
