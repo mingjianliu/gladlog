@@ -160,22 +160,51 @@ export function run(ctx: IRoundCtx): void {
       const up = auras.find(
         (a) => ev(a) === APPLIED && tsOf(a) >= lo && tsOf(a) < lo + 1000,
       );
-      if (!up) continue;
-      ctx.bump("noPressButPressed");
       const keyLines = linesOfKey.get(keyOf(m)) ?? [];
-      if (
-        isProcOwnNoPressLine(
-          keyLines.indexOf(i),
-          keyLines.length,
-          activationsInSecond(
-            auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
-            presses.map(tsOf),
-            procMarkerTs(unit, auras),
-            lo,
-          ),
-        )
-      )
+      const pos = keyLines.indexOf(i);
+      const acts = activationsInSecond(
+        auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
+        presses.map(tsOf),
+        procMarkerTs(unit, auras),
+        lo,
+      );
+      if (!up) {
+        // a second of REFRESH rows only: the line is a press's when its own
+        // activation (lines and activations one to one) was given a press
+        // (B192 review 5 — bf679e40 r1 0:53 tagged by mutation: the press
+        // and its REFRESH at 53.500, no APPLIED in the second)
+        const own = acts[pos];
+        if (!own || keyLines.length !== acts.length) continue;
+        ctx.bump("noPressButPressed");
+        if (!own.pressed) continue;
+        const rowTs = auras
+          .map(tsOf)
+          .filter(
+            (t, k) => ev(auras[k]) === REFRESH && t >= lo && t < lo + 1000,
+          )
+          .sort((x, y) => x - y)[pos]!;
+        const press = presses
+          .filter(
+            (c) =>
+              Math.abs(tsOf(c) - rowTs) <= 50 ||
+              (tsOf(c) >= rowTs && tsOf(c) <= rowTs + PRESS_AFTER_MS),
+          )
+          .sort(
+            (x, y) => Math.abs(tsOf(x) - rowTs) - Math.abs(tsOf(y) - rowTs),
+          )[0];
+        if (!press) continue;
+        ctx.violate(
+          "noPressButPressed",
+          "refreshed",
+          tsOf(press),
+          `${unit.name}#${name}#${tsOf(press)}`,
+          `${unit.name} ${name}: refresh +${rowTs - ctx.start}ms, press +${tsOf(press) - ctx.start}ms`,
+          line,
+        );
         continue;
+      }
+      ctx.bump("noPressButPressed");
+      if (isProcOwnNoPressLine(pos, keyLines.length, acts)) continue;
       const press = presses.find(
         (c) => tsOf(c) >= tsOf(up) && tsOf(c) <= tsOf(up) + PRESS_AFTER_MS,
       );
