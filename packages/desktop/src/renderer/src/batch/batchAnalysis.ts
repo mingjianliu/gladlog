@@ -211,7 +211,10 @@ async function processSource(
     // No done event = the round failed or was superseded: nothing of this
     // round to count or deep-dive (whatever getCached holds is an older
     // result).
-    const done = ownDone as { result: CachedResult; contentLang?: Language } | null;
+    const done = ownDone as {
+      result: CachedResult;
+      contentLang?: Language;
+    } | null;
     if (!done?.result) return "failed";
     const runLang = done.contentLang ?? (lang as Language | undefined);
     // Finished in the language it started in, which is no longer the current
