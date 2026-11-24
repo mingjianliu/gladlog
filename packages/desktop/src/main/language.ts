@@ -60,3 +60,29 @@ export function installerLanguageToAdopt(
   if (platform !== "win32") return null;
   return readInstallerLanguage(exeDir());
 }
+
+/** Startup step for §6.1 step 3: adopt the installer's language into
+ * settings. Never throws (codex A#2): it runs before the window is created,
+ * so a failed save (a locked settings.json) must not keep the app from
+ * opening -- the setting stays null and the renderer's first-run picker asks
+ * instead. */
+export function adoptInstallerLanguage(deps: {
+  platform: NodeJS.Platform;
+  current: Language | null;
+  exeDir: () => string;
+  save: (patch: { language: Language }) => void;
+  logError: (message: string) => void;
+}): void {
+  try {
+    const language = installerLanguageToAdopt(
+      deps.platform,
+      deps.current,
+      deps.exeDir,
+    );
+    if (language) deps.save({ language });
+  } catch (e) {
+    deps.logError(
+      `adopting the installer language failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}

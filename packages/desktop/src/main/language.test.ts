@@ -4,6 +4,7 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 
 import {
+  adoptInstallerLanguage,
   effectiveLanguage,
   INSTALLER_LANGUAGE_FILE,
   installerLanguageToAdopt,
@@ -98,5 +99,58 @@ describe("installerLanguageToAdopt", () => {
     expect(installerLanguageToAdopt("win32", null, tmpDir)).toBeNull();
     const bad = dirWith("fr");
     expect(installerLanguageToAdopt("win32", null, () => bad)).toBeNull();
+  });
+});
+
+describe("adoptInstallerLanguage(启动时采用安装器语言)", () => {
+  const dirWith = (content: string) => {
+    const dir = tmpDir();
+    writeFileSync(join(dir, INSTALLER_LANGUAGE_FILE), content);
+    return dir;
+  };
+
+  it("保存成功:写入安装器语言", () => {
+    const dir = dirWith("en");
+    const saved: unknown[] = [];
+    adoptInstallerLanguage({
+      platform: "win32",
+      current: null,
+      exeDir: () => dir,
+      save: (p) => saved.push(p),
+      logError: () => {},
+    });
+    expect(saved).toEqual([{ language: "en" }]);
+  });
+
+  it("保存抛异常(settings.json 被锁):不抛出,记日志,让启动继续(codex A#2)", () => {
+    const dir = dirWith("zh");
+    const logged: string[] = [];
+    expect(() =>
+      adoptInstallerLanguage({
+        platform: "win32",
+        current: null,
+        exeDir: () => dir,
+        save: () => {
+          throw new Error("EPERM settings.json");
+        },
+        logError: (m) => logged.push(m),
+      }),
+    ).not.toThrow();
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("EPERM settings.json");
+  });
+
+  it("exeDir 抛异常也不抛出", () => {
+    expect(() =>
+      adoptInstallerLanguage({
+        platform: "win32",
+        current: null,
+        exeDir: () => {
+          throw new Error("no exe path");
+        },
+        save: () => {},
+        logError: () => {},
+      }),
+    ).not.toThrow();
   });
 });

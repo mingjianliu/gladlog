@@ -25,8 +25,8 @@ import { exportReportImage } from "./exportImage";
 import { createIconCache } from "./iconCache";
 import { registerIpc } from "./ipc";
 import {
+  adoptInstallerLanguage as adoptInstallerLanguageInto,
   effectiveLanguage,
-  installerLanguageToAdopt,
   withEffectiveLanguage,
 } from "./language";
 import { createLearningService } from "./learning";
@@ -181,12 +181,13 @@ function effectiveSettings() {
  * installer -- only while the user has not chosen one. A missing or invalid
  * file leaves the setting null (the renderer then asks). */
 function adoptInstallerLanguage(): void {
-  const language = installerLanguageToAdopt(
-    process.platform,
-    settings.get().language,
-    () => dirname(app.getPath("exe")),
-  );
-  if (language) settings.save({ language });
+  adoptInstallerLanguageInto({
+    platform: process.platform,
+    current: settings.get().language,
+    exeDir: () => dirname(app.getPath("exe")),
+    save: (patch) => settings.save(patch),
+    logError: (m) => log.error(m),
+  });
 }
 
 /** Task-5b brief step 2: `settings.managedWsPassword ?? generate 32 hex
