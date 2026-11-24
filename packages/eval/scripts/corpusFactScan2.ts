@@ -204,7 +204,6 @@
  *   npx tsx packages/eval/scripts/corpusFactScan2.ts <captureDir> [--examples N]
  *     [--archive-dir <dir>] [--json <violations.json>]
  */
-import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
@@ -247,6 +246,7 @@ import {
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { LogEvent } from "@gladlog/parser-compat";
 
+import { writeJsonIndent1 } from "./verify/jsonWrite";
 import { addEach, type MergeRule } from "./verify/merge";
 import {
   type IContext,
@@ -2063,31 +2063,24 @@ function createScan(): IScan<any> {
       );
 
     if (JSON_OUT) {
-      writeFileSync(
-        JSON_OUT,
-        JSON.stringify(
-          {
-            capture: resolve(dir),
-            contexts,
-            checked: Object.fromEntries(checked),
-            landedByPrior,
-            playerKick,
-            ccEndJudged,
-            fixExamples,
-            immunityTableForward: {
-              immuneRows: fwdImmuneRows,
-              tableExplained: fwdTableExplained,
-              drExplained: fwdDrExplained,
-              unexplained: fwdCases,
-              byN: fwdRows,
-              byRate: fwdByRate,
-            },
-            violations,
-          },
-          null,
-          1,
-        ),
-      );
+      writeJsonIndent1(JSON_OUT, {
+        capture: resolve(dir),
+        contexts,
+        checked: Object.fromEntries(checked),
+        landedByPrior,
+        playerKick,
+        ccEndJudged,
+        fixExamples,
+        immunityTableForward: {
+          immuneRows: fwdImmuneRows,
+          tableExplained: fwdTableExplained,
+          drExplained: fwdDrExplained,
+          unexplained: fwdCases,
+          byN: fwdRows,
+          byRate: fwdByRate,
+        },
+        violations,
+      });
       say(`wrote ${JSON_OUT}`);
     }
   }

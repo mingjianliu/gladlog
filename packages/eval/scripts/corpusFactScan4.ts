@@ -50,7 +50,6 @@
  *
  *   npx tsx packages/eval/scripts/corpusFactScan4.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]
  */
-import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -70,7 +69,11 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals";
-import { isNoWallPress, kitTextWithoutNoWallTags, wallStartOfRowMs } from "@gladlog/analysis/src/utils/auraMasteryBranch";
+import {
+  isNoWallPress,
+  kitTextWithoutNoWallTags,
+  wallStartOfRowMs,
+} from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import {} from "@gladlog/analysis/src/utils/castPress";
 import {
   applicableCCAvoidanceIds,
@@ -118,6 +121,7 @@ import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { ccThreatReachYards } from "@gladlog/analysis/src/utils/spellRange";
 import { LogEvent } from "@gladlog/parser-compat";
 
+import { writeJsonIndent1 } from "./verify/jsonWrite";
 import {
   type IContext,
   type IScan,
@@ -1828,19 +1832,12 @@ function report(): void {
       `  ${n}: +${Math.round(y.pos / 1000)}k / ${Math.round(y.neg / 1000)}k / ticks ${Math.round(y.ticks / 1000)}k (${y.units})`,
     );
   if (JSON_OUT) {
-    writeFileSync(
-      JSON_OUT,
-      JSON.stringify(
-        {
-          capture: resolve(dir),
-          contexts,
-          checked: Object.fromEntries(checked),
-          violations,
-        },
-        null,
-        1,
-      ),
-    );
+    writeJsonIndent1(JSON_OUT, {
+      capture: resolve(dir),
+      contexts,
+      checked: Object.fromEntries(checked),
+      violations,
+    });
     say(`wrote ${JSON_OUT}`);
   }
 }

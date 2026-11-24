@@ -4,6 +4,7 @@
  *   npx tsx packages/eval/scripts/verify/run.ts <captureDir> --out <dir>
  *     [--scans corpusFactScan3,fact2Scan] [--only <check,…>] [--workers N]
  *     [--archive-dir <dir>] [--files N] [--freeze] [--coverage] [--flush-mb N]
+ *     [--chunks N] [--join-from <dir>]
  *
  * Each worker reads one contiguous run of the contexts (never cutting an
  * archive) and writes its accumulators; this process joins them in run order
@@ -14,7 +15,12 @@
  * run checked out: a dead worker, a truncated state file, a missing context or a
  * scan that failed its own report leaves no report, and the previous run's are
  * gone before this one starts, so nothing partial or stale can be mistaken for
- * a clean run. `--files N` keeps the first N
+ * a clean run. `--chunks N` cuts the walk into N runs instead of one per
+ * worker, `--workers` of them at a time (the wide corpus: a chunk that dies of
+ * SIGILL is walked again alone, and no process holds a third of the corpus).
+ * A walk that finished keeps its accumulators when the join after it throws,
+ * and `--join-from <that directory>` joins them without walking again; the
+ * reports do not depend on any of the three. `--files N` keeps the first N
  * contexts (a quick pass); `--freeze` deep-freezes the rows, which proves no
  * check writes to what the owners and scans share; `--coverage` writes
  * `coverage.json` for `verify/coverSet.ts`.
@@ -100,6 +106,14 @@ const COVERAGE = process.argv.includes("--coverage");
 /** Three, not six: the desktop stays usable and a run costs minutes more.
  * Reports do not depend on the count. */
 const WORKERS = Number(argOf("--workers") ?? 3);
+/** contiguous runs the walk is cut into; one per worker unless told */
+const CHUNKS = Number(argOf("--chunks") ?? WORKERS);
+/** the directory a finished walk kept: join it, walk nothing */
+const JOIN_FROM = argOf("--join-from");
+/** a chunk whose node died of SIGILL is walked this many times at most */
+const SIGILL_ATTEMPTS = 3;
+/** what a kept walk says about itself; a join reads nothing else's states */
+const WALK_FILE = "walk.json";
 const FILES = argOf("--files");
 const STATE = argOf("--state");
 const only = argOf("--scans")?.split(",");
@@ -227,6 +241,16 @@ function watchMemory(children: ChildProcess[]): () => number {
   };
 }
 
+class WorkerDeath extends Error {
+  constructor(
+    k: number,
+    code: number | null,
+    readonly signal: NodeJS.Signals | null,
+  ) {
+    super(`worker ${k}: exit ${code ?? signal}`);
+  }
+}
+
 function runWorker(
   k: number,
   n: number,
@@ -258,7 +282,7 @@ function runWorker(
     children.push(p);
     p.on("exit", (code, signal) => {
       if (code === 0) done();
-      else fail(new Error(`worker ${k}: exit ${code ?? signal}`));
+      else fail(new WorkerDeath(k, code, signal));
     });
   });
 }
@@ -337,7 +361,50 @@ async function main(): Promise<void> {
     console.error(`verify: no contexts under ${DIR}`);
     process.exit(1);
   }
-  const tmp = mkdtempSync(join(dirname(resolve(OUT!)), ".verify-"));
+  const walk = JSON.stringify({
+    capture: resolve(DIR!),
+    archiveDir: ARCHIVE_DIR,
+    contexts: expected,
+    files: FILES ?? null,
+    chunks: CHUNKS,
+    scans: specs.map((s) => s.name),
+    only: ONLY_CHECKS ?? null,
+    freeze: FREEZE,
+    coverage: COVERAGE,
+  });
+  if (JOIN_FROM) {
+    // states of another capture, split or scan list would join into a report
+    // that looks like this run's
+    let kept: string | undefined;
+    try {
+      kept = readFileSync(join(JOIN_FROM, WALK_FILE), "utf8");
+    } catch {
+      // no finished walk there
+    }
+    if (kept !== walk) {
+      console.error(
+        `verify: ${JOIN_FROM} does not hold a finished walk of this run\n  kept: ${kept ?? "nothing"}\n  this: ${walk}`,
+      );
+      process.exit(1);
+    }
+  }
+  const tmp = JOIN_FROM
+    ? resolve(JOIN_FROM)
+    : mkdtempSync(join(dirname(resolve(OUT!)), ".verify-"));
+  /** the walk is on disk, whole: from here only a verdict removes it */
+  let walked = Boolean(JOIN_FROM);
+  /** the run reached its verdict, published or refused */
+  let judged = false;
+  /** a walk costs hours on the wide corpus and a join minutes: what a throw
+   * in the join (or a signal during it) leaves is the walk, for
+   * `--join-from`. Everything else leaves nothing, as before. */
+  const dropTmp = (): void => {
+    if (walked && !judged)
+      console.error(
+        `verify: the walk finished and the join did not; kept its states, join them with --join-from ${tmp}`,
+      );
+    else rmSync(tmp, { recursive: true, force: true });
+  };
   const children: ChildProcess[] = [];
   let stopped: Promise<void> | undefined;
   /** every worker gone, by SIGKILL after 5 s: the one shutdown, whichever of
@@ -361,27 +428,60 @@ async function main(): Promise<void> {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.on(signal, () => {
       void stopWorkers().then(() => {
-        rmSync(tmp, { recursive: true, force: true });
+        dropTmp();
         process.exit(1);
       });
     });
   try {
     reportDir = join(tmp, "out");
+    // a join that threw left half a report in the kept directory
+    rmSync(reportDir, { recursive: true, force: true });
     mkdirSync(reportDir);
-    const paths = Array.from({ length: WORKERS }, (_, k) =>
+    const paths = Array.from({ length: CHUNKS }, (_, k) =>
       join(tmp, `w${k}.bin`),
     );
     const stopWatch = watchMemory(children);
     try {
-      await Promise.all(
-        paths.map((p, k) => runWorker(k, WORKERS, p, children)),
-      );
+      let next = 0;
+      let dead = false;
+      /** one of `WORKERS` lanes: the next chunk not yet taken, until none is
+       * left or a chunk died */
+      const lane = async (): Promise<void> => {
+        while (next < CHUNKS && !dead) {
+          const k = next++;
+          for (let attempt = 1; ; attempt++)
+            try {
+              await runWorker(k, CHUNKS, paths[k]!, children);
+              break;
+            } catch (e) {
+              // node on the WSL host dies of SIGILL at a fixed V8 address now
+              // and then (2026-11-18, -20, -22). The chunk starts over and
+              // writes every state file again; any other death ends the run.
+              if (
+                dead ||
+                attempt >= SIGILL_ATTEMPTS ||
+                !(e instanceof WorkerDeath && e.signal === "SIGILL")
+              ) {
+                dead = true;
+                throw e;
+              }
+              console.error(`chunk ${k}/${CHUNKS}: SIGILL, walking it again`);
+            }
+        }
+      };
+      if (!JOIN_FROM) {
+        await Promise.all(
+          Array.from({ length: Math.min(WORKERS, CHUNKS) }, lane),
+        );
+        writeFileSync(join(tmp, WALK_FILE), walk);
+        walked = true;
+      }
     } finally {
       lowestFree = stopWatch();
       // one dead worker ends the run: the others must not go on unattended
       await stopWorkers();
     }
-    const walked = Date.now();
+    const walkEnd = Date.now();
     const scans = await loadScans();
     const unmapped: string[] = [];
     const totals = new Map<string, number>();
@@ -402,7 +502,6 @@ async function main(): Promise<void> {
         totals.set(k, (totals.get(k) ?? 0) + ms);
       unmapped.push(...part.unmapped);
       contexts += part.contexts;
-      rmSync(p);
     }
     for (const { spec, scan } of scans) {
       const rules = (scan.merge ?? {}) as Record<string, MergeRule>;
@@ -416,7 +515,6 @@ async function main(): Promise<void> {
             unknown
           >;
           merged = merged ? mergeState(merged, part, rules) : part;
-          rmSync(file);
         }
       scan.load(merged);
       writeReport(spec, scan, unmapped);
@@ -437,15 +535,16 @@ async function main(): Promise<void> {
       );
     }
     console.log(
-      `verify: ${contexts}/${expected} contexts, ${specs.length} scans, walk ${((walked - t0) / 60000).toFixed(1)} min, total ${((Date.now() - t0) / 60000).toFixed(1)} min, unmapped ${unmapped.length}, lowest free memory ${lowestFree}%`,
+      `verify: ${contexts}/${expected} contexts, ${specs.length} scans, walk ${((walkEnd - t0) / 60000).toFixed(1)} min, total ${((Date.now() - t0) / 60000).toFixed(1)} min, unmapped ${unmapped.length}, lowest free memory ${lowestFree}%`,
     );
     // a scan's own failure (a module that did not load) sets the exit code
     if (contexts !== expected || unmapped.length > 0 || process.exitCode) {
       console.error("verify: run failed, no report published");
       process.exitCode = 1;
     } else publish();
+    judged = true;
   } finally {
-    rmSync(tmp, { recursive: true, force: true });
+    dropTmp();
   }
 }
 

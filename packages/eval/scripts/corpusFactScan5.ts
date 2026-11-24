@@ -10,7 +10,7 @@
  *
  *   npx tsx packages/eval/scripts/corpusFactScan5.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>] [--only <check,…>]
  */
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -21,6 +21,7 @@ import type {
   IViolationRef,
   RecordViolation,
 } from "./scan5/ctx";
+import { writeJsonIndent1 } from "./verify/jsonWrite";
 import { type MergeRule, mergeState } from "./verify/merge";
 import {
   type IContext,
@@ -334,19 +335,12 @@ function report(): void {
   }
   for (const m of modules) for (const l of m.report?.() ?? []) say(l);
   if (JSON_OUT) {
-    writeFileSync(
-      JSON_OUT,
-      JSON.stringify(
-        {
-          capture: resolve(dir),
-          contexts,
-          checked: Object.fromEntries(checked),
-          violations,
-        },
-        null,
-        1,
-      ),
-    );
+    writeJsonIndent1(JSON_OUT, {
+      capture: resolve(dir),
+      contexts,
+      checked: Object.fromEntries(checked),
+      violations,
+    });
     say(`wrote ${JSON_OUT}`);
   }
   for (const u of loadFailures) say(u);

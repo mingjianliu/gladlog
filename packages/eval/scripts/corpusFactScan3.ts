@@ -44,7 +44,6 @@
  *
  *   npx tsx packages/eval/scripts/corpusFactScan3.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]
  */
-import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -73,6 +72,7 @@ import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger"
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { LogEvent } from "@gladlog/parser-compat";
 
+import { writeJsonIndent1 } from "./verify/jsonWrite";
 import {
   type IContext,
   type IScan,
@@ -805,19 +805,12 @@ function report(): void {
     }
   }
   if (JSON_OUT) {
-    writeFileSync(
-      JSON_OUT,
-      JSON.stringify(
-        {
-          capture: resolve(dir),
-          contexts,
-          checked: Object.fromEntries(checked),
-          violations,
-        },
-        null,
-        1,
-      ),
-    );
+    writeJsonIndent1(JSON_OUT, {
+      capture: resolve(dir),
+      contexts,
+      checked: Object.fromEntries(checked),
+      violations,
+    });
     say(`wrote ${JSON_OUT}`);
   }
 }

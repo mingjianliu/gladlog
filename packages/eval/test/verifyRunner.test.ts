@@ -7,6 +7,7 @@
  */
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -20,11 +21,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { compareRuns, countsOf } from "../scripts/verify/compare";
 import { coverageGapsOf, CoverageTracker } from "../scripts/verify/coverage";
 import { pickCover } from "../scripts/verify/coverSet";
+import { writeJsonIndent1 } from "../scripts/verify/jsonWrite";
 import { addEach, mergeState, mergeValue } from "../scripts/verify/merge";
 import { listContextFiles, splitContexts } from "../scripts/verify/rounds";
 import { type IScan, isMainScan } from "../scripts/verify/scan";
@@ -325,6 +327,173 @@ describe("verify/run.ts", () => {
     );
     expect(readFileSync(join(out, "gates.json"), "utf8")).toContain('"files"');
   }, 60_000);
+});
+
+describe("verify/run.ts --chunks / --join-from (T263)", () => {
+  const runner = (cap: string, out: string, ...more: string[]) =>
+    spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        join(SCRIPTS, "verify/run.ts"),
+        cap,
+        "--out",
+        out,
+        "--scans",
+        "gates",
+        ...more,
+      ],
+      { cwd: join(__dirname, ".."), encoding: "utf8" },
+    );
+  /** five archives, one owner view each */
+  const capture = (): string => {
+    const cap = mkdtempSync(join(tmpdir(), "verify-"));
+    const context = join(cap, "s0", "context");
+    mkdirSync(context, { recursive: true });
+    for (let i = 1; i <= 5; i++)
+      writeFileSync(join(context, `${i}-1-1.txt`), `/nowhere/${i}\nowner\n`);
+    return cap;
+  };
+  const keptDirs = (cap: string) =>
+    readdirSync(cap).filter((f) => f.startsWith(".verify-"));
+
+  it("reports the same bytes however the walk is cut", () => {
+    const cap = capture();
+    const whole = join(cap, "whole");
+    const cut = join(cap, "cut");
+    expect(runner(cap, whole, "--workers", "1").status).toBe(0);
+    const r = runner(cap, cut, "--workers", "2", "--chunks", "4");
+    expect(r.stdout).toContain("5/5 contexts");
+    expect(r.status).toBe(0);
+    for (const f of ["gates.txt", "gates.json"])
+      expect(readFileSync(join(cut, f), "utf8")).toBe(
+        readFileSync(join(whole, f), "utf8"),
+      );
+    expect(keptDirs(cap)).toEqual([]);
+  }, 120_000);
+
+  it("keeps a finished walk whose join threw, and joins it without walking", () => {
+    const cap = capture();
+    const whole = join(cap, "whole");
+    expect(runner(cap, whole, "--workers", "1").status).toBe(0);
+    const out = join(cap, "out");
+    mkdirSync(out);
+    // the join's last step cannot write: the reports are made, not published
+    chmodSync(out, 0o555);
+    const failed = runner(cap, out, "--workers", "2", "--chunks", "3");
+    chmodSync(out, 0o755);
+    expect(failed.status).not.toBe(0);
+    expect(readdirSync(out)).toEqual([]);
+    const [kept] = keptDirs(cap);
+    expect(kept).toBeDefined();
+    expect(failed.stderr).toContain(`--join-from ${join(cap, kept!)}`);
+
+    // another split's states are not this run's
+    const other = runner(
+      cap,
+      out,
+      "--chunks",
+      "2",
+      "--join-from",
+      join(cap, kept!),
+    );
+    expect(other.status).toBe(1);
+    expect(other.stderr).toContain("does not hold a finished walk");
+    expect(keptDirs(cap)).toEqual([kept]);
+
+    // no worker runs: a walk could not read these
+    for (let i = 1; i <= 5; i++)
+      chmodSync(join(cap, "s0", "context", `${i}-1-1.txt`), 0o000);
+    const joined = runner(
+      cap,
+      out,
+      "--chunks",
+      "3",
+      "--join-from",
+      join(cap, kept!),
+    );
+    expect(joined.stdout).toContain("5/5 contexts");
+    expect(joined.status).toBe(0);
+    for (const f of ["gates.txt", "gates.json"])
+      expect(readFileSync(join(out, f), "utf8")).toBe(
+        readFileSync(join(whole, f), "utf8"),
+      );
+    expect(keptDirs(cap)).toEqual([]);
+  }, 180_000);
+
+  it("refuses a directory with no finished walk", () => {
+    const cap = capture();
+    const r = runner(cap, join(cap, "out"), "--join-from", cap);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("does not hold a finished walk");
+    expect(existsSync(join(cap, "s0", "context", "1-1-1.txt"))).toBe(true);
+  }, 60_000);
+});
+
+describe("writeJsonIndent1 (T263)", () => {
+  const written = (obj: Record<string, unknown>): string => {
+    const p = join(mkdtempSync(join(tmpdir(), "json-")), "o.json");
+    writeJsonIndent1(p, obj);
+    return readFileSync(p, "utf8");
+  };
+
+  it("writes the bytes JSON.stringify(obj, null, 1) returns", () => {
+    const cases: Array<Record<string, unknown>> = [
+      {
+        capture: "/a\nb",
+        contexts: 3,
+        checked: { "x: y": 2, 中文: 0 },
+        vList: [],
+        nested: { rows: [{ a: [1, [2, {}]] }], none: [] },
+        violations: [
+          { check: "c", detail: 'q"\n', n: [1, [2, {}]], u: undefined },
+          null,
+          [],
+          {},
+          undefined,
+          "s",
+          [[1], { k: [] }],
+        ],
+      },
+      { capture: "x", contexts: 0, checked: {}, violations: [] },
+      {
+        a: undefined,
+        b: [undefined, 1],
+        c: { d: [] },
+        f: () => 1,
+        s: Symbol("x"),
+        n: null,
+        z: 0,
+        e: "",
+        when: new Date(0),
+      },
+      {},
+    ];
+    for (const c of cases) expect(written(c)).toBe(JSON.stringify(c, null, 1));
+  });
+
+  it("never stringifies a top-level array whole", () => {
+    const big = {
+      capture: "x",
+      checked: { a: 1 },
+      violations: Array.from({ length: 5000 }, (_, i) => ({ check: "c", i })),
+    };
+    const want = JSON.stringify(big, null, 1);
+    const real = JSON.stringify;
+    const spy = vi
+      .spyOn(JSON, "stringify")
+      .mockImplementation((v: unknown, ...rest: unknown[]) => {
+        if (Array.isArray(v) && v.length > 1000)
+          throw new Error("a whole array stringified");
+        return (real as (...a: unknown[]) => string)(v, ...rest);
+      });
+    try {
+      expect(written(big)).toBe(want);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("pickCover", () => {

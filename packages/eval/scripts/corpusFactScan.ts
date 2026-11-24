@@ -105,7 +105,6 @@
  *   npx tsx packages/eval/scripts/corpusFactScan.ts <captureDir> [--examples N]
  *     [--archive-dir <dir>] [--json <violations.json>]
  */
-import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -144,6 +143,7 @@ import { DEFERRAL_SHIELD_DAMAGE_IDS } from "@gladlog/analysis/src/utils/incoming
 import { LogEvent } from "@gladlog/parser-compat";
 
 import { parseReflectedLine } from "./scan5/ctx";
+import { writeJsonIndent1 } from "./verify/jsonWrite";
 import {
   type IContext,
   type IScan,
@@ -1594,21 +1594,14 @@ function report(): void {
     );
 
   if (JSON_OUT) {
-    writeFileSync(
-      JSON_OUT,
-      JSON.stringify(
-        {
-          capture: resolve(dir),
-          contexts,
-          checked: Object.fromEntries(checked),
-          vList,
-          gapBySpell: spellRows,
-          violations,
-        },
-        null,
-        1,
-      ),
-    );
+    writeJsonIndent1(JSON_OUT, {
+      capture: resolve(dir),
+      contexts,
+      checked: Object.fromEntries(checked),
+      vList,
+      gapBySpell: spellRows,
+      violations,
+    });
     say(`wrote ${JSON_OUT}`);
   }
 }
