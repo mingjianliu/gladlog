@@ -978,13 +978,16 @@ describe("deepen(深挖轮)", () => {
 
     const writeSpy = vi.mocked(writeFileSync);
     const callsBefore = writeSpy.mock.calls.length;
+    // deepen only writes back into the slot that supplied its findings
+    // (codex F2#1), so hand it the cached slot's own (empty) findings.
+    const supplied = (await s.getCached("m1"))!.findings;
     writeSpy.mockImplementationOnce(() => {
       throw new Error("EACCES (simulated disk-write failure)");
     });
     await s.deepen({
       contentLang: "zh" as const,
       matchId: "m1",
-      findings: baseFindings as never,
+      findings: supplied,
       packs: [] as never,
       spec: "s",
     });
@@ -1420,22 +1423,15 @@ describe("分槽落盘(多模型对比)", () => {
     await s.deepen({
       contentLang: "zh" as const,
       matchId: "m1",
-      findings: [
-        {
-          eventIds: ["death:a:30"],
-          severity: "high",
-          category: "survival",
-          title: "深挖后",
-          explanation: "x",
-        },
-      ] as never,
+      // the active slot's own findings (deepen refuses any others, codex F2#1)
+      findings: (await s.getCached("m1"))!.findings,
       packs: [], // empty packs → straight to writeMerged, no extra client shape needed
       spec: "s",
     });
     const active = await s.getCached("m1", "anthropic:claude-opus-4-8");
     const other = await s.getCached("m1", "anthropic:claude-opus-5-5");
     expect(active!.deepened).toBe(true);
-    expect(active!.findings[0]!.title).toBe("深挖后");
+    expect(active!.findings[0]!.title).toBe("Death(claude-opus-4-8)");
     expect(other!.deepened).toBeFalsy(); // the other slot is untouched
     expect(other!.findings[0]!.title).toBe("Death(claude-opus-5-5)");
   });
@@ -1458,18 +1454,11 @@ describe("分槽落盘(多模型对比)", () => {
       backendOverride: { backend: "anthropic", model: "claude-opus-4-8" },
     }); // lastSlotKey → anthropic:claude-opus-4-8
     streamCalls.length = 0; // only care which model this deepen call hits
+    const supplied = (await s.getCached("m1"))!.findings;
     await s.deepen({
       contentLang: "zh" as const,
       matchId: "m1",
-      findings: [
-        {
-          eventIds: ["death:a:30"],
-          severity: "high",
-          category: "survival",
-          title: "深挖前",
-          explanation: "x",
-        },
-      ] as never,
+      findings: supplied,
       packs: [
         {
           findingIndex: 0,
@@ -3001,6 +2990,102 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
       enBefore,
     );
     expect((await s.getCached("m1"))?.findings[0]!.title).toBe("Death A");
+  });
+
+  it("深挖读回的是旧 analysis-v2.json(codex F2#1):拒绝,当前语言文件里过期的 codex 槽原样不动", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-legacy-"));
+    mkdirSync(join(dir, "m1"));
+    const enBefore = v2(
+      "en",
+      { "codex:gpt-x": slotOf("Death codex", PROMPT_VERSION - 1) },
+      "codex:gpt-x",
+    );
+    writeFileSync(join(dir, "m1", "analysis-v2.en.json"), enBefore);
+    const legacyBefore = v2(
+      "en",
+      { "agy:flash": slotOf("Death agy") },
+      "agy:flash",
+    );
+    writeFileSync(join(dir, "m1", "analysis-v2.json"), legacyBefore);
+    const { s, emitted } = service(dir, { language: "en" });
+    const cached = await s.getCached("m1");
+    expect(cached?.findings[0]!.title).toBe("Death agy");
+    await s.deepen({
+      matchId: "m1",
+      findings: cached!.findings,
+      packs: [],
+      spec: "Frost Mage",
+      contentLang: "en",
+    });
+    expect(readFileSync(join(dir, "m1", "analysis-v2.en.json"), "utf-8")).toBe(
+      enBefore,
+    );
+    expect(readFileSync(join(dir, "m1", "analysis-v2.json"), "utf-8")).toBe(
+      legacyBefore,
+    );
+    expect(emitted.filter((e) => e.ch === "gladlog:analysis:done")).toEqual([]);
+    expect(s.__generationCount()).toBe(0);
+    // the next read still serves the legacy result, not a re-stamped codex slot
+    expect((await s.getCached("m1"))?.findings[0]!.title).toBe("Death agy");
+  });
+
+  it("深挖的 findings 不是当前语言文件激活槽里的那份:拒绝,不写", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-other-findings-"));
+    mkdirSync(join(dir, "m1"));
+    const key = "anthropic:claude-opus-5-5";
+    const enBefore = v2("en", { [key]: slotOf("Death A") }, key);
+    writeFileSync(join(dir, "m1", "analysis-v2.en.json"), enBefore);
+    const { s, emitted } = service(dir, { language: "en" });
+    await s.deepen({
+      matchId: "m1",
+      findings: slotOf("Death B").result.findings as never,
+      packs: [],
+      spec: "Frost Mage",
+      contentLang: "en",
+    });
+    expect(readFileSync(join(dir, "m1", "analysis-v2.en.json"), "utf-8")).toBe(
+      enBefore,
+    );
+    expect(emitted.filter((e) => e.ch === "gladlog:analysis:done")).toEqual([]);
+  });
+
+  it("深挖在飞时激活槽被换掉:合并结果不写进新槽", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-swapped-"));
+    mkdirSync(join(dir, "m1"));
+    const key = "anthropic:claude-opus-5-5";
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      v2("en", { [key]: slotOf("Death A") }, key),
+    );
+    let release!: () => void;
+    const parked = new Promise<void>((r) => (release = r));
+    let reached!: () => void;
+    const atGate = new Promise<void>((r) => (reached = r));
+    const { s } = service(dir, { language: "en" }, async function* () {
+      yield { delta: goodDive };
+      reached();
+      await parked;
+      yield { delta: "" };
+    });
+    const p = s.deepen({
+      matchId: "m1",
+      findings: slotOf("Death A").result.findings as never,
+      packs: [deepPack] as never,
+      spec: "Frost Mage",
+      contentLang: "en",
+    });
+    await atGate;
+    const swapped = v2(
+      "en",
+      { [key]: slotOf("Death A"), "agy:flash": slotOf("Death agy") },
+      "agy:flash",
+    );
+    writeFileSync(join(dir, "m1", "analysis-v2.en.json"), swapped);
+    release();
+    await p;
+    expect(readFileSync(join(dir, "m1", "analysis-v2.en.json"), "utf-8")).toBe(
+      swapped,
+    );
   });
 
   it("按槽读取(分槽标签)不回退到另一种语言:当前语言里过期的槽 K 读成 null", async () => {

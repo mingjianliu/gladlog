@@ -193,6 +193,14 @@ export function contentLangOfCacheFile(fileName: string): Language {
   return basename(fileName) === "analysis-v2.zh.json" ? "zh" : "en";
 }
 
+/** One parsed cache file: the v2 doc, the language its name says, and the
+ * path it was read from (deepen compares it with the writable cache path). */
+type SlottedRead = {
+  doc: AnalysisCacheDocV2<AnalysisResult>;
+  contentLang: Language;
+  path: string;
+};
+
 /** Parse each existing file of `paths`, in order, into the v2 shape, tagged
  * with the language its name says. Missing and corrupt files are skipped.
  * Lazy: a caller that stops at the first file passing its check reads no
@@ -200,10 +208,7 @@ export function contentLangOfCacheFile(fileName: string): Language {
 function* readSlottedDocs(
   paths: string[],
   legacySlotKey: string,
-): Generator<{
-  doc: AnalysisCacheDocV2<AnalysisResult>;
-  contentLang: Language;
-}> {
+): Generator<SlottedRead> {
   for (const fp of paths) {
     if (!existsSync(fp)) continue;
     let doc: AnalysisCacheDocV2<AnalysisResult> | null = null;
@@ -215,7 +220,7 @@ function* readSlottedDocs(
     } catch {
       doc = null;
     }
-    if (doc) yield { doc, contentLang: contentLangOfCacheFile(fp) };
+    if (doc) yield { doc, contentLang: contentLangOfCacheFile(fp), path: fp };
   }
 }
 
@@ -248,7 +253,7 @@ function readSlottedDoc(
     aiSelfReview?: boolean;
   },
   slotKey?: string,
-): { doc: AnalysisCacheDocV2<AnalysisResult>; contentLang: Language } | null {
+): SlottedRead | null {
   const lang: Language = settings.language ?? "zh";
   const legacySlotKey = currentSlotKey(settings);
   const selfReviewOn = settings.aiSelfReview === true;
@@ -259,10 +264,7 @@ function readSlottedDoc(
     r: { doc: AnalysisCacheDocV2<AnalysisResult> },
     key?: string,
   ): boolean => Boolean(currentSlot(r.doc, key, selfReviewOn)?.result);
-  let firstOwn: {
-    doc: AnalysisCacheDocV2<AnalysisResult>;
-    contentLang: Language;
-  } | null = null;
+  let firstOwn: SlottedRead | null = null;
   for (const r of readSlottedDocs(
     slottedDocCandidatePaths(matchesDir, matchId, lang),
     legacySlotKey,
@@ -322,6 +324,13 @@ function currentSlot(
   )
     return null;
   return slot;
+}
+
+/** Whether two finding lists are the same content (deepen's "these are the
+ * findings this slot supplied" test). Both sides come from the same JSON
+ * (disk, or the IPC copy of it), so a serialised comparison is exact. */
+function sameFindings(a: readonly Finding[], b: readonly Finding[]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
@@ -1186,10 +1195,35 @@ export function createAnalysisService(deps: {
     // A missing tag is refused as well (codex A#1): an untagged call could
     // carry either language, and the IPC boundary does not type-check.
     if (input.contentLang !== lang) return;
-    const myGen = nextGen(input.matchId);
     // Path converged onto analysisCachePath (single-source predicate; this
     // used to hand-concatenate the string).
     const cachedPath = analysisCachePath(deps.matchesDir, input.matchId, lang);
+    // The deep dive may only write into the exact file + slot that supplied
+    // `input.findings` (codex F2#1). The reader getCached/getState use can
+    // serve a fallback candidate -- the legacy analysis-v2.json, or the other
+    // language's file -- while this language's file holds a stale slot;
+    // writing into that slot would stamp someone else's findings with the
+    // current PROMPT_VERSION and make it a "valid" hit. So: whatever the
+    // reader serves must be this language's writable file, its active slot
+    // must pass the same hit test, and its findings must be the ones handed
+    // in. Otherwise refuse like the language mismatch above (no write, no
+    // done, before nextGen). With nothing on disk at all there is no slot to
+    // corrupt: the round still runs and emits its result in memory only.
+    const supplier = readSlottedDoc(deps.matchesDir, input.matchId, settings);
+    if (supplier) {
+      if (supplier.path !== cachedPath) return;
+      const supplied = currentSlot(
+        supplier.doc,
+        undefined,
+        settings.aiSelfReview === true,
+      );
+      if (
+        !supplied?.result ||
+        !sameFindings(supplied.result.findings, input.findings)
+      )
+        return;
+    }
+    const myGen = nextGen(input.matchId);
     // Review I-1: the deep dive must follow the backend/model of the slot
     // `lastSlotKey` points at, not the global default in settings -- after an
     // overridden round (say agy:flash), an automatic deep dive still hitting
@@ -1210,6 +1244,9 @@ export function createAnalysisService(deps: {
          behavior before this change) */
     }
     const preDoc = toSlottedDoc<AnalysisResult>(preRaw, "legacy:unknown");
+    // The slot this round may write back into: the supplier checked above
+    // (null when nothing was on disk -- then nothing is ever written).
+    const targetSlotKey = supplier ? (preDoc?.lastSlotKey ?? null) : null;
     const targetSplit = preDoc ? splitSlotKey(preDoc.lastSlotKey) : null;
     let backend: AiBackend = settings.aiBackend ?? "anthropic";
     let slotModel: string | undefined;
@@ -1261,8 +1298,7 @@ export function createAnalysisService(deps: {
         /* cache missing/corrupt: fall through to the in-memory fallback below */
       }
       const doc = toSlottedDoc<AnalysisResult>(raw, "legacy:unknown");
-      const slot = resolveActiveSlot(doc);
-      if (!doc || !slot) {
+      if (!doc) {
         deps.emit("gladlog:analysis:done", {
           matchId: input.matchId,
           result: { findings, dropped: 0, hadNarration: true, deepened: true },
@@ -1270,6 +1306,17 @@ export function createAnalysisService(deps: {
         });
         return;
       }
+      // Re-check the supplier right before committing (codex F2#1): the
+      // active slot must still be the one this round started from, at the
+      // current PROMPT_VERSION, still holding the findings it deepened. If
+      // another write moved it on, drop this round -- no write, and no done
+      // that would replace what the panel now shows.
+      const slot =
+        targetSlotKey !== null && doc.lastSlotKey === targetSlotKey
+          ? currentSlot(doc, targetSlotKey)
+          : null;
+      if (!slot?.result || !sameFindings(slot.result.findings, input.findings))
+        return;
       const merged: AnalysisResult = {
         ...slot.result,
         findings,
