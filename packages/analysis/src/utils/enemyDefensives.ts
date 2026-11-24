@@ -90,6 +90,7 @@ import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
 import {
+  hiddenAuraLifeMs,
   hiddenPressCandidates,
   hiddenPressMs,
   isResyncBatchAt,
@@ -1429,9 +1430,58 @@ export function selfSaveCasts(
     (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
   );
   const ownRows = dropAuraRebroadcasts(ownRawRows);
-  const ownKept = new Set(ownRows);
-  // the proc markers already stated, one activation each
-  const statedMarkers = new Set<(typeof ownRows)[number]>();
+  type OwnRow = (typeof ownRows)[number];
+  const procOf = (m: OwnRow) => {
+    const def = m.spellId ? CRISIS_PROC_ANSWERS.get(m.spellId) : undefined;
+    return def?.via === "aura" &&
+      m.logLine.event === LogEvent.SPELL_AURA_APPLIED
+      ? def
+      : undefined;
+  };
+  // A proc's activation is its FRESH marker — one not already up just
+  // before its row (`ownAuraUpBeforeRow`: within its life from its run's
+  // start, not until a REMOVED the log never showed; one half of a
+  // re-broadcast pair is not among the kept rows, so never fresh) — paired
+  // with the ONE aura row it activated: the closest APPLIED / REFRESH of a
+  // save its proc casts (codex 85-mac-minifix-T259-1c #2 — 11dfa802 r3:
+  // the press's APPLIED 71.571 s, its cast row 71.572, the proc's REFRESH
+  // 71.586, the marker 71.587; the earlier row took the marker).
+  const freshMarkers = ownRows.filter(
+    (m) => procOf(m) && !ownAuraUpBeforeRow(enemy, ownRows, m),
+  );
+  const procRows = new Set<OwnRow>();
+  for (const m of freshMarkers) {
+    const def = procOf(m)!;
+    let best: OwnRow | undefined;
+    let bestGap = Infinity;
+    for (const b of ownRows) {
+      const ev = b.logLine.event;
+      if (
+        ev !== LogEvent.SPELL_AURA_APPLIED &&
+        ev !== LogEvent.SPELL_AURA_REFRESH
+      )
+        continue;
+      if (b.auraType === "DEBUFF") continue;
+      const castId = b.spellId ? castOfAura.get(b.spellId) : undefined;
+      if (castId === undefined || !def.triggers.has(castId)) continue;
+      const gap = Math.abs(b.logLine.timestamp - m.logLine.timestamp);
+      if (gap <= PROC_OWN_ACTIVATION_PAIR_MS && gap < bestGap) {
+        best = b;
+        bestGap = gap;
+      }
+    }
+    if (best) procRows.add(best);
+  }
+  const markerNear = (markers: readonly OwnRow[], castId: string, ms: number) =>
+    markers.some(
+      (m) =>
+        procOf(m)!.triggers.has(castId) &&
+        Math.abs(m.logLine.timestamp - ms) <= PROC_OWN_ACTIVATION_PAIR_MS,
+    );
+  const auraMarkers = ownRawRows.filter((m) => procOf(m));
+  // the last stated proc activation per aura: a re-listing inside its life
+  // is that activation (codex 85-mac-minifix-T259-1c #1)
+  const procRunAt = new Map<string, number>();
   const pressMsByCast = new Map<string, number[]>();
   const pressedNear = (castId: string, auraId: string, ms: number) =>
     (
@@ -1466,43 +1516,32 @@ export function selfSaveCasts(
     // stated whatever stands beside it: the hidden-press reading refuses it
     // (a re-stating batch), and a press a second later is the player's own
     // on top of it, with its own line (18e3feae r4: the proc 0:41 at 41 %,
-    // the press 0:42). Once per activation, and the activation is the
-    // proc's MARKER, read as a new one only when it was not already up
-    // (`ownAuraUpBeforeRow`: within its life from its run's start, not until
-    // a REMOVED the log never showed — T259). Well-Honed Instincts' marker
-    // is its own 120 s lockout, so a marker inside it is the log re-listing
-    // it (codex 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588, re-listed
-    // with its marker at 5:06.232). A fresh marker's activation does not ask
-    // the saved aura's own clock: 8416188b r1, pressed 20:01:57.596 with no
-    // REMOVED, re-listed 58.885, the proc 20:02:02.347 lost its line to
-    // "still up".
-    // A marker that is no new one (re-listed, or one half of a re-broadcast
-    // pair) makes the aura beside it no proc's: it is the run re-listed (up
-    // by its own clock), a press whose cast row has its own line (codex
-    // 85-mac-minifix-T259-1 #1 / -1b #1), or an activation the log shows
-    // with no press — stated as such, as before (-1b #2: a press made unseen
-    // beside a still-running marker, its earlier run REMOVED).
+    // the press 0:42). Once per activation: the row its fresh marker paired
+    // (`procRows` above). Well-Honed Instincts' marker is its own 120 s
+    // lockout, so a marker inside it is the log re-listing it (codex
+    // 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588, re-listed with its
+    // marker at 5:06.232). A fresh marker's activation does not ask the
+    // saved aura's own clock (T259 — 8416188b r1: pressed 20:01:57.596 with
+    // no REMOVED, re-listed 58.885, the proc 20:02:02.347 lost its line to
+    // "still up"). Beside a marker that is no new one, the aura is no
+    // proc's: the run re-listed (up by its own clock, or inside the last
+    // stated activation's life), a press whose cast row has its own line
+    // (codex 85-mac-minifix-T259-1 #1 / -1b #1), or an activation the log
+    // shows with no press — stated as such, as before (-1b #2: a press made
+    // unseen beside a still-running marker, its earlier run REMOVED).
     if (isProcOwnActivationAt(enemy, castId, ms)) {
-      const markers = ownRawRows.filter((b) => {
-        const def = b.spellId ? CRISIS_PROC_ANSWERS.get(b.spellId) : undefined;
-        return (
-          def?.via === "aura" &&
-          def.triggers.has(castId) &&
-          b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-          Math.abs(b.logLine.timestamp - ms) <= PROC_OWN_ACTIVATION_PAIR_MS
-        );
-      });
-      const fresh = markers.find(
-        (m) =>
-          ownKept.has(m) &&
-          !statedMarkers.has(m) &&
-          !ownAuraUpBeforeRow(enemy, ownRows, m),
-      );
-      if (fresh) statedMarkers.add(fresh);
+      const procAt = procRunAt.get(a.spellId!);
+      if (procRows.has(a)) procRunAt.set(a.spellId!, ms);
+      // beside a fresh marker but not its row: the press's own aura (its
+      // cast row has the line) or an echo of the activation
+      else if (markerNear(freshMarkers, castId, ms)) continue;
       else if (
         refresh ||
         ownAuraUpBeforeRow(enemy, ownRows, a) ||
-        (markers.length > 0 && pressedNear(castId, a.spellId!, ms))
+        (procAt !== undefined &&
+          ms - procAt <= hiddenAuraLifeMs(a.spellId!, enemy, procAt)) ||
+        (markerNear(auraMarkers, castId, ms) &&
+          pressedNear(castId, a.spellId!, ms))
       )
         continue;
     } else {

@@ -270,6 +270,27 @@ describe("selfSaveCasts: an aura is up only within its life, not until a REMOVED
     );
     expect(lines(v)).toEqual([[174.755, false]]);
   });
+  it("11dfa802 r3 shape: the marker pairs the closest aura row — the proc's REFRESH, not the press's APPLIED (codex 85-mac-minifix-T259-1c #2)", () => {
+    // the press's APPLIED 99.950 (cast row 99.951), the proc's REFRESH
+    // 100.040, its marker 100.041
+    const u = druid(
+      [99.951],
+      [100.041],
+      [fr(99.95), fr(100.04, LogEvent.SPELL_AURA_REFRESH)],
+    );
+    expect(lines(u)).toEqual([
+      [99.951, false],
+      [100.04, true],
+    ]);
+  });
+  it("a re-listing one second into a confirmed proc is that proc (codex 85-mac-minifix-T259-1c #1)", () => {
+    // pressed 100 (no REMOVED), the proc 103.5, both re-listed 104.5
+    const u = druid([100], [103.5, 104.5], [fr(100), fr(103.5), fr(104.5)]);
+    expect(lines(u)).toEqual([
+      [100, false],
+      [103.5, true],
+    ]);
+  });
   it("ownAuraUpBeforeRow: a re-listing does not restart the run's clock; a REFRESH does; a REMOVED ends it", () => {
     const u = druid([], []);
     const rowsOf = (...xs: ReturnType<typeof fr>[]) =>
