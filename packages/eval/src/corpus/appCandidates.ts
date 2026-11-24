@@ -15,7 +15,10 @@
  *
  * `rawText` is the whole log (a match / round is sliced out by its own start
  * and duration); null / undefined = no raw text available (a stored match
- * without raw.txt) → the same degraded menu the app shows for it.
+ * without raw.txt) → the same degraded menu the app shows for it. It may also
+ * be the file pass already made (`RawStreamsAbsolute`, built line by line with
+ * `rawStreamsAbsoluteCollector` for a log too large for one string, GH #228)
+ * — the same streams as passing that log's text.
  */
 import {
   type CandidateEvent,
@@ -30,9 +33,13 @@ import {
 
 type LegacyCombat = Parameters<typeof extractCandidateFindings>[0];
 
-let lastKey: { text: string; startMs: number; durS: number } | null = null;
+/** The whole log's text, or its file pass already made. */
+export type RawLogSource = string | RawStreamsAbsolute;
+
+let lastKey: { text: RawLogSource; startMs: number; durS: number } | null =
+  null;
 let lastStreams: ReturnType<typeof parseRawStreams> | null = null;
-let lastFileText: string | null = null;
+let lastFileText: RawLogSource | null = null;
 let lastFile: RawStreamsAbsolute | null = null;
 
 /** The round's raw streams, parsed once per (text, round): every owner of the
@@ -43,7 +50,7 @@ let lastFile: RawStreamsAbsolute | null = null;
  * `parseRawStreams(rawText, startMs, durS)`, byte for byte. */
 export function roundRawStreams(
   combat: LegacyCombat,
-  rawText: string | null | undefined,
+  rawText: RawLogSource | null | undefined,
 ): ReturnType<typeof parseRawStreams> | undefined {
   if (!rawText) return undefined;
   const c = combat as unknown as { startTime?: number; endTime?: number };
@@ -58,7 +65,8 @@ export function roundRawStreams(
   )
     return lastStreams;
   if (lastFileText !== rawText || !lastFile) {
-    lastFile = parseRawStreamsAbsolute(rawText);
+    lastFile =
+      typeof rawText === "string" ? parseRawStreamsAbsolute(rawText) : rawText;
     lastFileText = rawText;
   }
   lastStreams = rawStreamsForRound(lastFile, startMs, durS);
@@ -69,7 +77,7 @@ export function roundRawStreams(
 export function candidatesAsTheAppRuns(
   combat: LegacyCombat,
   ownerId: string | undefined,
-  rawText: string | null | undefined,
+  rawText: RawLogSource | null | undefined,
 ): CandidateEvent[] {
   return extractCandidateFindings(
     combat,

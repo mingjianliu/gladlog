@@ -255,10 +255,38 @@ export function parseRawStreamsAbsolute(
   rawText: string | null,
 ): RawStreamsAbsolute {
   if (!rawText) return { available: false, mana: [], failed: [] };
+  const c = rawStreamsAbsoluteCollector();
+  for (const line of rawText.split("\n")) c.push(line);
+  return c.result();
+}
+
+/**
+ * The same file pass fed one line at a time, for a log too large to hold as
+ * one string (GH #228: V8 caps a string at 536,870,888 chars, and one wide
+ * 12.1.x log decompresses to 569,766,147 bytes). Pushing the lines of
+ * `rawText.split("\n")` in order gives exactly `parseRawStreamsAbsolute(rawText)`,
+ * `available` included: an empty text is one empty line.
+ */
+export function rawStreamsAbsoluteCollector(): {
+  push(line: string): void;
+  result(): RawStreamsAbsolute;
+} {
   const mana: AbsManaSample[] = [];
   const failed: AbsCastFailedEvent[] = [];
-  for (const line of rawText.split("\n")) parseLineInto(line, mana, failed);
-  return { available: true, mana, failed };
+  let lines = 0;
+  let firstLineEmpty = false;
+  return {
+    push(line: string) {
+      if (lines++ === 0) firstLineEmpty = line === "";
+      parseLineInto(line, mana, failed);
+    },
+    result() {
+      const available = lines > 1 || (lines === 1 && !firstLineEmpty);
+      return available
+        ? { available: true, mana, failed }
+        : { available: false, mana: [], failed: [] };
+    },
+  };
 }
 
 /** One round of a file pass — exactly what `parseRawStreams(rawText, baseMs,

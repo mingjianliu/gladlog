@@ -38,16 +38,20 @@ import {
   isHealerSpec,
 } from "@gladlog/analysis";
 import { buildMatchContext } from "@gladlog/analysis/src/context/buildMatchContext";
+import {
+  rawStreamsAbsoluteCollector,
+  type RawStreamsAbsolute,
+} from "@gladlog/analysis/src/utils/rawStreams";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { gunzipSync } from "zlib";
 
 import {
   candidatesAsTheAppRuns,
   roundRawStreams,
 } from "../src/corpus/appCandidates";
+import { forEachLogLine, readLogBytes } from "../src/corpus/logLines";
 import { splitTeams } from "../src/explore/storeAccess";
 
 function parseArgs() {
@@ -111,16 +115,26 @@ for (const f of files) {
   const items: GladMatch[] = [];
   parser.on("match", (m) => items.push(m));
   parser.on("shuffle", (s) => items.push(...(s.rounds as never[])));
-  let text: string;
+  // Line by line off the Buffer, never one whole-file string (GH #228: a log
+  // decompressing past V8's 536,870,888-char string limit was "unreadable"
+  // on every machine). The raw-streams file pass rides the same walk.
+  let bytes: Buffer;
   try {
-    const raw = readFileSync(p);
-    text = (p.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+    bytes = readLogBytes(p);
   } catch {
     unreadable.push(f);
     continue;
   }
-  for (const line of text.split("\n")) parser.push(line);
+  const streams = args.rawStreams ? rawStreamsAbsoluteCollector() : null;
+  forEachLogLine(bytes, (line) => {
+    parser.push(line);
+    streams?.push(line);
+  });
   parser.end();
+  // An empty file reads as no raw text at all (the old `text` was "" →
+  // falsy → no streams), not as an unavailable pass.
+  const pass = streams?.result();
+  const fileStreams: RawStreamsAbsolute | null = pass?.available ? pass : null;
   let idx = 0;
   for (const m of items) {
     idx++;
@@ -140,7 +154,7 @@ for (const f of files) {
         cands = candidatesAsTheAppRuns(
           legacy,
           owner.id,
-          args.rawStreams ? text : null,
+          fileStreams,
         );
       } catch {
         skipped.candidates++;
@@ -176,7 +190,7 @@ for (const f of files) {
         // (found 2026-09-26, reliability leftovers batch 13)
         ctx = buildMatchContext(legacy, friends, enemies, {
           owner,
-          rawStreams: roundRawStreams(legacy, args.rawStreams ? text : null),
+          rawStreams: roundRawStreams(legacy, fileStreams),
         });
       } catch {
         skipped.context++;
