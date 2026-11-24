@@ -641,6 +641,86 @@ describe("多模型槽 tab 切换(Task 3)", () => {
     expect(activeTabs()).toHaveLength(1);
   });
 
+  it("重挂载时一轮在跑、加载还没回来就完成了:晚到的 running:true 不把它拉回「分析中」(GH #230 复核二)", async () => {
+    const { fx, getDoneCb } = twoSlotFixture();
+    const pendingStates: Array<(v: unknown) => void> = [];
+    fx.analysis.getState = vi.fn(
+      () =>
+        new Promise((r) => {
+          pendingStates.push(r);
+        }),
+    );
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await waitFor(() => expect(pendingStates.length).toBe(1));
+    const initialLoad = pendingStates[0]!;
+    act(() => {
+      (getDoneCb() as unknown as (d: unknown) => void)?.(unsavedDone);
+    });
+    await screen.findByText(/这一轮写盘失败了/);
+    await act(async () => {
+      initialLoad({
+        cached: resultA,
+        running: true,
+        runningMeta: { since: 1, backend: "agy", model: "pro" },
+        ...twoSlotSummary,
+      });
+    });
+    expect(screen.queryByTestId("analysis-running-status")).toBeNull();
+    expect(screen.getByText(/这一轮写盘失败了/)).toBeTruthy();
+  });
+
+  it("晚到的初次快照不用旧的槽摘要盖掉刚完成那一轮的 tab(GH #230 复核二)", async () => {
+    const { fx, getDoneCb } = twoSlotFixture();
+    const threeSlots = {
+      slots: [
+        ...twoSlotSummary.slots,
+        { key: "codex:gpt-6", createdAt: 3, stale: false },
+      ],
+      activeKey: "codex:gpt-6",
+    };
+    let resolveInitial!: (v: unknown) => void;
+    let call = 0;
+    fx.analysis.getState = vi.fn(() => {
+      call++;
+      if (call === 1)
+        return new Promise((r) => {
+          resolveInitial = r;
+        });
+      return Promise.resolve({ cached: null, running: false, ...threeSlots });
+    });
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await waitFor(() => expect(call).toBe(1));
+    act(() => {
+      getDoneCb()?.({
+        matchId: "m1",
+        result: unsavedDone.result,
+        slotKey: "codex:gpt-6",
+      });
+    });
+    await screen.findByText(/这一轮写盘失败了/);
+    const tabs = await screen.findByTestId("analysis-slot-tabs");
+    await waitFor(() =>
+      expect(within(tabs).getAllByRole("button")).toHaveLength(3),
+    );
+    await act(async () => {
+      resolveInitial({ cached: resultA, running: false, ...twoSlotSummary });
+    });
+    expect(
+      within(screen.getByTestId("analysis-slot-tabs")).getAllByRole("button"),
+    ).toHaveLength(3);
+    expect(screen.getByText(/这一轮写盘失败了/)).toBeTruthy();
+  });
+
   it("初次加载还没回来时到了一轮未保存结果:晚到的旧快照不覆盖它(GH #230 复核)", async () => {
     const { fx, getDoneCb } = twoSlotFixture();
     // every getState (the initial load, and the refresh onDone fires) waits

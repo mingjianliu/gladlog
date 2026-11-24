@@ -361,13 +361,18 @@ export function StructuredAnalysisPanel({
           activeKey?: string | null;
         };
         if (cancelled) return;
+        // A done landed while this query was in flight (it set resultForRef;
+        // this effect cleared it on start): the whole snapshot is older than
+        // what is on screen -- its result, its slot summary and its running
+        // flag alike. Keep the newer state; that done's own getState refresh
+        // brings the tab bar up to date. Without this an unsaved round's text
+        // (GH #230) was replaced by the older saved result, and a stale
+        // `running: true` put a finished round back to "analyzing", or an old
+        // summary dropped the new slot's tab (codex re-reviews).
+        if (resultForRef.current === matchId) return;
         setSlots(slotSummaries ?? []);
         setActiveKey(docActiveKey ?? null);
-        // A result that landed while this query was in flight (a done, or a
-        // slot click) is newer than this snapshot: keep it. Without this an
-        // unsaved round's text (GH #230) was replaced by the older saved
-        // result, its `unsaved` flag left set over it (codex re-review).
-        if (cached && resultForRef.current !== matchId) {
+        if (cached) {
           resultForRef.current = matchId;
           // getState's cached is always resolveActiveSlot's content (single-
           // source decision on the main side), so this is always "active",
