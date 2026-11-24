@@ -1355,6 +1355,99 @@ describe("shutdown 与在途连接(GH #213)", () => {
     expect((await backend.probe()).ready).toBe(false);
   });
 
+  it("shutdown 等 disconnect 时再连:不复用正在关的连接,另起新连接(复审二 #1)", async () => {
+    const fakeA = new FakeManagedObsWs();
+    let releaseReadyA!: () => void;
+    fakeA.handlers.GetSceneList = () =>
+      new Promise((r) => {
+        releaseReadyA = () => r({ scenes: [] });
+      });
+    let releaseDisconnectA!: () => void;
+    fakeA.disconnect = async () => {
+      fakeA.disconnectCalls++;
+      await new Promise<void>((r) => {
+        releaseDisconnectA = r;
+      });
+    };
+    const clients = [fakeA, fake];
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => clients.shift()!,
+      now,
+    });
+    const first = backend.configureSession();
+    await vi.waitFor(() =>
+      expect(order(fakeA)).toContain("call:GetSceneList"),
+    );
+    const down = backend.shutdown();
+    await vi.waitFor(() => expect(fakeA.disconnectCalls).toBe(1));
+    await backend.configureSession(); // while A is still closing
+    expect(ensureProcess).toHaveBeenCalledTimes(2);
+    expect(order(fakeA)).not.toContain("call:CreateInput");
+    expect(order(fake)).toContain("call:CreateInput");
+    expect((await backend.probe()).ready).toBe(true);
+    releaseReadyA();
+    await first;
+    releaseDisconnectA();
+    await down;
+    expect(fakeA.disconnectCalls).toBe(1);
+    expect((await backend.probe()).ready).toBe(true); // B untouched
+  });
+
+  it("就绪轮询失败的收尾在 shutdown 之后:不重复断开(复审二 #2)", async () => {
+    vi.useFakeTimers();
+    fake.handlers.GetSceneList = async () => {
+      throw new Error("OBS is not ready to perform the request.");
+    };
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => fake,
+      now: () => Date.now(),
+    });
+    const conf = backend.configureSession();
+    await vi.advanceTimersByTimeAsync(29_000);
+    let releaseDisconnect!: () => void;
+    fake.disconnect = async () => {
+      fake.disconnectCalls++;
+      await new Promise<void>((r) => {
+        releaseDisconnect = r;
+      });
+    };
+    const down = backend.shutdown();
+    await vi.advanceTimersByTimeAsync(2_000); // the poll reaches its deadline
+    await conf;
+    releaseDisconnect();
+    await down;
+    expect(fake.disconnectCalls).toBe(1);
+  });
+
+  it("旧连接的就绪轮询到期不覆盖新一轮的 lastError(复审二 #3)", async () => {
+    vi.useFakeTimers();
+    const fakeA = new FakeManagedObsWs();
+    fakeA.handlers.GetSceneList = () => new Promise(() => {}); // hangs
+    const fakeB = new FakeManagedObsWs();
+    fakeB.connect = async () => {
+      throw new Error("current password failure");
+    };
+    const clients = [fakeA, fakeB];
+    const backend = createManagedObsBackend({
+      ensureProcess,
+      recDir,
+      clientFactory: () => clients.shift()!,
+      now: () => Date.now(),
+    });
+    const first = backend.configureSession();
+    await vi.advanceTimersByTimeAsync(20_000); // A mid-poll
+    await backend.shutdown();
+    await backend.configureSession(); // B's handshake fails
+    expect((await backend.probe()).lastError).toMatch(/current password failure/);
+    await vi.advanceTimersByTimeAsync(12_000); // A's poll hits its deadline
+    await first;
+    expect((await backend.probe()).lastError).toMatch(/current password failure/);
+  });
+
   it("shutdown 之后再连:新一轮照常连上(栅栏只挡 shutdown 之前开始的连接)", async () => {
     const backend = makeBackend();
     await backend.shutdown();

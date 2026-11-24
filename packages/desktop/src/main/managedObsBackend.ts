@@ -538,14 +538,19 @@ export function createManagedObsBackend(
    * it, or its handshake failed or timed out (a timed-out handshake can
    * still complete later). Disconnect it, best effort, and make sure it is
    * not left as the live client. */
-  async function dropConnection(c: ManagedObsWs): Promise<void> {
+  async function dropConnection(
+    c: ManagedObsWs,
+    timeoutMs = CALL_TIMEOUT_MS,
+  ): Promise<void> {
+    // Detached before the await, so nobody picks up a client that is being
+    // closed (and a shutdown() meanwhile finds nothing left to disconnect).
     if (client === c) {
       client = null;
       connected = false;
       listenersAttached = false;
     }
     try {
-      await withTimeout(c.disconnect(), CALL_TIMEOUT_MS, "disconnect");
+      await withTimeout(c.disconnect(), timeoutMs, "disconnect");
     } catch {
       /* best effort: the socket may never have opened */
     }
@@ -558,9 +563,12 @@ export function createManagedObsBackend(
     try {
       proc = await deps.ensureProcess();
     } catch (err) {
-      lastError = t("errors.obs.ensureProcessFailed", {
-        error: errMessage(err),
-      });
+      // an attempt a shutdown() overtook does not speak for the backend any
+      // more (GH #213 review: it overwrote a newer attempt's diagnostic)
+      if (!overtaken())
+        lastError = t("errors.obs.ensureProcessFailed", {
+          error: errMessage(err),
+        });
       return false;
     }
     if (overtaken()) return false; // shutdown() ran during the process lookup
@@ -605,18 +613,10 @@ export function createManagedObsBackend(
     // really gone, that connect fails and says so in lastError instead of
     // every call silently talking to a dead socket. (ensureProcess only
     // re-reads the spawned process's ready handle -- it does not respawn.)
-    if (client === c) {
-      try {
-        await withTimeout(c.disconnect(), OBS_READY_POLL_MS * 4, "disconnect");
-      } catch {
-        /* best effort: the socket may already be gone */
-      }
-      if (client === c) {
-        client = null;
-        connected = false;
-        listenersAttached = false;
-      }
-    }
+    // A shutdown() during the poll already detached and disconnected it
+    // (GH #213 review: this used to disconnect it a second time).
+    if (overtaken() || client !== c) return false;
+    await dropConnection(c, OBS_READY_POLL_MS * 4);
     return false;
   }
 
@@ -642,10 +642,13 @@ export function createManagedObsBackend(
         last = err;
       }
       if (nowFn() >= deadline) {
-        lastError = t("errors.obs.notReady", {
-          seconds: OBS_READY_TIMEOUT_MS / 1000,
-          error: errMessage(last),
-        });
+        // only while this is still the live client (a dropped one's poll
+        // must not overwrite a newer attempt's diagnostic; GH #213 review)
+        if (client === c)
+          lastError = t("errors.obs.notReady", {
+            seconds: OBS_READY_TIMEOUT_MS / 1000,
+            error: errMessage(last),
+          });
         return false;
       }
       await sleep(OBS_READY_POLL_MS);
@@ -821,8 +824,23 @@ export function createManagedObsBackend(
   async function shutdown(): Promise<void> {
     epoch++;
     connecting = null;
+    // Detach first, disconnect after (GH #213 review): while the disconnect
+    // was pending, `client` / `connected` still named the closing client, and
+    // a caller arriving meanwhile took ensureConnected()'s fast path and
+    // issued requests on it. A connection made after this point is a new
+    // session, never cleared by this shutdown's tail (the round-2 concern).
     const c = client;
-    if (c && connected) {
+    const wasConnected = connected;
+    client = null;
+    connected = false;
+    listenersAttached = false;
+    continuousActive = false;
+    sessionConfigured = false;
+    encoder = null;
+    currentChunk = null;
+    // A client still handshaking (wasConnected false) is closed by its own
+    // connectFresh(), which sees the epoch moved.
+    if (c && wasConnected) {
       try {
         await withTimeout(c.disconnect(), CALL_TIMEOUT_MS, "disconnect");
       } catch (err) {
@@ -831,18 +849,6 @@ export function createManagedObsBackend(
         });
       }
     }
-    // A newer connection replaced `c` while that disconnect was pending (the
-    // readiness-timeout cleanup in connectFresh dropped `c`, and a later
-    // caller connected afresh): that session is not this shutdown's to clear
-    // (codex review 2026-11-13 round 2).
-    if (client !== null && client !== c) return;
-    client = null;
-    connected = false;
-    listenersAttached = false;
-    continuousActive = false;
-    sessionConfigured = false;
-    encoder = null;
-    currentChunk = null;
   }
 
   async function configureSession(): Promise<void> {
