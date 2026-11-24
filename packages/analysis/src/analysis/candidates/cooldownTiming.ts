@@ -1736,11 +1736,11 @@ export function saveCoversPressureOn(
 
 /**
  * Corpus-derived outcome reference for cd-hoarded (2026-08-30, GH #34;
- * re-run 2026-10-08, 2026-10-13, 2026-10-20 and 2026-11-06 in the GH #115
- * batched regens):
+ * re-run 2026-10-08, 2026-10-13, 2026-10-20, 2026-11-06 and 2026-11-23 in
+ * the GH #115 batched regens):
  * 3,000-match outcome probe "cd-hoarded" (`signalOutcomeProbe.ts --only
  * cd-hoarded`, the first 3,000 files of manifest-archive-2026-08-28-newseason;
- * report eval-private/runs/regen-115-2026-11-06/cd-hoarded-ref/report.md;
+ * report eval-private/runs/regen-115-2026-11-21/cd-hoarded-ref/report.md;
  * first run: eval-private/reports/signal-outcomes-2026-08-30/report.md). Decision
  * point = every friendly crisis (`crisisDecisionPoints` on the owner for
  * their own crises, and on each teammate as owner for theirs; HP crossed
@@ -1748,14 +1748,14 @@ export function saveCoversPressureOn(
  * crisisDecisionPoints.ts) at which the owner had >=1 usable major
  * Defensive cooldown ready (a personal wall or a self-castable external for
  * the owner's own crisis; any cooldown `canHelpAnotherUnit` says can reach
- * the crisis unit for a teammate's). Across 16,061 such decision points,
+ * the crisis unit for a teammate's). Across 16,063 such decision points,
  * the crisis unit died within 10s **5.3%** of the time when a ready
  * cooldown was spent within `CD_HOARD_RESPONSE_S` vs **13.8%** when every
  * ready cooldown was held (share acted 30%; 2v2 7.3% vs 17.1%; Solo Shuffle
  * 4.6% vs 12.6%; own-crisis 7.6% vs 19.5%; teammate-crisis 4.8% vs 12.8%).
  * The 2026-08-30 run (16,960 points: 4.5% vs 11.4%) recorded only "3,000
  * matches"; its 2v2 / Solo Shuffle point counts (4,485 / 11,943) are close
- * to this slice's (4,440 / 11,596) but not equal, and its 3v3 count (532) is
+ * to this slice's (4,440 / 11,598) but not equal, and its 3v3 count (532) is
  * far off (25 here — the slice holds 6 3v3 files), so the slice is a best
  * reconstruction, not proven to be the same input.
  *
@@ -1779,12 +1779,14 @@ export function saveCoversPressureOn(
  * The 2026-11-06 re-run (code e950156df, after the fact8–fact11 / F21–F26
  * rounds: more answers recognised, heals off the major-defensive set, the
  * F24/F25 offensive-cooldown additions) moved it 15,653 → 16,061 and the
- * printed rates 5.8 → 5.3 (spent) and 13.0 → 13.8 (held).
+ * printed rates 5.8 → 5.3 (spent) and 13.0 → 13.8 (held). The 2026-11-23
+ * re-run (code 42e5c4d6, GH #115 regen #8, after the third and fourth
+ * pipeline waves) moved it 16,061 → 16,063 and no printed rate.
  */
 export const CD_HOARDED_OUTCOME_REF = {
   refDeathSpent: "5.3",
   refDeathHeld: "13.8",
-  refN: "16061",
+  refN: "16063",
 } as const;
 
 /** One crisis-decision-point SOURCE cd-hoarded scans: the unit in crisis

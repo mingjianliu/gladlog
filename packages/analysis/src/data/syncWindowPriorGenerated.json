@@ -1,28 +1,28 @@
 {
   "meta": {
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
-    "generatedAt": "2026-11-10",
-    "windows": 148478,
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-21",
+    "generatedAt": "2026-11-24",
+    "windows": 160854,
     "predicate": "eligible window: enemyHealerCcWindows merged per healer; team burst = countsAsTeamBurst (canonical offensive table, a healer's own only Power Infusion) (mergeHealerCcWindows: one continuous lock = one window), syncWindowEligible (rendered dur>=3s, rendered t>=30s, no enemy death in-window), evaluateSyncWindow: >=1 canonical OFFENSIVE_CD_SPELL_IDS off cooldown at the window start or at a merged component's start, whose owner was then free to act for most of the rest of the lock (couldActForMostOf) and, for a CD that hits an enemy, within its reach (cdOutOfRangeReachYards) of a non-healer enemy at some half-second of it; entered = such a CD pressed (cast START or success) in [from-2s, to] or still active (buffFullDurationForCaster) at the lock start; kill15 = enemy death in (from, from+15s]"
   },
   "cells": {
     "Rated Solo Shuffle": {
-      "nEntered": 53886,
-      "killEntered": 0.09427309505251828,
-      "nUnentered": 19072,
-      "killUnentered": 0.054477768456375836
+      "nEntered": 57156,
+      "killEntered": 0.09531807684232627,
+      "nUnentered": 20914,
+      "killUnentered": 0.052166013196901596
     },
     "2v2": {
-      "nEntered": 13447,
-      "killEntered": 0.09057782404997397,
-      "nUnentered": 8624,
-      "killUnentered": 0.04336734693877551
+      "nEntered": 14702,
+      "killEntered": 0.09046388246497075,
+      "nUnentered": 9369,
+      "killUnentered": 0.044081545522467715
     },
     "3v3": {
-      "nEntered": 41120,
-      "killEntered": 0.0773103112840467,
-      "nUnentered": 12329,
-      "killUnentered": 0.042420309838591935
+      "nEntered": 45243,
+      "killEntered": 0.07647591892668479,
+      "nUnentered": 13470,
+      "killUnentered": 0.04127691165553081
     }
   }
 }

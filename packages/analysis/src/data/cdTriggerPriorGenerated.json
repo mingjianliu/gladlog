@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generatedAt": "2026-11-11",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
+    "generatedAt": "2026-11-23",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-21",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 235114,
+    "rows": 235098,
     "nFloor": 50,
     "predicateVersion": 1
   },
@@ -496,7 +496,7 @@
       "spellName": "Barkskin"
     },
     "Restoration Druid|*|22842": {
-      "n": 2205,
+      "n": 2189,
       "medianHpPct": 52,
       "spellName": "Frenzied Regeneration"
     },
@@ -526,7 +526,7 @@
       "spellName": "Barkskin"
     },
     "Restoration Druid|Keeper of the Grove|22842": {
-      "n": 1500,
+      "n": 1489,
       "medianHpPct": 52,
       "spellName": "Frenzied Regeneration"
     },
@@ -556,7 +556,7 @@
       "spellName": "Barkskin"
     },
     "Restoration Druid|Wildstalker|22842": {
-      "n": 705,
+      "n": 700,
       "medianHpPct": 53,
       "spellName": "Frenzied Regeneration"
     },

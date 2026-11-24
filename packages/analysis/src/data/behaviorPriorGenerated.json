@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-11-11",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-09",
+    "generatedAt": "2026-11-24",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-11-21",
     "weeks": [
       "2026-W33",
       "2026-W34",
@@ -76,9 +76,9 @@
       "outcome": "ownDeath10s"
     },
     "3v3|healer|*": {
-      "nNoResp": 488,
+      "nNoResp": 486,
       "deathNoResp": 0.12,
-      "nResp": 5062,
+      "nResp": 5061,
       "deathResp": 0.05,
       "top": [
         [
@@ -118,9 +118,9 @@
       "outcome": "ownDeath10s"
     },
     "3v3|healer|>=20%": {
-      "nNoResp": 228,
+      "nNoResp": 226,
       "deathNoResp": 0.12,
-      "nResp": 3925,
+      "nResp": 3924,
       "deathResp": 0.05,
       "top": [
         [

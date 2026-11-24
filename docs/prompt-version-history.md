@@ -8554,3 +8554,28 @@ check, layer below vs this): iceBarrierNoPress resync-no-span 8 -> 2, resync-
 pressed-span 9 -> 15; new iceBarrierUnpressedRun 8 (ate nothing 4; ate hits,
 no window over them 4); ownAbsorbDefenseless unchanged (pressed 6); gates 0.
 This layer check serves as the lane's remote job T162-1.
+
+v663 (2026-11-24; GH #115 regen #8). The eleven reference tables, the
+reference vectors and CD_HOARDED_OUTCOME_REF are regenerated at code 42e5c4d6
+(after the third and fourth pipeline waves) on the same corpora as regen #7,
+with the archive ledger complete (63,309 of 63,309 files; a first WSL pass
+missed the 2026-09-03..05 ledger days, so three scans skipped 8,629 of 63,303
+files and the reference vectors picked 2,292 instead of 2,420 matches, and
+those four were redone). Table diff (leaves changed): burstWindowPrior 1,261
+of 2,162 plus 180 added and 8 removed, backlashDispelPrior 10 of 46,
+syncWindowPrior 12 of 12, kickPriority heal spells 8 of 24 and prior 3 of 4,
+behaviorPrior 4 of 99, cdTriggerPrior 3 of 378, kickLockoutObserved 1 of 92,
+cdRecastFloor 15 changed and 8 removed, reference vectors 2,400 of 90,934
+changed and 9 removed; healerSaveCd unchanged. CD_HOARDED_OUTCOME_REF re-
+measures to 5.3 / 13.8 with 16,063 points (was 16,061). 605, both captures at
+42e5c4d6: the five reference-consistency gates the stale tables tripped fall
+to 0 (backlash 61, burstWindow 505, cdPrior 6, kickPriority 318, syncWindow
+1,215); no other gate fails on either side. Menu ids 7,478 -> 7,467: slow-
+defensive-response only, 11 added and 22 removed, because its contrast door
+reads the new burst-window cells; among them the 8 rows led by Champion's
+Spear, which had no cell of their own and fell back to `<bracket>|*` (GH #226
+item 26): the 7 Solo Shuffle rows (`Rated Solo Shuffle|*`, 8 % vs 11 %) no
+longer pass, and the 3v3 row (`3v3|*`, 7 % vs 13 %) passes on its own cell
+`3v3|376079` (5 % vs 8 %). captureFamilyDiff flags 3 families, all slow-
+defensive-response menu rows (Summon Darkglare 10 -> 2, The Hunt 6 -> 1, Havoc
+6 -> 1). Not in these tables: the commits after 42e5c4d6.

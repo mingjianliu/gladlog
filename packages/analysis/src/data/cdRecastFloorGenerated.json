@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-11-10",
-    "manifest": "manifest-archive-2026-08-28-newseason.txt",
+    "generatedAt": "2026-11-23",
+    "manifest": "manifest-archive-2026-08-28-newseason.wsl",
     "every": 3,
     "offset": 1,
     "filesRead": 6045,
@@ -13,10 +13,10 @@
       "quantile": 0.02,
       "floorRatio": 0.07,
       "staticBreak": 0.377,
-      "holdoutStaticBreak": 0.324,
+      "holdoutStaticBreak": 0.325,
       "nTrain": 183,
-      "nHoldout": 170,
-      "holdoutBelow": 0.029
+      "nHoldout": 169,
+      "holdoutBelow": 0.03
     },
     "471195|65": {
       "name": "Lay on Hands",
@@ -42,11 +42,11 @@
       "name": "Frenzied Regeneration",
       "quantile": 0.02,
       "floorRatio": 0.67,
-      "staticBreak": 0.313,
-      "holdoutStaticBreak": 0.309,
-      "nTrain": 460,
-      "nHoldout": 492,
-      "holdoutBelow": 0.02
+      "staticBreak": 0.312,
+      "holdoutStaticBreak": 0.308,
+      "nTrain": 458,
+      "nHoldout": 491,
+      "holdoutBelow": 0.018
     },
     "33206|256": {
       "name": "Pain Suppression",
@@ -72,20 +72,20 @@
       "name": "Frenzied Regeneration",
       "quantile": 0.02,
       "floorRatio": 0.8,
-      "staticBreak": 0.175,
-      "holdoutStaticBreak": 0.174,
-      "nTrain": 189,
-      "nHoldout": 287,
-      "holdoutBelow": 0.01
+      "staticBreak": 0.17,
+      "holdoutStaticBreak": 0.175,
+      "nTrain": 188,
+      "nHoldout": 285,
+      "holdoutBelow": 0.011
     },
     "205021|64": {
       "name": "Ray of Frost",
       "quantile": 0.02,
       "floorRatio": 0.828,
       "staticBreak": 0.172,
-      "holdoutStaticBreak": 0.187,
+      "holdoutStaticBreak": 0.186,
       "nTrain": 1374,
-      "nHoldout": 1471,
+      "nHoldout": 1470,
       "holdoutBelow": 0.019
     },
     "11426|64": {
@@ -97,16 +97,6 @@
       "nTrain": 2527,
       "nHoldout": 2756,
       "holdoutBelow": 0.015
-    },
-    "385059|72": {
-      "name": "Odyn's Fury",
-      "quantile": 0.02,
-      "floorRatio": 0.87,
-      "staticBreak": 0.046,
-      "holdoutStaticBreak": 0.016,
-      "nTrain": 628,
-      "nHoldout": 640,
-      "holdoutBelow": 0
     },
     "235450|62": {
       "name": "Prismatic Barrier",

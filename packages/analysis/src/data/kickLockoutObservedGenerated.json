@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-10T06:10:11.041Z",
+  "generatedAt": "2026-11-23T03:01:26.210Z",
   "generator": "packages/eval/scripts/kickLockoutScan.ts",
-  "manifest": "corpus/manifest-archive-2026-08-28-newseason.txt",
+  "manifest": "/home/mingjian/code/gladlog-eval-private/runs/regen-115-2026-11-21/manifests/manifest-archive-2026-08-28-newseason.wsl",
   "every": 30,
   "files": 605,
   "interrupts": 6134,

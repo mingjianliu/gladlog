@@ -1889,5 +1889,15 @@
  *  stated by a resync batch now counts as pressed when its holder presses
  *  it again later in the round.
  *  See docs/prompt-version-history.md.
+ *
+ * v663 (2026-11-24; GH #115 regen #8): The reference tables are
+ *  regenerated at code 42e5c4d6, after the third and fourth pipeline waves.
+ *  Printed reference rates move (burst-window, sync-window, backlash, kick
+ *  and recast tables, the reference vectors), and the slow-defensive-
+ *  response contrast door now reads the new burst-window cells: on the 605,
+ *  11 such rows appear and 22 go (view files), among them 7 of the 8 rows
+ *  led by Champion's Spear that had passed only on the bracket-wide
+ *  fallback. The cd-hoarded reference count reads 16,063.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 662;
+export const PROMPT_VERSION = 663;
