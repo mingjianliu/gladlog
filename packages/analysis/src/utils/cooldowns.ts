@@ -63,6 +63,7 @@ import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
 import { TALENT_REPLACE_VARIANT_IDS } from "../data/talentReplaceVariants";
 import {
+  auraConsumedTriggers,
   eventReducedCooldownSeconds,
   eventReductionsFor,
   eventTriggersFor,
@@ -6785,6 +6786,27 @@ function buildCooldownEntry(
     .map((g) => (g.atMs - matchStartMs) / 1000);
   const resetBetween = (from: number, to: number) =>
     resetAtSeconds.some((r) => r >= from && r <= to);
+  // A press that spent a stack of its own of a buff — a `triggerAuraConsumed`
+  // row whose consuming cast is this very spell — is genuine however close
+  // to the press before it: the stack's removal is a second row of the log
+  // that a duplicate cast row does not have (pipeline T240, codex
+  // 85-tk-L3-T240-1 #1, e0d4b250: Rushing Wind Kick 101.48 s and 103.28 s,
+  // each with a Thunder Focus Tea stack removed beside it — folded into one
+  // press, the second kick's 9 s went to the first).
+  const ownStackUses = reductions
+    .filter((r) => r.triggerAuraConsumed?.byCastIds.includes(spell.spellId))
+    .flatMap((r) =>
+      auraConsumedTriggers(unit, r).map((g) => ({
+        atSeconds: (g.atMs - matchStartMs) / 1000,
+        withinSeconds: r.triggerAuraConsumed!.withinMs / 1000,
+      })),
+    );
+  const spentOwnStackApartFrom = (c: ICooldownCast, last: ICooldownCast) =>
+    ownStackUses.some(
+      (u) =>
+        Math.abs(u.atSeconds - c.timeSeconds) <= u.withinSeconds &&
+        Math.abs(u.atSeconds - last.timeSeconds) > u.withinSeconds,
+    );
   // Time Spiral (GH #176): the cast rows that consumed the unit's aura — a
   // press that neither spends a charge nor restarts the cooldown
   const spiralMs = timeSpiralFreePressMs(
@@ -6851,6 +6873,7 @@ function buildCooldownEntry(
       ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
         (freeWindow !== undefined && pressesInWindow < 2) ||
         resetBetween(last.timeSeconds, c.timeSeconds) ||
+        spentOwnStackApartFrom(c, last) ||
         // a retry after a hold never released (GH #183 codex review: Fire
         // Breath cut at 10.3 s, pressed again at 11.5 s and released)
         last.unreleased === true ||

@@ -9,12 +9,12 @@ import {
   type AtomicArenaCombat,
   CombatUnitClass,
   CombatUnitSpec,
+  LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { spellSchoolMask } from "../src/data/spellSchools";
-
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   eventReducedCooldownSeconds,
@@ -22,6 +22,10 @@ import {
   eventTriggersFor,
 } from "../src/data/talentScriptedCooldowns";
 import { healerLockIntervals } from "../src/utils/cannotCastIntervals";
+import {
+  pressReadyAgainAtSeconds,
+  unitCooldownEntry,
+} from "../src/utils/cooldowns";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
@@ -148,10 +152,78 @@ describe("T240 the healer lock reads the shared model for a spent heal", () => {
     expect(healerLockIntervals(u, [lock], combatOf(u))).toHaveLength(1);
     expect(healerLockIntervals(u, [lock])).toHaveLength(1);
   });
+  it("an older press the model folds does not outlast the last press before the lock (codex 85-tk-L3-T240-1 #2)", () => {
+    // kicks 1.0 s and 2.0 s: the model folds the second into the first
+    // (duplicate rows of one press), so it has no press at 2.0 s and the
+    // static 12 s answers for it — the LAST press, back at 14 s
+    const u = makeUnit("m", {
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [1, 2].map((sec) =>
+        makeSpellCastEvent(KICK, T0 + sec * 1000, ""),
+      ),
+      healOut: [{ spellId: KICK, destUnitId: "mate" }],
+      absorbsOut: [],
+    } as unknown as Parameters<typeof makeUnit>[1]);
+    const at = (fromS: number, toS: number) => ({
+      ...lock,
+      from: T0 + fromS * 1000,
+      to: T0 + toS * 1000,
+    });
+    expect(healerLockIntervals(u, [at(9, 13.5)], combatOf(u))).toHaveLength(1);
+    expect(healerLockIntervals(u, [at(9, 14.5)], combatOf(u))).toHaveLength(0);
+  });
   it("kick 1 s, tea 5 s: the kick was back before the lock — a heal was left, the lock is dropped", () => {
     const u = mw(1, 5);
     expect(healerLockIntervals(u, [lock], combatOf(u))).toHaveLength(0);
     // without the round the static 12 s still answers
     expect(healerLockIntervals(u, [lock])).toHaveLength(1);
+  });
+});
+
+describe("T240 two kicks inside 2 s, each spending a tea stack, are two presses (codex 85-tk-L3-T240-1 #1)", () => {
+  // e0d4b250: kicks 101.481 s and 103.278 s, a stack removed beside each
+  const aura = (event: LogEvent, atS: number) => ({
+    spellId: TEA,
+    srcUnitId: "m",
+    destUnitId: "m",
+    timestamp: T0 + Math.round(atS * 1000),
+    logLine: { event, timestamp: T0 + Math.round(atS * 1000) },
+  });
+  const unit = (withStacks: boolean) =>
+    makeUnit("m", {
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [101.481, 103.278].map((sec) =>
+        makeSpellCastEvent(KICK, T0 + Math.round(sec * 1000), ""),
+      ),
+      auraEvents: withStacks
+        ? [
+            aura(LogEvent.SPELL_AURA_REMOVED_DOSE, 101.49),
+            aura(LogEvent.SPELL_AURA_REMOVED, 103.29),
+          ]
+        : [],
+    } as unknown as Parameters<typeof makeUnit>[1]);
+  const entryOf = (u: ReturnType<typeof makeUnit>) =>
+    unitCooldownEntry(
+      u,
+      {
+        startTime: T0,
+        endTime: T0 + 300_000,
+        units: { m: u },
+      } as unknown as AtomicArenaCombat,
+      KICK,
+    )!;
+  it("with the two removals: two presses, the second back 3 s after it", () => {
+    const e = entryOf(unit(true));
+    expect(e.casts.map((c) => c.timeSeconds)).toEqual([101.481, 103.278]);
+    expect(pressReadyAgainAtSeconds(e, 103.278)).toBeCloseTo(106.278, 2);
+  });
+  it("without them the second row stays folded into the first press", () => {
+    expect(entryOf(unit(false)).casts.map((c) => c.timeSeconds)).toEqual([
+      101.481,
+    ]);
   });
 });

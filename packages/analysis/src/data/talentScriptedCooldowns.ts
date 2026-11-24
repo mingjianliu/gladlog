@@ -1199,9 +1199,14 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   //
   // Thunder Focus Tea 116680, effect 0 (−9000): "Rising Sun Kick: Cooldown
   // reduced by 9 sec" for the kick the buff empowers. A use is the buff
-  // REMOVED (or a dose of it — Focused Thunder holds two) within 0.1 s of
+  // REMOVED (or a dose of it — Focused Thunder holds two) within 0.25 s of
   // the unit's own kick: cc0a95d4 r411, kick 48.52 s on a tea pressed
-  // 48.31 s, the next kick 51.94 s. Baseline for the spec.
+  // 48.31 s, the next kick 51.94 s. The 64 files' 1,214 tea removals: 909
+  // follow a kick's cast row — 907 inside 50 ms, one at 50–100 ms, one at
+  // 156 ms (85a6cad9, 1 ms after the kick's damage landed; codex
+  // 85-tk-L3-T240-1 #3) — none precedes one, and the other 305 follow
+  // another spell's row by more than a global cooldown or run out. Baseline
+  // for the spec.
   "116680:kick": {
     targets: ["107428", "467307"],
     talentSpellId: "116680",
@@ -1210,7 +1215,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     triggerAuraConsumed: {
       auraIds: ["116680"],
       byCastIds: ["107428", "467307"],
-      withinMs: 100,
+      withinMs: 250,
     },
     seconds: 9,
     note: "Thunder Focus Tea — the kick it empowers has 9 s less cooldown",

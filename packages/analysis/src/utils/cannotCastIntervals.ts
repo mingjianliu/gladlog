@@ -369,8 +369,8 @@ export function pressedHeals(
 }
 
 /**
- * Was this single-charge heal spent for the whole of `iv`? A press before it
- * that was not back in hand before the interval ended, and no press inside it
+ * Was this single-charge heal spent for the whole of `iv`? The last press
+ * before it was not back in hand before the interval ended, and no press inside it
  * (the press is the proof, whatever a talent took off the cooldown). "Back in
  * hand" is the shared model's realised ready instant of that press
  * (`unitCooldownEntry` + `pressReadyAgainAtSeconds`: per-press effects,
@@ -404,7 +404,15 @@ function healSpentAcross(
       ? pressMs + cd.cooldownSeconds * 1000
       : combat.startTime + modelled * 1000;
   };
-  return presses.some((t) => t < iv.from && readyAgainMs(t) >= iv.to);
+  // the LAST press before the interval is the one whose cooldown runs into
+  // it: a press before that one was back, or the later press could not have
+  // been made (codex 85-tk-L3-T240-1 #2, c47ee283: a 70.2 s kick the model
+  // folds, on the static 12 s, outlasted the 73.7 s kick's own 3 s)
+  const last = presses.reduce(
+    (m, t) => (t < iv.from && t > m ? t : m),
+    Number.NEGATIVE_INFINITY,
+  );
+  return Number.isFinite(last) && readyAgainMs(last) >= iv.to;
 }
 
 /**
