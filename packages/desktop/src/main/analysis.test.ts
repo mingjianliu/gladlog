@@ -2761,6 +2761,35 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     ).toEqual([["死亡A", "zh"]]);
   });
 
+  it("全库扫描:当前版本的槽 result 为 null 时继续看下一个候选(codex F2#8)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-scan-null-"));
+    mkdirSync(join(dir, "m1"));
+    const key = "anthropic:claude-opus-5-5";
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      JSON.stringify({
+        schemaVersion: 2,
+        language: "en",
+        slots: {
+          [key]: { promptVersion: PROMPT_VERSION, createdAt: 1, result: null },
+        },
+        lastSlotKey: key,
+      }),
+    );
+    writeFileSync(join(dir, "m1", "analysis-v2.json"), doc("Death legacy"));
+    const { s } = service(dir, { language: "en" });
+    expect((await s.getCached("m1"))?.findings[0]!.title).toBe("Death legacy");
+    expect(await s.listAnalyzed()).toEqual(["m1"]);
+    const agg = await s.aggregate();
+    expect(agg.flatMap((c) => c.recent).map((r) => r.title)).toEqual([
+      "Death legacy",
+    ]);
+    const nb = await s.notebook();
+    expect(nb.flatMap((g) => g.entries).map((e) => e.title)).toEqual([
+      "Death legacy",
+    ]);
+  });
+
   it("当前语言有命中时不读另一种语言;当前语言的文件过期才回退", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-cl-hit-"));
     mkdirSync(join(dir, "m1"));

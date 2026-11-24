@@ -419,6 +419,9 @@ async function readAnalyzedMatchDirs(
     async (dir): Promise<AnalyzedMatchDir | null> => {
       // The first candidate whose active slot passes (codex A#6): a stale or
       // corrupt file earlier in the list must not hide a valid one after it.
+      // "Passes" includes a stored result (codex F2#8), the same test
+      // getCached / readSlottedDoc apply: a current-version slot with
+      // `result: null` is skipped like a stale one.
       let file: string | undefined;
       let slot: AnalysisSlot<AnalysisResult> | null = null;
       for (const f of candidates(dir)) {
@@ -428,7 +431,7 @@ async function readAnalyzedMatchDirs(
             undefined,
             selfReviewOn,
           );
-          if (found) {
+          if (found?.result) {
             file = f;
             slot = found;
             break;
