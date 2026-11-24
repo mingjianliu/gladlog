@@ -283,6 +283,14 @@ export function createManagedObsBackend(
    * after shutdown used to create a client and carry on to StartRecord) or
    * leaking a handshake that completed after shutdown cleared `client`. */
   let epoch = 0;
+  /** shutdown() is terminal (GH #213 third review). The recorder never
+   * reuses a backend after shutting it down -- an off→on toggle injects a
+   * brand-new one with a fresh OBS process (recorder.ts, 复核 C1) -- so
+   * nothing may connect afresh afterwards: a start / configure / split
+   * still in flight across the shutdown would otherwise bring up a second
+   * session (StartRecord on a new client, a fresh OBS recording without its
+   * capture source, a split cutting the new recording). */
+  let disposed = false;
   let listenersAttached = false;
   let continuousActive = false;
   let sessionConfigured = false;
@@ -519,6 +527,7 @@ export function createManagedObsBackend(
    * startContinuous() 都可能是"第一个真正建立连接的调用",谁先调用谁做这份工作,
    * 幂等。 */
   async function ensureConnected(): Promise<boolean> {
+    if (disposed) return false;
     if (connected && client && !connecting) {
       attachListeners(client);
       return true;
@@ -822,6 +831,7 @@ export function createManagedObsBackend(
   }
 
   async function shutdown(): Promise<void> {
+    disposed = true;
     epoch++;
     connecting = null;
     // Detach first, disconnect after (GH #213 review): while the disconnect

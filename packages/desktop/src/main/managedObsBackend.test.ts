@@ -1164,7 +1164,7 @@ describe("ensureConnected — OBS 就绪等待(NotReady 207,2026-11-12 黑屏的
     expect(order.indexOf("call:StartRecord")).toBeGreaterThan(lastPoll);
   });
 
-  it("就绪超时清理后又连上了新连接:之前挂着的 shutdown 结束时不清掉新连接", async () => {
+  it("就绪超时清理的 disconnect 还挂着时 shutdown:之后不再起新连接(shutdown 是终态,GH #213)", async () => {
     vi.useFakeTimers();
     const fakeA = new FakeManagedObsWs();
     fakeA.handlers.GetSceneList = async () => {
@@ -1180,14 +1180,14 @@ describe("ensureConnected — OBS 就绪等待(NotReady 207,2026-11-12 黑屏的
     });
     const first = backend.configureSession();
     await vi.advanceTimersByTimeAsync(30_500); // readiness timed out, cleanup's disconnect pending
-    const down = backend.shutdown(); // also waits on A's hung disconnect
-    await vi.advanceTimersByTimeAsync(2_000); // cleanup gives up on A, drops it
+    const down = backend.shutdown();
+    await vi.advanceTimersByTimeAsync(2_000); // cleanup gives up on A
     await first;
-    await backend.configureSession(); // B: connects, ready, source created
-    expect((await backend.probe()).ready).toBe(true);
-    await vi.advanceTimersByTimeAsync(15_000); // the old shutdown's disconnect times out
     await down;
-    expect((await backend.probe()).ready).toBe(true); // B survives
+    await backend.configureSession();
+    expect(clients).toHaveLength(1); // B never made
+    expect(ensureProcess).toHaveBeenCalledTimes(1);
+    expect((await backend.probe()).ready).toBe(false);
   });
 });
 
@@ -1270,7 +1270,7 @@ describe("shutdown 与在途连接(GH #213)", () => {
     expect((await backend.probe()).ready).toBe(false);
   });
 
-  it("shutdown 后、旧的进程查找还挂着时再连:新一轮不搭旧连接的车,照常连上(复审 #2)", async () => {
+  it("shutdown 后、旧的进程查找还挂着时再调:什么都不连(复审 #2;shutdown 是终态)", async () => {
     let resolveProc!: (v: { wsUrl: string; wsPassword: string }) => void;
     ensureProcess.mockImplementationOnce(
       () =>
@@ -1292,15 +1292,12 @@ describe("shutdown 与在途连接(GH #213)", () => {
     const start = backend.startContinuous();
     await vi.waitFor(() => expect(ensureProcess).toHaveBeenCalledTimes(1));
     await backend.shutdown();
-    await backend.configureSession();
-    expect(ensureProcess).toHaveBeenCalledTimes(2);
-    expect(made).toHaveLength(1);
-    expect((await backend.probe()).ready).toBe(true);
+    await backend.configureSession(); // returns at once, no new lookup
+    expect(ensureProcess).toHaveBeenCalledTimes(1);
     resolveProc({ wsUrl: "ws://127.0.0.1:4466", wsPassword: "pw" });
-    await start; // the old attempt backs out without touching the new one
-    expect(made).toHaveLength(1);
-    expect(made[0]!.disconnectCalls).toBe(0);
-    expect((await backend.probe()).ready).toBe(true);
+    await start;
+    expect(made).toHaveLength(0);
+    expect((await backend.probe()).ready).toBe(false);
   });
 
   it("shutdown 等 disconnect 期间迟到的分片事件不开新分片(复审 #3)", async () => {
@@ -1355,7 +1352,7 @@ describe("shutdown 与在途连接(GH #213)", () => {
     expect((await backend.probe()).ready).toBe(false);
   });
 
-  it("shutdown 等 disconnect 时再连:不复用正在关的连接,另起新连接(复审二 #1)", async () => {
+  it("shutdown 等 disconnect 时再调:不复用正在关的连接,也不另起新连接(复审二 #1)", async () => {
     const fakeA = new FakeManagedObsWs();
     let releaseReadyA!: () => void;
     fakeA.handlers.GetSceneList = () =>
@@ -1383,16 +1380,16 @@ describe("shutdown 与在途连接(GH #213)", () => {
     const down = backend.shutdown();
     await vi.waitFor(() => expect(fakeA.disconnectCalls).toBe(1));
     await backend.configureSession(); // while A is still closing
-    expect(ensureProcess).toHaveBeenCalledTimes(2);
     expect(order(fakeA)).not.toContain("call:CreateInput");
-    expect(order(fake)).toContain("call:CreateInput");
-    expect((await backend.probe()).ready).toBe(true);
+    expect(clients).toHaveLength(1); // no second client
+    expect(ensureProcess).toHaveBeenCalledTimes(1);
     releaseReadyA();
     await first;
     releaseDisconnectA();
     await down;
     expect(fakeA.disconnectCalls).toBe(1);
-    expect((await backend.probe()).ready).toBe(true); // B untouched
+    expect(order(fakeA)).not.toContain("call:CreateInput");
+    expect((await backend.probe()).ready).toBe(false);
   });
 
   it("就绪轮询失败的收尾在 shutdown 之后:不重复断开(复审二 #2)", async () => {
@@ -1423,36 +1420,37 @@ describe("shutdown 与在途连接(GH #213)", () => {
     expect(fake.disconnectCalls).toBe(1);
   });
 
-  it("旧连接的就绪轮询到期不覆盖新一轮的 lastError(复审二 #3)", async () => {
+  it("被 shutdown 丢下的连接,就绪轮询到期时不再写 lastError(复审二 #3)", async () => {
     vi.useFakeTimers();
-    const fakeA = new FakeManagedObsWs();
-    fakeA.handlers.GetSceneList = () => new Promise(() => {}); // hangs
-    const fakeB = new FakeManagedObsWs();
-    fakeB.connect = async () => {
-      throw new Error("current password failure");
-    };
-    const clients = [fakeA, fakeB];
+    fake.handlers.GetSceneList = () => new Promise(() => {}); // hangs
     const backend = createManagedObsBackend({
       ensureProcess,
       recDir,
-      clientFactory: () => clients.shift()!,
+      clientFactory: () => fake,
       now: () => Date.now(),
     });
     const first = backend.configureSession();
-    await vi.advanceTimersByTimeAsync(20_000); // A mid-poll
+    await vi.advanceTimersByTimeAsync(20_000); // mid-poll
     await backend.shutdown();
-    await backend.configureSession(); // B's handshake fails
-    expect((await backend.probe()).lastError).toMatch(/current password failure/);
-    await vi.advanceTimersByTimeAsync(12_000); // A's poll hits its deadline
+    const before = (await backend.probe()).lastError;
+    await vi.advanceTimersByTimeAsync(12_000); // the poll hits its deadline
     await first;
-    expect((await backend.probe()).lastError).toMatch(/current password failure/);
+    expect((await backend.probe()).lastError).toBe(before);
   });
 
-  it("shutdown 之后再连:新一轮照常连上(栅栏只挡 shutdown 之前开始的连接)", async () => {
+  it("shutdown 之后每个入口都不再连 OBS(shutdown 是终态;复审三 #1)", async () => {
     const backend = makeBackend();
-    await backend.shutdown();
     await backend.configureSession();
-    expect(fake.connectCalls).toHaveLength(1);
     expect((await backend.probe()).ready).toBe(true);
+    // a start issued in the same turn as the shutdown
+    const start = backend.startContinuous();
+    await backend.shutdown();
+    await start;
+    await backend.configureSession();
+    await backend.startContinuous();
+    expect(await backend.splitChunk()).toBeNull();
+    expect(fake.connectCalls).toHaveLength(1);
+    expect(order(fake)).not.toContain("call:StartRecord");
+    expect((await backend.probe()).ready).toBe(false);
   });
 });
