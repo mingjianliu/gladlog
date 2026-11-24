@@ -60,6 +60,9 @@ export interface EventRow {
   tS: number;
   kind: EventKind;
   srcName: string;
+  /** Short name of the source's owner when the source is a pet or guardian
+   * (`ownerId`): a pet alone ("Khiizhem", 未知目标) does not say whose it is. */
+  srcOwner?: string;
   destName: string;
   spellId: string;
   spellName: string;
@@ -224,6 +227,8 @@ export function deriveEventRows(
     const startMs = source.startTime;
     const rel = (ts: number) => Math.round(((ts - startMs) / 1000) * 10) / 10;
     const rows: EventRow[] = [];
+    // owner of the unit whose events are being pushed (pets only)
+    let cur: { name: string; owner?: string } = { name: "" };
     const push = (
       e: RawEvent,
       kind: EventKind,
@@ -234,6 +239,7 @@ export function deriveEventRows(
         tS: rel(e.timestamp),
         kind,
         srcName: shortUnitName(e.srcName),
+        ...(cur.owner && e.srcName === cur.name ? { srcOwner: cur.owner } : {}),
         destName: shortUnitName(extra?.destOverride ?? e.destName),
         spellId: String(e.spellId ?? ""),
         spellName: spellNameOf(e, lang),
@@ -243,7 +249,13 @@ export function deriveEventRows(
         lineIndex: e.lineIndex,
       });
 
+    const unitsById = source.units as unknown as Record<string, UnitLike>;
     for (const u of Object.values(source.units) as unknown as UnitLike[]) {
+      const ownerName = u.ownerId ? unitsById[u.ownerId]?.name : undefined;
+      cur = {
+        name: u.name,
+        ...(ownerName ? { owner: shortUnitName(ownerName) } : {}),
+      };
       // Players and pets both go in (pet events already carry their own src
       // name)
       for (const e of u.damageOut ?? []) {

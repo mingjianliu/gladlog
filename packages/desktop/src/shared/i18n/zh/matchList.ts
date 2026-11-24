@@ -31,5 +31,8 @@ export const zhMatchList = {
   "matchList.import.doneFailed": ",失败 {failed} 个文件",
   "matchList.import.failed": "导入失败:{error}",
   "matchList.partial.badge": "不完整",
+  "matchList.durTitle": "对局时长",
+  "matchList.ratingTitle": "开局时的分数{delta}",
+  "matchList.ratingDelta": "，比上一场 {d}",
   "matchList.partial.title": "不完整:{issues}",
 };

@@ -23,6 +23,7 @@ import {
   deriveFocusFire,
 } from "../derive/replayHighlights";
 import { spellLabel } from "../derive/spellLabel";
+import { shortUnitName } from "../derive/teamSide";
 import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { useMatchPageActive } from "../pageActive";
@@ -1047,8 +1048,8 @@ export function ReplayView({
                           onMouseLeave={() => setHoverUnit(null)}
                         >
                           <span className="rpt-frame-main">
-                            <span className="rpt-frame-name">
-                              {tr.name}
+                            <span className="rpt-frame-name" title={tr.name}>
+                              {shortUnitName(tr.name)}
                               {bursting && !dead && (
                                 <span className="rpt-frame-burst">
                                   {tt("report.replay.burstTag")}

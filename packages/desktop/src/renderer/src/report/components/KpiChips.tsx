@@ -1,7 +1,11 @@
 import { useT } from "../../i18n/LangProvider";
 import type { DispelDash } from "../derive/dispelDash";
 import type { KickDashRow } from "../derive/kickDash";
-import type { Mistake } from "../derive/mistakes";
+import {
+  groupMistakesByMoment,
+  type Mistake,
+  splitMistakesByOwner,
+} from "../derive/mistakes";
 import type { VulnBand } from "../derive/vulnWindows";
 
 /**
@@ -27,8 +31,14 @@ export function KpiChips({
   dispelDash: DispelDash;
 }) {
   const { t } = useT();
-  const major = mistakes.filter((m) => m.severity === "major").length;
-  const rest = mistakes.length - major;
+  // The same count the mistakes card leads with: your own mistakes, merged
+  // into moments (groupMistakesByMoment). Counting every teammate's raw items
+  // here read "1 重大 · 3 一般" above a card saying "全部 0 · 你本人未检出失误".
+  const { own, teammates } = splitMistakesByOwner(mistakes);
+  const ownMoments = groupMistakesByMoment(own);
+  const mateMoments = groupMistakesByMoment(teammates).length;
+  const major = ownMoments.filter((m) => m.severity === "major").length;
+  const rest = ownMoments.length - major;
 
   const bursts = bands.filter((b) => b.kind === "burst");
   const converted = bursts.filter((b) => b.targetDied).length;
@@ -52,6 +62,11 @@ export function KpiChips({
           )}
           {major > 0 && rest > 0 && " · "}
           {(rest > 0 || major === 0) && t("report.kpi.restN", { n: rest })}
+          {mateMoments > 0 && (
+            <span className="rpt-kpi-passive">
+              {t("report.kpi.matesN", { n: mateMoments })}
+            </span>
+          )}
         </span>
       </span>
       {bursts.length > 0 && (

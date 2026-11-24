@@ -144,18 +144,10 @@ export function MatchListRow({
           <span className={`badge badge-${meta.kind}`}>shuffle</span>
         )}
         <span className="mlr-zone">{zone ?? meta.bracket}</span>
-        {meta.structuralIssues && meta.structuralIssues.length > 0 && (
-          <span
-            className="mlr-partial"
-            title={t("matchList.partial.title", {
-              issues: meta.structuralIssues.join(", "),
-            })}
-          >
-            {t("matchList.partial.badge")}
-          </span>
-        )}
         {meta.durationS != null && (
-          <span className="mlr-dur">{fmtTime(meta.durationS)}</span>
+          <span className="mlr-dur" title={t("matchList.durTitle")}>
+            {fmtTime(meta.durationS)}
+          </span>
         )}
         {rating != null && (
           <span
@@ -166,6 +158,14 @@ export function MatchListRow({
                   : "mlr-rating down"
                 : "mlr-rating"
             }
+            title={t("matchList.ratingTitle", {
+              delta:
+                ratingDelta != null && ratingDelta !== 0
+                  ? t("matchList.ratingDelta", {
+                      d: `${ratingDelta > 0 ? "+" : "−"}${Math.abs(ratingDelta)}`,
+                    })
+                  : "",
+            })}
           >
             {rating}
             {ratingDelta != null && ratingDelta !== 0
@@ -188,6 +188,18 @@ export function MatchListRow({
             <SpecDot key={i} specId={p.specId} classId={p.classId} />
           ))}
         </span>
+        {/* on the second line: on the first it squeezed the map name to
+            "Ruins of L…" */}
+        {meta.structuralIssues && meta.structuralIssues.length > 0 && (
+          <span
+            className="mlr-partial"
+            title={t("matchList.partial.title", {
+              issues: meta.structuralIssues.join(", "),
+            })}
+          >
+            {t("matchList.partial.badge")}
+          </span>
+        )}
         <span className="mlr-when">{fmtHHMM(meta.startTime)}</span>
       </div>
     </div>

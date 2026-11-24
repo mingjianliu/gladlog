@@ -96,15 +96,22 @@ export function KickDashboard({
                   {r.landedRate === null
                     ? "—"
                     : `${Math.round(r.landedRate * 100)}%`}
-                  {r.silenced > 0
-                    ? t("report.kickDash.silencedN", { n: r.silenced })
-                    : ""}
-                  {r.refused > 0
-                    ? t("report.kickDash.refusedN", { n: r.refused })
-                    : ""}
-                  {r.unknown > 0
-                    ? t("report.kickDash.unknownN", { n: r.unknown })
-                    : ""}
+                  {/* The notes go under the percentage, not beside it: in
+                      the 1/3-width card "60%(落空含 1 次被免疫/反射)" ran into
+                      the card edge. */}
+                  {(r.silenced > 0 || r.refused > 0 || r.unknown > 0) && (
+                    <span className="rpt-kick-note">
+                      {r.silenced > 0
+                        ? t("report.kickDash.silencedN", { n: r.silenced })
+                        : ""}
+                      {r.refused > 0
+                        ? t("report.kickDash.refusedN", { n: r.refused })
+                        : ""}
+                      {r.unknown > 0
+                        ? t("report.kickDash.unknownN", { n: r.unknown })
+                        : ""}
+                    </span>
+                  )}
                 </td>
               </tr>,
               expanded ? (
@@ -185,7 +192,7 @@ function CastControlStrip({
   const [open, setOpen] = useState(false);
   return (
     <div className="rpt-stats-detail-group" data-testid="cast-control">
-      <span className="rpt-stats-detail-item">
+      <span className="rpt-stats-detail-item rpt-cast-control-line">
         <UnitName name={c.name} />
         {t("report.castControl.line", {
           hardcasts: c.hardcasts,

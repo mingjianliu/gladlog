@@ -153,7 +153,10 @@ const LaneBody = memo(function LaneBody({
   return (
     <>
       {cols.map((tr, colIdx) => {
-        const dead = tr.deathT != null;
+        // Struck through once the replay clock has passed the death, not
+        // from 0:00 on (a header crossed out at the opening read as "dead
+        // from the start"); the lane's own 死亡 marker still shows when.
+        const dead = tr.deathT != null && tr.deathT <= tQ;
         return (
           <div key={tr.unitId} className="rpt-gcd-col-wrap">
             {colIdx === friendlyColCount &&

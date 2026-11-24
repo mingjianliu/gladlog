@@ -97,6 +97,7 @@ export const zhReportDerive = {
   "report.eventKind.interrupt": "打断",
   "report.eventKind.death": "死亡",
   "report.events.auraGained": "+获得",
+  "report.events.petOf": "{owner} 的宠物",
   "report.events.auraLost": "−失去",
   "report.events.dispelled": "驱掉 {spell}",
   "report.events.interrupted": "打断 {spell}",

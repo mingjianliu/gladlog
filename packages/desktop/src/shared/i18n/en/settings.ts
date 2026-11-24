@@ -20,6 +20,9 @@ export const enSettings = {
   "settings.loading": "Loading…",
   "settings.chooseFolder": "Choose folder…",
   "settings.toggle.enable": "Turn on",
+  // state shown beside each on/off button (the button names the action)
+  "settings.state.on": "On",
+  "settings.state.off": "Off",
   "settings.toggle.disable": "Turn off",
   "settings.toggle.turnOn": "Turn on",
   "settings.toggle.turnOff": "Turn off",

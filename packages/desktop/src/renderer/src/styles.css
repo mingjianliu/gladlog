@@ -766,6 +766,13 @@ pre {
   color: var(--ink-2);
   padding: 6px 0;
 }
+/* Before an analysis exists the chat is only a hint: a bordered empty box
+   sitting above the AI 分析 button read as a broken panel. */
+.coach-chat-card:has(> .coach-chat-empty:only-child) {
+  border: none;
+  padding: 0;
+  text-align: center;
+}
 .coach-chat-head {
   font-size: 11px;
   color: var(--ink-2);
@@ -2567,12 +2574,18 @@ pre {
 .rpt-recap {
   overflow-x: hidden;
 }
+/* The spell cell is the one that gives way (width:100% + max-width:0 makes
+   an auto-layout cell take the leftover width and ellipsize): with a fixed
+   220px cap the row outgrew the 384px column and the source names on the
+   right were cut off mid-word by the card's overflow ("Bumbin"). */
 .rpt-recap-spell {
-  max-width: 220px;
+  width: 100%;
+  max-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rpt-recap-src {
+  min-width: 56px;
   max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2846,8 +2859,18 @@ pre {
   cursor: pointer;
 }
 .rpt-stats-caret {
-  color: var(--mute);
-  font-size: 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+/* kick table rate notes: their own line under the percentage */
+.rpt-kick-note {
+  display: block;
+  font-size: 11px;
+  white-space: normal;
+}
+/* the cast-control summary wraps instead of running out of its card */
+.rpt-stats-detail-item.rpt-cast-control-line {
+  white-space: normal;
 }
 .rpt-stats-detail-row td {
   background: var(--surface-2);
@@ -3733,7 +3756,7 @@ pre {
 /* ── 设置页(phase3 #2a)── */
 .settings {
   padding: 16px 20px;
-  max-width: 720px;
+  max-width: 880px;
 }
 .settings h2 {
   font-size: 15px;
@@ -3763,12 +3786,29 @@ pre {
   color: var(--ink-2);
   font-size: 12.5px;
 }
+/* Descriptions wrap: cut to one line, the AI 自查 / OBS WebSocket notes lost
+   the instruction they exist to give. */
 .settings-v {
   font-size: 12px;
-  color: var(--mute);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #9a9eb2;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+/* on/off state beside a toggle button, whose label names the action */
+.settings-state {
+  font-size: 11px;
+  color: #9a9eb2;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 1px 8px;
   white-space: nowrap;
+}
+.settings-state.on {
+  color: var(--win);
+  border-color: color-mix(in srgb, var(--win) 40%, transparent);
+}
+.settings-actions {
+  align-items: center;
 }
 .settings input {
   width: 100%;
@@ -3810,7 +3850,7 @@ pre {
   display: block;
   margin-top: 4px;
   font-size: 11px;
-  color: #595d6c;
+  color: #8a8ea0;
 }
 .settings-seg {
   width: fit-content;
@@ -4011,12 +4051,22 @@ pre {
   display: flex;
   align-items: center;
   gap: 12px;
+  row-gap: 4px;
+  /* a narrow column moves the trailing note to its own line instead of
+     breaking every label into two (确定性规则直/出) */
+  flex-wrap: wrap;
   margin-bottom: 6px;
+}
+.rpt-ledger-head > * {
+  white-space: nowrap;
 }
 .rpt-ledger-title {
   font-size: 12px;
   color: var(--ink-2);
   letter-spacing: 0.06em;
+  /* in the 384px side column the title was squeezed to 失误清/单 */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .rpt-ledger-tabs {
   display: inline-flex;
@@ -4676,8 +4726,12 @@ button.rpt-mistakes-showminor:hover {
   background: var(--accent);
   color: #fff;
   border-radius: 0 10px 10px 0;
-  padding: 14px 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 14px 14px;
   font-size: 13px;
+}
+.rpt-ai-split-chevron {
+  display: block;
 }
 .rpt-ai-model-menu {
   position: absolute;
@@ -6298,7 +6352,7 @@ button.rpt-kpi:hover {
 }
 .cs-line {
   display: grid;
-  grid-template-columns: 84px 112px minmax(0, 1fr) 96px;
+  grid-template-columns: 84px 104px minmax(0, 1fr) 72px;
   align-items: center;
   gap: 12px;
   padding: 9px 0;
@@ -6377,8 +6431,13 @@ button.rpt-kpi:hover {
   width: 1px;
   background: var(--mute);
 }
+.cs-rec-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cs-spark {
-  width: 96px;
+  width: 72px;
   height: 32px;
   overflow: visible;
 }
@@ -6515,4 +6574,11 @@ button.rpt-kpi:hover {
   .cs-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* events table: whose pet a pet source is */
+.rpt-events-owner {
+  margin-left: 6px;
+  font-size: 11px;
+  color: #9a9eb2;
 }

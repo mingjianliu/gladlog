@@ -42,6 +42,9 @@ export { nodeMaps } from "./data/talentStrings";
 export { zoneMetadata } from "./data/zoneMetadata";
 export * from "./utils/auraIntervals";
 export * from "./utils/burstLedger";
+// The marker the timeline appends to a cooldown aura no press put up; the
+// desktop cards swap it for a translated label.
+export { NO_PRESS_SUFFIX } from "./utils/offensiveAuraOccurrences";
 export {
   ADAPTATION_TRIGGER_AURA_ID,
   pvpTrinketUses,

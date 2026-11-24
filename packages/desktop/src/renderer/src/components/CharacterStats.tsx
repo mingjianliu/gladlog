@@ -124,7 +124,7 @@ export function BracketRow({ line }: { line: BracketLine }) {
         <Delta value={line.delta} from={line.baseline} />
       </span>
       <span className="cs-line-rec">
-        <span>
+        <span className="cs-rec-text" title={`${rec.primary} ${rec.secondary}`}>
           <b>{rec.primary}</b> <span className="cs-dim">{rec.secondary}</span>
         </span>
         <RateBar wins={line.rateWins} games={line.rateGames} />

@@ -5,9 +5,9 @@ import type { GladlogSettings } from "../../../main/settingsStore";
 import type { UpdateState } from "../../../main/updater";
 import {
   AI_MODELS,
-  modelLabel,
   type AiBackend,
   BACKEND_CLI_TOOL,
+  modelLabel,
   resolveAiModel,
 } from "../../../shared/aiModels";
 import {
@@ -677,6 +677,11 @@ export function SettingsPanel() {
           <span className="settings-k">{t("settings.autoAnalyze.label")}</span>
           <span className="settings-v">{t("settings.autoAnalyze.note")}</span>
           <span className="settings-actions">
+            <span
+              className={settings.autoAnalyzeNew ? "settings-state on" : "settings-state"}
+            >
+              {settings.autoAnalyzeNew ? t("settings.state.on") : t("settings.state.off")}
+            </span>
             <button
               aria-label={t("settings.autoAnalyze.label")}
               onClick={() =>
@@ -697,6 +702,11 @@ export function SettingsPanel() {
           <span className="settings-k">{t("settings.selfReview.label")}</span>
           <span className="settings-v">{t("settings.selfReview.note")}</span>
           <span className="settings-actions">
+            <span
+              className={settings.aiSelfReview ? "settings-state on" : "settings-state"}
+            >
+              {settings.aiSelfReview ? t("settings.state.on") : t("settings.state.off")}
+            </span>
             <button
               aria-label={t("settings.selfReview.label")}
               onClick={() =>
@@ -799,6 +809,11 @@ export function SettingsPanel() {
               : t("recorder.autoRecord.externalNote")}
           </span>
           <span className="settings-actions">
+            <span
+              className={settings.recordingEnabled ? "settings-state on" : "settings-state"}
+            >
+              {settings.recordingEnabled ? t("settings.state.on") : t("settings.state.off")}
+            </span>
             <button
               onClick={() =>
                 void save(
@@ -1098,6 +1113,11 @@ export function SettingsPanel() {
           <span className="settings-k">{t("settings.autoCheck.label")}</span>
           <span className="settings-v">{scheduleNote}</span>
           <span className="settings-actions">
+            <span
+              className={settings.autoCheckUpdates ? "settings-state on" : "settings-state"}
+            >
+              {settings.autoCheckUpdates ? t("settings.state.on") : t("settings.state.off")}
+            </span>
             <button
               aria-label={t("settings.autoCheck.label")}
               onClick={() =>

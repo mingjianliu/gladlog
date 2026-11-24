@@ -117,6 +117,7 @@ export const enReportDerive = {
   "report.eventKind.interrupt": "Interrupt",
   "report.eventKind.death": "Death",
   "report.events.auraGained": "+gained",
+  "report.events.petOf": "{owner}'s pet",
   "report.events.auraLost": "−lost",
   "report.events.dispelled": "removed {spell}",
   "report.events.interrupted": "interrupted {spell}",

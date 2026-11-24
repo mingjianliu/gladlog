@@ -9,6 +9,7 @@ import {
   type IKillWindowTargetEval,
   isHealerSpec,
   type IWindowTargetingAudit,
+  NO_PRESS_SUFFIX,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
@@ -134,4 +135,15 @@ export function groupAllyOverlaps(
     playerName,
     spellNames,
   }));
+}
+
+/**
+ * A spell name for display: the analysis layer marks a cooldown aura that no
+ * press put up with the English `NO_PRESS_SUFFIX` (" (no press)"), which is a
+ * prompt token — the cards show the translated label in its place.
+ */
+export function withNoPressLabel(name: string, noPressLabel: string): string {
+  return name.endsWith(NO_PRESS_SUFFIX)
+    ? `${name.slice(0, -NO_PRESS_SUFFIX.length)}${noPressLabel}`
+    : name;
 }

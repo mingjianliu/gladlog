@@ -21,10 +21,13 @@ import {
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { type Language, translate } from "../../../../shared/i18n";
+import { resolveOwner } from "./analysisInput";
 import { toLegacySafe } from "./legacySource";
 import { langMemoKey, sourceMemo } from "./sourceMemo";
 import { displaySpellName } from "./spellDisplay";
 import type { ReportSource } from "./types";
+
+const UNNAMED_UNIT = /^(未知目标|unknown|unknown target)$/i;
 
 /** Look-back window before death (seconds). The same fact as analysis's
  * counterfactual window — aliased, not re-declared (issue #11 window
@@ -137,6 +140,8 @@ export interface DeathRecap {
     /** the caster could not pay for it for long enough (the death fact's
      * `casterCouldNotPay`, apart from control) */
     casterCouldNotPay?: true;
+    /** the caster is the recorder (`resolveOwner`): the card says 你 */
+    casterIsOwner?: true;
   }>;
   /**
    * Mitigation audit (form A, #17b Task4): a row-by-row accounting of the
@@ -169,6 +174,7 @@ function deriveDeathRecapsUncached(
 ): DeathRecap[] {
   try {
     const legacy = toLegacySafe(source);
+    const ownerName = resolveOwner(legacy)?.name;
     const matchStartMs = legacy.startTime;
     // Cover deaths on both sides: our deaths = defensive review, enemy deaths
     // = kill-execution review.
@@ -335,7 +341,21 @@ function deriveDeathRecapsUncached(
       allDispels = [];
     }
 
-    const nameOf = (id: string): string => legacy.units[id]?.name ?? "unknown";
+    // A source the log left unnamed (the CN client writes 未知目标, the EN one
+    // "Unknown") is usually a guardian with a known owner: say whose it is.
+    const nameOf = (id: string): string => {
+      const u = legacy.units[id] as
+        | { name?: string; ownerId?: string }
+        | undefined;
+      if (!u) return "unknown";
+      const name = u.name ?? "";
+      const ownerName = u.ownerId ? legacy.units[u.ownerId]?.name : undefined;
+      if (ownerName && (!name || UNNAMED_UNIT.test(name)))
+        return translate(lang, "report.events.petOf", {
+          owner: ownerName.split("-")[0] ?? ownerName,
+        });
+      return name || "unknown";
+    };
 
     const recaps: DeathRecap[] = [];
     for (const unit of players) {
@@ -687,6 +707,9 @@ function deriveDeathRecapsUncached(
             casterWasInCC: m.casterWasInCC,
             ...(m.casterCouldNotPay
               ? { casterCouldNotPay: true as const }
+              : {}),
+            ...(ownerName && m.casterName === ownerName
+              ? { casterIsOwner: true as const }
               : {}),
           })),
           mitigationAudit,

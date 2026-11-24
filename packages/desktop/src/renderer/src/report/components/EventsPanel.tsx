@@ -622,7 +622,14 @@ export function EventsPanel({
       >
         <td className="rpt-stats-detail-t">{fmtTime(r.tS)}</td>
         <td>{eventKindLabel(r.kind, lang)}</td>
-        <td>{nameCell(r.srcName)}</td>
+        <td>
+          {nameCell(r.srcName)}
+          {r.srcOwner && (
+            <span className="rpt-events-owner">
+              {t("report.events.petOf", { owner: r.srcOwner })}
+            </span>
+          )}
+        </td>
         <td>{nameCell(r.destName)}</td>
         <td>
           {r.kind === "death" ? (

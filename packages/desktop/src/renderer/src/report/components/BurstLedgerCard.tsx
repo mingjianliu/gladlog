@@ -12,6 +12,7 @@ import {
   burstSpellsLabel,
   groupAllyOverlaps,
   type LedgerPlayer,
+  withNoPressLabel,
 } from "../derive/burstLedger";
 import { missedKickLabel } from "../derive/kickText";
 import { shortUnitName, type TeamSide } from "../derive/teamSide";
@@ -81,6 +82,8 @@ export function BurstLedgerCard({
     [players],
   );
   const { t: tr, lang } = useT();
+  const sn = (name: string) =>
+    withNoPressLabel(name, tr("report.burstLedger.noPress"));
   const [idx, setIdx] = useState(defaultIdx);
   const sides = useContext(TeamSideContext);
   /** Ring colour for the class dot. "unknown" keeps the class colour, i.e. no
@@ -159,7 +162,9 @@ export function BurstLedgerCard({
                   {fmtTime(b.fromSeconds)}–{fmtTime(b.toSeconds)}
                 </span>
                 <span className="rpt-ledger-spells">
-                  {burstSpellsLabel(b.spells)}
+                  {burstSpellsLabel(
+                    b.spells.map((s) => ({ spellName: sn(s.spellName) })),
+                  )}
                 </span>
                 {t ? (
                   <span>
@@ -175,7 +180,7 @@ export function BurstLedgerCard({
                 {immunities.map((d) => (
                   <Chip key={d.spellId} kind="bad">
                     {tr("report.burstLedger.intoImmunity", {
-                      spell: d.spellName,
+                      spell: sn(d.spellName),
                       s: d.overlapSeconds.toFixed(1),
                     })}
                   </Chip>
@@ -183,7 +188,7 @@ export function BurstLedgerCard({
                 {walls.map((d) => (
                   <Chip key={d.spellId} kind="warn">
                     {tr("report.burstLedger.intoWall", {
-                      spell: d.spellName,
+                      spell: sn(d.spellName),
                       s: d.overlapSeconds.toFixed(1),
                     })}
                   </Chip>
@@ -194,7 +199,7 @@ export function BurstLedgerCard({
                       names: groupAllyOverlaps(b.allyCDsOverlapping)
                         .map(
                           (a) =>
-                            `${shortUnitName(a.playerName)}(${a.spellNames.join(tr("report.common.listSep"))})`,
+                            `${shortUnitName(a.playerName)}(${a.spellNames.map(sn).join(tr("report.common.listSep"))})`,
                         )
                         .join(tr("report.common.listSep")),
                     })}

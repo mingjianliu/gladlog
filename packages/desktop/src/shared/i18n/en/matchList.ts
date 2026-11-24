@@ -42,5 +42,8 @@ export const enMatchList = {
     `, ${Number(p.failed) === 1 ? "1 file" : `${p.failed} files`} failed`,
   "matchList.import.failed": "Import failed: {error}",
   "matchList.partial.badge": "partial",
+  "matchList.durTitle": "Match length",
+  "matchList.ratingTitle": "Rating at the start{delta}",
+  "matchList.ratingDelta": ", {d} vs the previous match",
   "matchList.partial.title": "Incomplete: {issues}",
 };

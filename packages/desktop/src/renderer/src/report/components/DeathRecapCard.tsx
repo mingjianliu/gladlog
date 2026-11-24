@@ -427,21 +427,43 @@ export function DeathRecapCard({
           ))}
         </p>
       )}
-      {recap.missedExternals.length > 0 && (
-        <p className="rpt-recap-verdictish">
-          {t("report.deathCard.missedExternals")}
-          {recap.missedExternals.map((m, k) => (
-            <span key={k} className="rpt-recap-pill">
-              <ChipIcon spellId={m.spellId} />
-              {t("report.deathCard.casterSpell", {
-                caster: m.casterName,
-                spell: m.spellName,
-              })}
-              {m.casterWasInCC ? t("report.deathCard.casterCc") : ""}
-              {m.casterCouldNotPay ? t("report.deathCard.casterOom") : ""}
-            </span>
-          ))}
-        </p>
+      {/* A caster under control or unable to pay could not have given it:
+          those go on their own line instead of under "could have given"
+          with a (被控) note contradicting the heading. */}
+      {(
+        [
+          [
+            "report.deathCard.missedExternals",
+            recap.missedExternals.filter(
+              (m) => !m.casterWasInCC && !m.casterCouldNotPay,
+            ),
+          ],
+          [
+            "report.deathCard.blockedExternals",
+            recap.missedExternals.filter(
+              (m) => m.casterWasInCC || m.casterCouldNotPay,
+            ),
+          ],
+        ] as const
+      ).map(([key, list]) =>
+        list.length > 0 ? (
+          <p key={key} className="rpt-recap-verdictish">
+            {t(key)}
+            {list.map((m, k) => (
+              <span key={k} className="rpt-recap-pill" title={m.casterName}>
+                <ChipIcon spellId={m.spellId} />
+                {t("report.deathCard.casterSpell", {
+                  caster: m.casterIsOwner
+                    ? t("report.deathCard.you")
+                    : shortUnitName(m.casterName),
+                  spell: m.spellName,
+                })}
+                {m.casterWasInCC ? t("report.deathCard.casterCc") : ""}
+                {m.casterCouldNotPay ? t("report.deathCard.casterOom") : ""}
+              </span>
+            ))}
+          </p>
+        ) : null,
       )}
 
       {recap.mitigationAudit.length > 0 && (

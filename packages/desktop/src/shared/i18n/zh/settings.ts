@@ -19,6 +19,9 @@ export const zhSettings = {
   "settings.loading": "加载中…",
   "settings.chooseFolder": "选择目录…",
   "settings.toggle.enable": "启用",
+  // state shown beside each on/off button (the button names the action)
+  "settings.state.on": "已开",
+  "settings.state.off": "未开",
   "settings.toggle.disable": "停用",
   "settings.toggle.turnOn": "开启",
   "settings.toggle.turnOff": "关闭",
