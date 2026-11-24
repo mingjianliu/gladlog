@@ -1904,8 +1904,8 @@
  *  Greater Invisibility holder's own press put on its target, logged in the
  *  same millisecond just below the invisibility's APPLIED, is no longer
  *  read as the mage's next action ending the invisibility: the kill
- *  window's stealth split applies again (wide: one round, 0c2f3878 r2; the
- *  605: no change).
+ *  window's stealth split applies again (wide: one round, 0c2f3878 r2,
+ *  among the 391 of 727 wide archives screened; the 605: no change).
  *  See docs/prompt-version-history.md.
  */
 export const PROMPT_VERSION = 664;
