@@ -2738,6 +2738,40 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     expect(existsSync(join(dir, "m1", "analysis-v2.en.json"))).toBe(false);
   });
 
+  it("当前语言第一个文件过期时继续看下一个候选(codex A#6):过期 en + 有效旧 analysis-v2.json → 读旧文件(en),不回退 zh", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-iter-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      doc("Death stale", PROMPT_VERSION - 1),
+    );
+    writeFileSync(join(dir, "m1", "analysis-v2.json"), doc("Death legacy"));
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    const { s } = service(dir, { language: "en" });
+    const cached = await s.getCached("m1");
+    expect(cached?.findings[0]!.title).toBe("Death legacy");
+    expect(cached?.contentLang).toBe("en");
+    const state = await s.getState("m1");
+    expect(state.cached?.findings[0]!.title).toBe("Death legacy");
+  });
+
+  it("汇总 / 笔记本:当前语言文件过期时继续看下一个候选(codex A#6)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-agg-iter-"));
+    mkdirSync(join(dir, "m1"));
+    writeFileSync(
+      join(dir, "m1", "analysis-v2.en.json"),
+      doc("Death stale", PROMPT_VERSION - 1),
+    );
+    writeFileSync(join(dir, "m1", "analysis-v2.zh.json"), doc("死亡A"));
+    const { s } = service(dir, { language: "en" });
+    const agg = await s.aggregate();
+    expect(agg.flatMap((c) => c.recent).map((r) => r.title)).toEqual(["死亡A"]);
+    const nb = await s.notebook();
+    expect(
+      nb.flatMap((g) => g.entries).map((e) => [e.title, e.contentLang]),
+    ).toEqual([["死亡A", "zh"]]);
+  });
+
   it("当前语言有命中时不读另一种语言;当前语言的文件过期才回退", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-cl-hit-"));
     mkdirSync(join(dir, "m1"));

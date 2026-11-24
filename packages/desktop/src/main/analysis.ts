@@ -193,20 +193,29 @@ export function contentLangOfCacheFile(fileName: string): Language {
   return basename(fileName) === "analysis-v2.zh.json" ? "zh" : "en";
 }
 
-/** Parse the first existing file of `paths` into the v2 shape, tagged with the
- * language its name says. null when none exists or the first one is corrupt. */
-function readFirstSlottedDoc(
+/** Parse each existing file of `paths`, in order, into the v2 shape, tagged
+ * with the language its name says. Missing and corrupt files are skipped.
+ * Lazy: a caller that stops at the first file passing its check reads no
+ * further. */
+function* readSlottedDocs(
   paths: string[],
   legacySlotKey: string,
-): { doc: AnalysisCacheDocV2<AnalysisResult>; contentLang: Language } | null {
-  const fp = paths.find((p) => existsSync(p));
-  if (!fp) return null;
-  try {
-    const raw = JSON.parse(readFileSync(fp, "utf-8"));
-    const doc = toSlottedDoc<AnalysisResult>(raw, legacySlotKey);
-    return doc ? { doc, contentLang: contentLangOfCacheFile(fp) } : null;
-  } catch {
-    return null;
+): Generator<{
+  doc: AnalysisCacheDocV2<AnalysisResult>;
+  contentLang: Language;
+}> {
+  for (const fp of paths) {
+    if (!existsSync(fp)) continue;
+    let doc: AnalysisCacheDocV2<AnalysisResult> | null = null;
+    try {
+      doc = toSlottedDoc<AnalysisResult>(
+        JSON.parse(readFileSync(fp, "utf-8")),
+        legacySlotKey,
+      );
+    } catch {
+      doc = null;
+    }
+    if (doc) yield { doc, contentLang: contentLangOfCacheFile(fp) };
   }
 }
 
@@ -243,18 +252,32 @@ function readSlottedDoc(
   const lang: Language = settings.language ?? "zh";
   const legacySlotKey = currentSlotKey(settings);
   const selfReviewOn = settings.aiSelfReview === true;
-  const own = readFirstSlottedDoc(
+  // A candidate counts only when it passes the same hit test getCached
+  // applies (codex A#6): a stale analysis-v2.en.json must not hide a valid
+  // legacy analysis-v2.json behind it.
+  const passes = (
+    r: { doc: AnalysisCacheDocV2<AnalysisResult> },
+    key?: string,
+  ): boolean => Boolean(currentSlot(r.doc, key, selfReviewOn)?.result);
+  let firstOwn: {
+    doc: AnalysisCacheDocV2<AnalysisResult>;
+    contentLang: Language;
+  } | null = null;
+  for (const r of readSlottedDocs(
     slottedDocCandidatePaths(matchesDir, matchId, lang),
     legacySlotKey,
-  );
-  if (slotKey !== undefined) return own;
-  if (own && currentSlot(own.doc, undefined, selfReviewOn)) return own;
-  const other = readFirstSlottedDoc(
+  )) {
+    firstOwn ??= r;
+    if (passes(r, slotKey)) return r;
+  }
+  // Keyed reads stay within the current language (see above).
+  if (slotKey !== undefined) return firstOwn;
+  for (const r of readSlottedDocs(
     slottedDocCandidatePaths(matchesDir, matchId, lang === "zh" ? "en" : "zh"),
     legacySlotKey,
-  );
-  if (other && currentSlot(other.doc, undefined, selfReviewOn)) return other;
-  return own;
+  ))
+    if (passes(r)) return r;
+  return firstOwn;
 }
 
 /**
@@ -353,9 +376,10 @@ type AnalyzedMatchDir = {
 /**
  * The one whole-library scan behind aggregate / notebook / listAnalyzed:
  * every match directory under matchesDir (skipping `.`/`_` entries), the
- * first existing cache file from `candidates(dir)`, parsed and normalized via
- * toSlottedDoc, kept only when its active slot is at the current
- * PROMPT_VERSION, plus the sidecar flags and meta.
+ * first cache file from `candidates(dir)` that parses (toSlottedDoc) with its
+ * active slot at the current PROMPT_VERSION -- a stale or corrupt earlier
+ * candidate does not hide a valid later one -- plus the sidecar flags and
+ * meta.
  *
  * Fully async with bounded concurrency: the previous per-method loops did
  * readdirSync + existsSync + readFileSync + JSON.parse for every directory
@@ -384,25 +408,28 @@ async function readAnalyzedMatchDirs(
     dirs,
     SCAN_CONCURRENCY,
     async (dir): Promise<AnalyzedMatchDir | null> => {
+      // The first candidate whose active slot passes (codex A#6): a stale or
+      // corrupt file earlier in the list must not hide a valid one after it.
       let file: string | undefined;
+      let slot: AnalysisSlot<AnalysisResult> | null = null;
       for (const f of candidates(dir)) {
         try {
-          await fsp.access(f);
-          file = f;
-          break;
+          const found = currentSlot(
+            toSlottedDoc<AnalysisResult>(await readJson(f), legacySlotKey),
+            undefined,
+            selfReviewOn,
+          );
+          if (found) {
+            file = f;
+            slot = found;
+            break;
+          }
         } catch {
-          /* try the next candidate */
+          /* missing or corrupt: try the next candidate */
         }
       }
-      if (!file) return null;
+      if (!file || !slot) return null;
       try {
-        const raw = await readJson(file);
-        const slot = currentSlot(
-          toSlottedDoc<AnalysisResult>(raw, legacySlotKey),
-          undefined,
-          selfReviewOn,
-        );
-        if (!slot) return null;
         const base = join(matchesDir, dir);
         let flags: Record<string, string> = {};
         try {
