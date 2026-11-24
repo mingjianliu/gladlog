@@ -172,11 +172,13 @@ export function run(ctx: IRoundCtx): void {
         // a second of REFRESH rows only: the line is a press's when its own
         // activation (lines and activations one to one) was given a press
         // (B192 review 5 — bf679e40 r1 0:53 tagged by mutation: the press
-        // and its REFRESH at 53.500, no APPLIED in the second)
+        // and its REFRESH at 53.500, no APPLIED in the second) — unless a
+        // proc's marker names that REFRESH as the proc's (review 6,
+        // constructed: APPLIED 10.970, press 10.999, REFRESH + marker 11.000)
         const own = acts[pos];
         if (!own || keyLines.length !== acts.length) continue;
         ctx.bump("noPressButPressed");
-        if (!own.pressed) continue;
+        if (!own.pressed || own.proc) continue;
         const rowTs = auras
           .map(tsOf)
           .filter(
