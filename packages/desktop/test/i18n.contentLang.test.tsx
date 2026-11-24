@@ -832,6 +832,54 @@ describe("AI 卡片:另一种语言的完成 / 在跑 / 无候选(codex A#7·B1#
     expect(screen.getByTestId("ai-preview").textContent).toContain("Death");
   });
 
+  it("restore 在跑后那一轮失败(state=error):不对旧结果自动深挖,错误保留(codex F3#2)", async () => {
+    let fail: ((d: unknown) => void) | null = null;
+    let runningNow = true;
+    const getState = vi.fn(async () => ({
+      cached: { ...enResult, contentLang: "en" },
+      lang: "en",
+      running: runningNow,
+      runningMeta: runningNow
+        ? {
+            since: Date.now(),
+            backend: "anthropic",
+            model: "claude-opus-5-5",
+            retrying: false,
+            reviewing: false,
+          }
+        : null,
+      slots: [],
+      activeKey: null,
+    }));
+    const calls = installBridge({
+      language: "en",
+      cached: enResult,
+      contentLang: "en",
+      analysisOverrides: {
+        getState,
+        onError: (cb: (d: unknown) => void) => {
+          fail = cb;
+          return () => {
+            fail = null;
+          };
+        },
+      },
+    });
+    vi.mocked(buildAnalysisInput).mockReturnValue(fakeInput as never);
+    renderPanel();
+    await screen.findByRole("button", { name: "Analyzing…" });
+    runningNow = false;
+    await act(async () => {
+      fail!({ matchId: "m1", message: "backend exploded" });
+    });
+    expect(await screen.findByText(/backend exploded/)).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 50));
+    // a deep dive here would re-deepen the previous result and its done
+    // would clear the error
+    expect(calls.deepen).not.toHaveBeenCalled();
+    expect(screen.getByText(/backend exploded/)).toBeTruthy();
+  });
+
   it("en 无候选(hadNarration=false, no-candidates):空状态是英文,不出中文", async () => {
     const empty = {
       findings: [],

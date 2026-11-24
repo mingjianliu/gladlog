@@ -636,11 +636,13 @@ export function StructuredAnalysisPanel({
     // -- main's deepen writes into the current language's cache, so it would
     // merge the other language's findings into it.
     if ((result.contentLang ?? lang) !== lang) return;
-    // Never while a first round is running (codex F2#2): e.g. remounting with
-    // a cached result while main still runs a round (restored `running`). The
-    // deep dive bumps the match's generation in main, which would cancel that
-    // paid round. The effect re-runs when the round's done lands.
-    if (state === "running") return;
+    // Only from a settled result (codex F2#2, F3#2): not while a first round
+    // is running (restored `running` on remount -- the deep dive bumps the
+    // match's generation in main and would cancel that paid round; main also
+    // refuses it), and not on the error path (a failed re-analysis must not
+    // deep-dive the previous result and clear the error). The effect re-runs
+    // when the round's done lands.
+    if (state !== "done") return;
     if (!result.hadNarration || result.deepened) return;
     if (result.findings.length === 0) return;
     try {

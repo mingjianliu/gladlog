@@ -1229,6 +1229,12 @@ export function createAnalysisService(deps: {
       )
         return;
     }
+    // Never while a first round of this match is running (codex F3#1): the
+    // deep dive's nextGen would supersede that paid round, which then exits
+    // without saving -- whichever panel tab or caller asked. `run` clears its
+    // `running` entry before emitting done, so a deep dive requested from a
+    // done handler is not refused.
+    if (running.has(input.matchId)) return;
     const myGen = nextGen(input.matchId);
     // Review I-1: the deep dive must follow the backend/model of the slot
     // `lastSlotKey` points at, not the global default in settings -- after an

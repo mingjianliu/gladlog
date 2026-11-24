@@ -263,6 +263,49 @@ describe("isRunning 追踪(切页防丢 + 泄漏回归)", () => {
     await runP;
     expect(await s.isRunning("m1")).toBe(false); // old implementation left true here
   });
+
+  it("同场一轮在跑时 deepen 被拒绝:不抬世代,那一轮照常完成并发 done(codex F3#1)", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const runDone: unknown[] = [];
+    const s = createAnalysisService({
+      getSettings: () => ({
+        anthropicApiKey: "k",
+        wowDirectory: null,
+      }),
+      clientFactory: () => ({
+        async *stream() {
+          yield { delta: JSON.stringify([]) };
+          await gate; // the first round is still running
+        },
+      }),
+      matchesDir: "/tmp/nope-" + Math.random(),
+      emit: (ch: string, payload: unknown) => {
+        // the round's own done carries slotKey (deepen's in-memory done does not)
+        if (
+          ch === "gladlog:analysis:done" &&
+          (payload as { slotKey?: string }).slotKey !== undefined
+        )
+          runDone.push(payload);
+      },
+    });
+    const runP = s.run(input);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await s.isRunning("m1")).toBe(true);
+    await s.deepen({
+      matchId: "m1",
+      findings: [],
+      packs: [],
+      spec: "x",
+      contentLang: "zh",
+    });
+    release();
+    await runP;
+    // Without the guard the deep dive's nextGen superseded the round: it
+    // exited without saving and no done was emitted.
+    expect(runDone).toHaveLength(1);
+    expect(await s.isRunning("m1")).toBe(false);
+  });
 });
 
 describe("AI 语言(backlog #1)", () => {
