@@ -277,3 +277,65 @@ describe("学到的规则:zh 模式回退到英文描述时标语言(§6.13)", (
     }
   });
 });
+
+describe("学到的规则:en 模式回退到中文描述时标语言(§6.13)", () => {
+  it("只有 zh 描述/建议 → en 模式显示中文原文,两处各带 Analyzed in Chinese", async () => {
+    install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "en");
+    const prev = rule.description;
+    const prevAdv = rule.advice;
+    rule.description = { zh: "被击杀窗口打死 {{hits}} 次" } as typeof prev;
+    rule.advice = { zh: "早交饰品" } as typeof prevAdv;
+    try {
+      const { container } = render(
+        <LangProvider>
+          <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+        </LangProvider>,
+      );
+      await screen.findByText(/被击杀窗口打死 4 次/);
+      const desc = container.querySelector(".dash-learning-desc")!;
+      const adv = container.querySelector(".dash-learning-advice")!;
+      expect(desc.getAttribute("data-content-lang")).toBe("zh");
+      expect(adv.getAttribute("data-content-lang")).toBe("zh");
+      expect(adv.textContent).toContain("早交饰品");
+      expect(
+        desc.querySelector("[data-testid=content-lang-badge]")?.textContent,
+      ).toBe("Analyzed in Chinese");
+      expect(
+        adv.querySelector("[data-testid=content-lang-badge]")?.textContent,
+      ).toBe("Analyzed in Chinese");
+      expect(container.textContent).not.toContain(
+        "(description arrives with the next consolidation)",
+      );
+    } finally {
+      rule.description = prev;
+      rule.advice = prevAdv;
+    }
+  });
+
+  it("两种语言都没有 → 占位文案,不显示建议,不带标签", async () => {
+    install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "en");
+    const prev = rule.description;
+    const prevAdv = rule.advice;
+    rule.description = {} as typeof prev;
+    rule.advice = {} as typeof prevAdv;
+    try {
+      const { container } = render(
+        <LangProvider>
+          <StatsDashboard onOpenMatch={() => {}} onZoneClick={() => {}} />
+        </LangProvider>,
+      );
+      await screen.findByText(
+        "(description arrives with the next consolidation)",
+      );
+      expect(container.querySelector(".dash-learning-advice")).toBeNull();
+      expect(
+        container.querySelector(
+          ".dash-learning-desc [data-testid=content-lang-badge]",
+        ),
+      ).toBeNull();
+    } finally {
+      rule.description = prev;
+      rule.advice = prevAdv;
+    }
+  });
+});

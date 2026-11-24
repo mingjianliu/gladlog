@@ -700,21 +700,17 @@ export function StatsDashboard({
                   </p>
                   {(rulesDoc?.rules ?? []).map((r: LearnedRule) => {
                     const facts = distillFacts(r.stats);
-                    // Model-written text. en shows only the en version (a
-                    // missing one waits for the next consolidation, see
-                    // LearnedRule.description); zh keeps its en fallback,
-                    // labelled as English content (spec §6.13).
+                    // Model-written text. Each language falls back to the
+                    // other one, labelled with the content's language (spec
+                    // §6.13); the next consolidation fills in the current
+                    // language lazily (see LearnedRule.description). The
+                    // placeholder only shows when neither language exists.
+                    const otherLang = lang === "en" ? "zh" : "en";
                     const desc =
-                      lang === "en"
-                        ? r.description.en
-                        : (r.description.zh ?? r.description.en);
-                    const adv =
-                      lang === "en"
-                        ? r.advice.en
-                        : (r.advice.zh ?? r.advice.en);
-                    const descFallback =
-                      lang === "zh" && !r.description.zh && !!desc;
-                    const advFallback = lang === "zh" && !r.advice.zh && !!adv;
+                      r.description[lang] ?? r.description[otherLang];
+                    const adv = r.advice[lang] ?? r.advice[otherLang];
+                    const descFallback = !r.description[lang] && !!desc;
+                    const advFallback = !r.advice[lang] && !!adv;
                     const max = Math.max(1, ...r.stats.trend);
                     return (
                       <div key={r.ruleId} className="dash-learning-rule">
@@ -764,23 +760,27 @@ export function StatsDashboard({
                         </span>
                         <p
                           className="dash-learning-desc"
-                          data-content-lang={descFallback ? "en" : undefined}
+                          data-content-lang={
+                            descFallback ? otherLang : undefined
+                          }
                         >
                           {desc
                             ? interpolate(desc, facts)
                             : t("stats.rule.noDescription")}
                           {descFallback && (
-                            <ContentLangBadge contentLang="en" />
+                            <ContentLangBadge contentLang={otherLang} />
                           )}
                         </p>
                         {adv && (
                           <p
                             className="dash-learning-advice"
-                            data-content-lang={advFallback ? "en" : undefined}
+                            data-content-lang={
+                              advFallback ? otherLang : undefined
+                            }
                           >
                             💡 {interpolate(adv, facts)}
                             {advFallback && (
-                              <ContentLangBadge contentLang="en" />
+                              <ContentLangBadge contentLang={otherLang} />
                             )}
                           </p>
                         )}

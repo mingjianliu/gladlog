@@ -101,8 +101,9 @@ export interface LearnedRule {
   };
   /** Template text (containing {{hits}}/{{windowMatches}} placeholders),
    * interpolated at render time.
-   * Missing the current language → the UI falls back deterministically
-   * (category label + stats) and the next consolidation fills it in lazily. */
+   * Missing the current language → the UI shows the other language's text
+   * with a content-language label (spec §6.13), or a placeholder when neither
+   * exists, and the next consolidation fills the current language in lazily. */
   description: { zh?: string; en?: string };
   advice: { zh?: string; en?: string };
   evidence: string[];
