@@ -376,6 +376,9 @@ const stealthAllowsPress =
  * which is what a standing effect is: a Garrote pressed 15.5 s earlier on a
  * player stands nowhere (fact7 `unseenEndOpener`, a7c8de4c r1: its 703 aura
  * 0.34 s into a Vanish was read as such a row, the Vanish printed 1.0 s).
+ * Nor the landing of a press logged above the application's row in the
+ * debuff's own millisecond (pipeline T261: a Polymorph that came off just
+ * before Greater Invisibility, its debuff written below the invisibility).
  */
 
 function holderOpenerDebuffAfterMs(
@@ -413,7 +416,23 @@ function holderOpenerDebuffAfterMs(
             (spellEffectData[c.spellId]?.durationSeconds ?? 0) * 1000 >=
             t,
       );
-      if (!standing) first = t;
+      if (standing) continue;
+      // the landing of a press logged before the application's row: its
+      // SUCCESS on this unit in the debuff's own millisecond, above the
+      // application — the debuff the press carried, not an action after the
+      // invisibility (pipeline T261, v0.1.44 wide check, 0c2f3878 16:20:00.769:
+      // Polymorph SUCCESS, Greater Invisibility APPLIED, its two cast rows,
+      // then the Polymorph DEBUFF APPLIED; the mage next acted 1.4 s later)
+      const ownLanding = (holder.spellCastEvents ?? []).some(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          !!c.spellId &&
+          pressIds.has(c.spellId) &&
+          c.destUnitId === u.id &&
+          c.logLine.timestamp === t &&
+          !after(c.logLine.timestamp, c.logLine.lineIndex),
+      );
+      if (!ownLanding) first = t;
     }
   }
   return first;

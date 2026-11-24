@@ -270,6 +270,61 @@ describe("fact7 unseenEndOpener — what ends a stealth nobody saw end", () => {
       ),
     ).toBe(Infinity);
   });
+  it("T261: a Polymorph that came off above Greater Invisibility's APPLIED in its millisecond is no action after it (0c2f3878 16:20:00.769)", () => {
+    const at = (row: object, s: number, line: number) =>
+      ({
+        ...row,
+        logLine: {
+          ...(row as { logLine: object }).logLine,
+          timestamp: ms(s),
+          lineIndex: line,
+        },
+      }) as never;
+    const poly = at(press("118", 67.3), 67.3, 1);
+    const polyDebuff = at(debuff("118", 67.3), 67.3, 5);
+    // the raw order: Polymorph SUCCESS (1), invisibility APPLIED (2), its two
+    // cast rows (3, 4), the Polymorph DEBUFF APPLIED (5)
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder([poly]),
+        ms(67.3),
+        GREATER_INVISIBILITY,
+        units(polyDebuff),
+        2,
+      ),
+    ).toBe(Infinity);
+    // a Polymorph pressed below the APPLIED is the mage acting again
+    const polyBelow = at(press("118", 67.3), 67.3, 4);
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder([polyBelow]),
+        ms(67.3),
+        GREATER_INVISIBILITY,
+        units(polyDebuff),
+        2,
+      ),
+    ).toBe(ms(67.3));
+    // no press row at all (fact7 D59, a lost cast row): the debuff still ends it
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder(),
+        ms(67.3),
+        GREATER_INVISIBILITY,
+        units(polyDebuff),
+        2,
+      ),
+    ).toBe(ms(67.3));
+    // a press on another unit is not this debuff's press
+    expect(
+      holderFirstOwnActionAfterMs(
+        holder([at(press("118", 67.3, "other"), 67.3, 1)]),
+        ms(67.3),
+        GREATER_INVISIBILITY,
+        units(polyDebuff),
+        2,
+      ),
+    ).toBe(ms(67.3));
+  });
 });
 
 describe("fact7 kickBackVsNextPress — the back of a kick a later event shortened", () => {
