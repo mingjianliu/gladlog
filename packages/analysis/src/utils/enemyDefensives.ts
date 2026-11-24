@@ -1425,16 +1425,32 @@ export function selfSaveCasts(
       if (!castOfAura.has(a)) castOfAura.set(a, id);
   // the unit's own rows on itself, for "was this aura already up just
   // before this row" (`ownAuraUpBeforeRow`, T259)
-  const ownRows = dropAuraRebroadcasts(
-    (enemy.auraEvents ?? []).filter(
-      (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
-    ),
+  const ownRawRows = (enemy.auraEvents ?? []).filter(
+    (b) => b.srcUnitId === enemy.id && b.destUnitId === enemy.id,
   );
+  const ownRows = dropAuraRebroadcasts(ownRawRows);
+  const ownKept = new Set(ownRows);
   // the proc markers already stated, one activation each
   const statedMarkers = new Set<(typeof ownRows)[number]>();
   const pressMsByCast = new Map<string, number[]>();
+  const pressedNear = (castId: string, auraId: string, ms: number) =>
+    (
+      pressMsByCast.get(castId) ??
+      pressMsByCast
+        .set(
+          castId,
+          pressMsOf(
+            new Set([...pressIdsOf(castId), ...castsOfEffectAura(auraId)]),
+          ),
+        )
+        .get(castId)!
+    ).some((p) => Math.abs(p - ms) <= SAVE_CAST_AURA_PAIR_S * 1000);
   for (const a of dropAuraRebroadcasts(enemy.auraEvents ?? [])) {
-    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+    // an APPLIED; a REFRESH only as a proc's own activation below (a proc
+    // that fires while the aura it casts is up refreshes it — 12dc512f r3:
+    // pressed 174.755 s, the proc's REFRESH 176.347 s, its marker 1 ms on)
+    const refresh = a.logLine.event === LogEvent.SPELL_AURA_REFRESH;
+    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED && !refresh) continue;
     if (a.srcUnitId !== enemy.id || a.destUnitId !== enemy.id) continue;
     // a transfer external's link on its own caster is no save of theirs
     // (`isCasterSideLinkAura`; 605 preview: 17 Blessing of Sacrifice links
@@ -1456,13 +1472,18 @@ export function selfSaveCasts(
     // a REMOVED the log never showed — T259). Well-Honed Instincts' marker
     // is its own 120 s lockout, so a marker inside it is the log re-listing
     // it (codex 85-tk-CD-T134-1 #1 — 4faf00ba: up at 5:04.588, re-listed
-    // with its marker at 5:06.232), and the aura beside it is no activation
-    // — a press's own aura there has its cast row's line (codex
-    // 85-mac-minifix-T259-1 #1). The saved aura's own clock is not asked:
-    // 8416188b r1, pressed 20:01:57.596 with no REMOVED, re-listed 58.885,
-    // the proc 20:02:02.347 lost its line to "still up".
+    // with its marker at 5:06.232). A fresh marker's activation does not ask
+    // the saved aura's own clock: 8416188b r1, pressed 20:01:57.596 with no
+    // REMOVED, re-listed 58.885, the proc 20:02:02.347 lost its line to
+    // "still up".
+    // A marker that is no new one (re-listed, or one half of a re-broadcast
+    // pair) makes the aura beside it no proc's: it is the run re-listed (up
+    // by its own clock), a press whose cast row has its own line (codex
+    // 85-mac-minifix-T259-1 #1 / -1b #1), or an activation the log shows
+    // with no press — stated as such, as before (-1b #2: a press made unseen
+    // beside a still-running marker, its earlier run REMOVED).
     if (isProcOwnActivationAt(enemy, castId, ms)) {
-      const markers = ownRows.filter((b) => {
+      const markers = ownRawRows.filter((b) => {
         const def = b.spellId ? CRISIS_PROC_ANSWERS.get(b.spellId) : undefined;
         return (
           def?.via === "aura" &&
@@ -1471,31 +1492,23 @@ export function selfSaveCasts(
           Math.abs(b.logLine.timestamp - ms) <= PROC_OWN_ACTIVATION_PAIR_MS
         );
       });
-      if (markers.length > 0) {
-        const fresh = markers.find(
-          (m) =>
-            !statedMarkers.has(m) && !ownAuraUpBeforeRow(enemy, ownRows, m),
-        );
-        if (!fresh) continue;
-        statedMarkers.add(fresh);
-      } else if (ownAuraUpBeforeRow(enemy, ownRows, a)) continue; // a heal marker
-    } else {
-      if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
-      const presses =
-        pressMsByCast.get(castId) ??
-        pressMsByCast
-          .set(
-            castId,
-            pressMsOf(
-              new Set([
-                ...pressIdsOf(castId),
-                ...castsOfEffectAura(a.spellId!),
-              ]),
-            ),
-          )
-          .get(castId)!;
-      if (presses.some((p) => Math.abs(p - ms) <= SAVE_CAST_AURA_PAIR_S * 1000))
+      const fresh = markers.find(
+        (m) =>
+          ownKept.has(m) &&
+          !statedMarkers.has(m) &&
+          !ownAuraUpBeforeRow(enemy, ownRows, m),
+      );
+      if (fresh) statedMarkers.add(fresh);
+      else if (
+        refresh ||
+        ownAuraUpBeforeRow(enemy, ownRows, a) ||
+        (markers.length > 0 && pressedNear(castId, a.spellId!, ms))
+      )
         continue;
+    } else {
+      if (refresh) continue;
+      if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
+      if (pressedNear(castId, a.spellId!, ms)) continue;
     }
     out.push({
       atSeconds: (ms - matchStartMs) / 1000,

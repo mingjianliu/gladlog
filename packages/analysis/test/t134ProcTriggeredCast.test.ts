@@ -201,17 +201,74 @@ describe("selfSaveCasts: an aura is up only within its life, not until a REMOVED
     ]);
   });
   it("the marker's lockout ends at its life: a marker past it is a new proc, one inside it a re-listing", () => {
-    // 382912: 120 s, + the 1 s lost-REMOVED slack
-    expect(
-      lines(druid([], [100, 220.9], [fr(100), fr(220.9)])).map((x) => x[0]),
-    ).toEqual([100]);
-    expect(
-      lines(druid([], [100, 221.1], [fr(100), fr(221.1)])).map((x) => x[0]),
-    ).toEqual([100, 221.1]);
+    // 382912: 120 s, + the 1 s lost-REMOVED slack; a press in the marker's
+    // batch shows which: inside the lockout the aura is the press's alone
+    expect(lines(druid([220.9], [100, 220.9], [fr(100), fr(220.9)]))).toEqual([
+      [100, true],
+      [220.9, false],
+    ]);
+    expect(lines(druid([221.1], [100, 221.1], [fr(100), fr(221.1)]))).toEqual([
+      [100, true],
+      [221.1, false],
+      [221.1, true],
+    ]);
   });
   it("one marker is one activation: a second aura row beside it states nothing more", () => {
     const u = druid([], [100], [fr(100), fr(100.02)]);
     expect(lines(u)).toEqual([[100, true]]);
+  });
+  it("a re-broadcast marker beside a press is no proc (codex 85-mac-minifix-T259-1b #1)", () => {
+    // proc 10 (no REMOVED of the aura), the marker re-broadcast 40.000 /
+    // 40.001, the player's press and its aura at 40.001
+    const u = druid(
+      [40.001],
+      [10, 40.001],
+      [
+        fr(10),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          MARKER,
+          at(40),
+          "p1",
+          "p1",
+          "BUFF",
+        ),
+        fr(40.001),
+      ],
+    );
+    expect(lines(u)).toEqual([
+      [10, true],
+      [40.001, false],
+    ]);
+  });
+  it("an aura new beside a still-running marker, its earlier run REMOVED and no press, is stated with no press (codex 85-mac-minifix-T259-1b #2)", () => {
+    const u = druid(
+      [],
+      [10, 40],
+      [fr(10), fr(13, LogEvent.SPELL_AURA_REMOVED), fr(40)],
+    );
+    expect(lines(u)).toEqual([
+      [10, true],
+      [40, true],
+    ]);
+  });
+  it("12dc512f r3 shape: a proc that refreshes the aura a press put up is its own activation (codex 85-mac-minifix-T259-1b #3)", () => {
+    const u = druid(
+      [174.755],
+      [176.348],
+      [fr(174.755), fr(176.347, LogEvent.SPELL_AURA_REFRESH)],
+    );
+    expect(lines(u)).toEqual([
+      [174.755, false],
+      [176.347, true],
+    ]);
+    // a REFRESH with no fresh marker beside it states nothing
+    const v = druid(
+      [174.755],
+      [],
+      [fr(174.755), fr(176.347, LogEvent.SPELL_AURA_REFRESH)],
+    );
+    expect(lines(v)).toEqual([[174.755, false]]);
   });
   it("ownAuraUpBeforeRow: a re-listing does not restart the run's clock; a REFRESH does; a REMOVED ends it", () => {
     const u = druid([], []);

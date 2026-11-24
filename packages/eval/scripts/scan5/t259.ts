@@ -13,11 +13,12 @@
  *    on an enemy (the `[ENEMY DEF]` lines `selfSaveCasts` feeds) of a proc
  *    whose spell is a save a line states (`SELF_SAVE_IDS`): the marker's
  *    APPLIED (self → self) while the marker is not already up — no APPLIED
- *    that started a run of it within its DB2 length before, with no REMOVED
- *    since (the lockout makes a second proc inside it impossible, so such a
- *    row is the log re-listing the marker; a run past its length is over,
- *    and the next APPLIED starts a new one) — beside an APPLIED of an aura
- *    the proc casts within the proc's pairing. A violation when no
+ *    that started a run of it (or REFRESH) within its DB2 length + 1 s
+ *    before, with no REMOVED since, and no re-broadcast (the lockout makes a
+ *    second proc inside it impossible, so such a row is the log re-listing
+ *    the marker; a run past its length is over, and the next APPLIED starts
+ *    a new one) — beside an APPLIED or REFRESH (a proc on an aura already up,
+ *    12dc512f r3) of an aura the proc casts within the proc's pairing. A violation when no
  *    `[ENEMY DEF]` line naming the spell with the no-press tag
  *    (`ENEMY_DEF_NO_PRESS_TAG`) on that unit lies within 1 s: the proc's
  *    own line, whatever press stands beside it (18e3feae r4: the proc 0:41,
@@ -27,6 +28,7 @@
  */
 import { CRISIS_PROC_ANSWERS } from "@gladlog/analysis/src/data/crisisProcAnswers";
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
+import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import {
   ENEMY_DEF_NO_PRESS_TAG,
   SELF_SAVE_IDS,
@@ -39,6 +41,7 @@ import {
   fmtS,
   type IRoundCtx,
   nameOf,
+  REFRESH,
   REMOVED,
   tsOf,
 } from "./ctx";
@@ -66,14 +69,22 @@ export function run(ctx: IRoundCtx): void {
       if (m.srcUnitId !== u.id || m.destUnitId !== u.id) continue;
       const ms = tsOf(m);
       if (ms < ctx.start || ms > ctx.roundEndAt) continue;
-      // the marker already up: a re-listing of it, no new proc
+      // the marker already up: a re-listing of it, no new proc. Its
+      // lockout is its DB2 length + the log's lost-REMOVED slack (1 s), from
+      // the row that started its run or its latest REFRESH; a REMOVED ends
+      // it — unless the APPLIED follows it within the re-broadcast gap (the
+      // same aura, re-broadcast)
       const lockMs =
-        (spellEffectData[String(m.spellId)]?.durationSeconds ?? 0) * 1000;
+        ((spellEffectData[String(m.spellId)]?.durationSeconds ?? 0) + 1) * 1000;
       let upSince: number | undefined;
+      let removedAt: number | undefined;
       for (let k = 0; k < i; k++) {
         const b = rows[k];
         if (b.spellId !== m.spellId || b.destUnitId !== u.id) continue;
-        if (ev(b) === REMOVED) upSince = undefined;
+        if (ev(b) === REMOVED) {
+          upSince = undefined;
+          removedAt = tsOf(b);
+        } else if (ev(b) === REFRESH) upSince = tsOf(b);
         else if (
           ev(b) === APPLIED &&
           (upSince === undefined || tsOf(b) - upSince > lockMs)
@@ -81,6 +92,13 @@ export function run(ctx: IRoundCtx): void {
           upSince = tsOf(b);
       }
       if (upSince !== undefined && ms - upSince <= lockMs) continue;
+      if (
+        upSince === undefined &&
+        removedAt !== undefined &&
+        ms - removedAt >= 0 &&
+        ms - removedAt <= AURA_REBROADCAST_GAP_MS
+      )
+        continue;
       for (const id of def.triggers) {
         // the saves a line states (`SELF_SAVE_IDS`): Blazing Speed, Second
         // Wind and Cheating Death are procs with no press line of their own
@@ -88,7 +106,8 @@ export function run(ctx: IRoundCtx): void {
         const aura = rows.find(
           (a) =>
             String(a.spellId) === id &&
-            ev(a) === APPLIED &&
+            // a proc that fires while the aura is up refreshes it (12dc512f r3)
+            (ev(a) === APPLIED || ev(a) === REFRESH) &&
             a.srcUnitId === u.id &&
             a.destUnitId === u.id &&
             Math.abs(tsOf(a) - ms) <= PROC_OWN_ACTIVATION_PAIR_MS,
