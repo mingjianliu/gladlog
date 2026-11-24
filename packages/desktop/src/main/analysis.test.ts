@@ -2819,6 +2819,29 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     expect(await s.listAnalyzed()).toEqual([]); // …but the batch still re-runs it
   });
 
+  it("流式片段带这一轮固定的语言:中途改成 en 后的片段仍标 zh(codex F2#9)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-delta-"));
+    const settings: { language: "zh" | "en" | null } = { language: "zh" };
+    let release!: () => void;
+    const parked = new Promise<void>((r) => (release = r));
+    let reached!: () => void;
+    const atGate = new Promise<void>((r) => (reached = r));
+    const { s, emitted } = service(dir, settings, async function* () {
+      yield { delta: finding.slice(0, 10) };
+      reached();
+      await parked;
+      yield { delta: finding.slice(10) };
+    });
+    const p = s.run(input);
+    await atGate;
+    settings.language = "en";
+    release();
+    await p;
+    const deltas = emitted.filter((e) => e.ch === "gladlog:analysis:delta");
+    expect(deltas.length).toBe(2);
+    expect(deltas.map((e) => e.p.contentLang)).toEqual(["zh", "zh"]);
+  });
+
   it("zh 设置下发起的一轮,跑到一半把设置改成 en:结果仍写进 analysis-v2.zh.json(Review Focus 4)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-cl-pin-"));
     const settings: { language: "zh" | "en" | null } = { language: "zh" };

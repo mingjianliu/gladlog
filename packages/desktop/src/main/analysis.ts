@@ -920,6 +920,9 @@ export function createAnalysisService(deps: {
               deps.emit("gladlog:analysis:delta", {
                 matchId: input.matchId,
                 text: ev.delta,
+                // the run's pinned language: the panel drops another
+                // language's stream (codex F2#9)
+                contentLang: lang,
               });
           }
         }

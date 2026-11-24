@@ -788,6 +788,50 @@ describe("AI 卡片:另一种语言的完成 / 在跑 / 无候选(codex A#7·B1#
     expect(calls.deepen.mock.calls[0]![0].contentLang).toBe("en");
   });
 
+  it("en 结果在屏上 + 一轮 zh 在跑:zh 的流式片段不显示在 en 结果下面;en 的照常显示(codex F2#9)", async () => {
+    let delta: ((d: unknown) => void) | null = null;
+    installBridge({
+      language: "en",
+      cached: enResult,
+      contentLang: "en",
+      analysisOverrides: {
+        getState: async () => ({
+          cached: { ...enResult, contentLang: "en" },
+          lang: "en",
+          running: true,
+          runningMeta: {
+            since: Date.now(),
+            backend: "anthropic",
+            model: "claude-opus-5-5",
+            retrying: false,
+            reviewing: false,
+          },
+          slots: [],
+          activeKey: null,
+        }),
+        onDelta: (cb: (d: unknown) => void) => {
+          delta = cb;
+          return () => {
+            delta = null;
+          };
+        },
+      },
+    });
+    vi.mocked(buildAnalysisInput).mockReturnValue(fakeInput as never);
+    const { container } = renderPanel();
+    expect(await screen.findByText(/No defensive was up/)).toBeTruthy();
+    await screen.findByRole("button", { name: "Analyzing…" });
+    await act(async () => {
+      delta!({ matchId: "m1", text: '[{"title":"死亡"', contentLang: "zh" });
+    });
+    expect(screen.queryByTestId("ai-preview")).toBeNull();
+    expect(visibleCjk(container)).toEqual([]);
+    await act(async () => {
+      delta!({ matchId: "m1", text: '[{"title":"Death"', contentLang: "en" });
+    });
+    expect(screen.getByTestId("ai-preview").textContent).toContain("Death");
+  });
+
   it("en 无候选(hadNarration=false, no-candidates):空状态是英文,不出中文", async () => {
     const empty = {
       findings: [],

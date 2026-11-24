@@ -323,6 +323,10 @@ export function StructuredAnalysisPanel({
     setRunMeta(null);
     setRetrying(false);
     setReviewing(false);
+    // The stream preview belongs to the match / language it streamed in
+    // (codex F2#9): a running same-language round refills it from its next
+    // delta.
+    setPreview("");
     void (async () => {
       try {
         // Single atomic query: the cache and the running flag must be read from
@@ -400,10 +404,18 @@ export function StructuredAnalysisPanel({
     let offError: (() => void) | undefined;
     try {
       const ai = bridge().analysis;
-      offDelta = ai.onDelta?.((d: { matchId: string; text: string }) => {
-        if (d.matchId !== matchId) return;
-        setPreview((p) => (p + d.text).slice(-600));
-      });
+      offDelta = ai.onDelta?.(
+        (d: { matchId: string; text: string; contentLang?: Language }) => {
+          if (d.matchId !== matchId) return;
+          // A round pinned to another language (started before a language
+          // switch) streams text in that language: it must not render under
+          // this language's result (codex F2#9). Its done is re-resolved
+          // through getState (see onDone below).
+          if (d.contentLang !== undefined && d.contentLang !== langRef.current)
+            return;
+          setPreview((p) => (p + d.text).slice(-600));
+        },
+      );
       offRetry = ai.onRetry?.((d: { matchId: string }) => {
         if (d.matchId !== matchId) return;
         setRetrying(true);

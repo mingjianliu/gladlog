@@ -354,7 +354,15 @@ export interface GladlogApi {
       key: string,
       flag: "done" | "recurring" | null,
     ): Promise<Record<string, string>>;
-    onDelta(cb: (d: { matchId: string; text: string }) => void): () => void;
+    /** contentLang: the language the streaming run pinned (spec §6.13); the
+     * panel drops another language's stream. */
+    onDelta(
+      cb: (d: {
+        matchId: string;
+        text: string;
+        contentLang?: Language;
+      }) => void,
+    ): () => void;
     /** 首轮输出解析失败、正在自动重试(bad-json retry):CLI 后端单发分钟级,
      * 重试让总时长翻倍,必须让面板能解释这段等待。 */
     onRetry(cb: (d: { matchId: string }) => void): () => void;
