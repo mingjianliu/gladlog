@@ -120,7 +120,11 @@ async function captureZhPrompts(): Promise<Record<string, string>> {
       matchesDir: mkdtempSync(join(tmpdir(), "gl-zh-golden-win-")),
       emit: () => {},
     });
-    await s.analyzeWindow({ matchId: "golden-1", ...req } as never);
+    await s.analyzeWindow({
+      matchId: "golden-1",
+      ...req,
+      contentLang: "zh",
+    } as never);
     record("window", sent[0]!);
   }
 

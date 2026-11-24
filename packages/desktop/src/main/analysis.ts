@@ -464,9 +464,9 @@ type DeepenInput = {
   /** Language `findings` were generated in (the caller's
    * CachedAnalysisResult.contentLang). deepenInner refuses a mismatch with
    * the language it pins (spec §6.13): it writes into that language's cache,
-   * and must never merge the other language's findings into it. Absent =
-   * older callers, no check. */
-  contentLang?: Language;
+   * and must never merge the other language's findings into it. Required:
+   * a call without it is refused too (it could carry either language). */
+  contentLang: Language;
 };
 type WindowAnalyzeInput = {
   matchId: string;
@@ -480,8 +480,8 @@ type WindowAnalyzeInput = {
    * language at request time). analyzeWindow refuses a mismatch with the
    * language it pins (spec §6.13, same guard as DeepenInput.contentLang): the
    * entries would land in that language's cache carrying the other
-   * language's chips. Absent = older callers, no check. */
-  contentLang?: Language;
+   * language's chips. Required: a call without it is refused too. */
+  contentLang: Language;
   /**
    * Review-round fix (#21 item11 addendum): an explicit retry must bypass
    * the cache and hit the model again -- it must not be swallowed by the
@@ -1156,7 +1156,9 @@ export function createAnalysisService(deps: {
     // Refuse outright: no write, and no done event carrying a wrong label.
     // Checked before nextGen, so a refused call never aborts an in-flight
     // round of this match.
-    if (input.contentLang !== undefined && input.contentLang !== lang) return;
+    // A missing tag is refused as well (codex A#1): an untagged call could
+    // carry either language, and the IPC boundary does not type-check.
+    if (input.contentLang !== lang) return;
     const myGen = nextGen(input.matchId);
     // Path converged onto analysisCachePath (single-source predicate; this
     // used to hand-concatenate the string).
@@ -1430,8 +1432,8 @@ export function createAnalysisService(deps: {
     // The language switched between the renderer building the pack and this
     // call: no model call, no cache write (the renderer remounts the report on
     // a language switch, so nothing is waiting for this answer).
-    if (input.contentLang !== undefined && input.contentLang !== lang)
-      return { status: "error" };
+    // A missing tag is refused too (codex A#1): it could carry either language.
+    if (input.contentLang !== lang) return { status: "error" };
     // Important audit fix (#16, second of three): backend + model are part of
     // the cache key. The original key was just fromS-toS, so after switching
     // backend/model, rerunning the same window silently returned the old

@@ -288,8 +288,8 @@ export interface GladlogApi {
       spec: string;
       ownerName?: string;
       /** Language the findings were generated in; main refuses the deep dive
-       * when it differs from the current language (spec §6.13). */
-      contentLang?: Language;
+       * when it is missing or differs from the current language (spec §6.13). */
+      contentLang: Language;
     }): Promise<void>;
     /** Window analysis (#16): the pack is built deterministically in the
      * renderer; single request-response, no emit.
@@ -306,8 +306,9 @@ export interface GladlogApi {
       ownerName?: string;
       force?: boolean;
       /** Language the pack's chip labels were built in; main refuses the
-       * request when it differs from the language it pins (spec §6.5). */
-      contentLang?: Language;
+       * request when it is missing or differs from the language it pins
+       * (spec §6.5). */
+      contentLang: Language;
       /** Moment deep dive (2026-08-05): main does not rebuild the pack from
        * this flag (the renderer already folded it into `pack`) -- it only
        * affects the cache key (`:snap` windowKey suffix) and max_tokens. */

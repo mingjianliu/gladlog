@@ -252,7 +252,13 @@ describe("isRunning 追踪(切页防丢 + 泄漏回归)", () => {
     expect(await s.isRunning("m1")).toBe(true);
     // Empty packs → deepen just ++es the generation and returns (no streaming),
     // which exactly simulates "a deep dive superseding an in-flight run"
-    await s.deepen({ matchId: "m1", findings: [], packs: [], spec: "x" });
+    await s.deepen({
+      matchId: "m1",
+      findings: [],
+      packs: [],
+      spec: "x",
+      contentLang: "zh",
+    });
     release(); // run resumes → isCurrent false → abort → clearRunning
     await runP;
     expect(await s.isRunning("m1")).toBe(false); // old implementation left true here
@@ -884,6 +890,7 @@ describe("deepen(深挖轮)", () => {
       });
 
     await svcDeep(good).deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: baseFindings as never,
       packs: [pack] as never,
@@ -905,6 +912,7 @@ describe("deepen(深挖轮)", () => {
       },
     ]);
     await svcDeep(bad).deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: baseFindings as never,
       packs: [pack] as never,
@@ -929,6 +937,7 @@ describe("deepen(深挖轮)", () => {
       emit: (ch, p) => emitted.push({ ch, p }),
     });
     await s2.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: baseFindings as never,
       packs: [] as never,
@@ -973,6 +982,7 @@ describe("deepen(深挖轮)", () => {
       throw new Error("EACCES (simulated disk-write failure)");
     });
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: baseFindings as never,
       packs: [] as never,
@@ -1067,6 +1077,7 @@ describe("deepen 审计全灭反馈重试(SDD 2026-08-06)", () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-deep-repair-ok-"));
     const { s, emitted } = svc(dir, [BAD, GOOD]);
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m-repair-ok",
       findings: baseFindings as never,
       packs: [pack] as never,
@@ -1086,6 +1097,7 @@ describe("deepen 审计全灭反馈重试(SDD 2026-08-06)", () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-deep-repair-noneed-"));
     const { s, emitted, calls } = svc(dir, [GOOD]);
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m-repair-noneed",
       findings: baseFindings as never,
       packs: [pack] as never,
@@ -1102,6 +1114,7 @@ describe("deepen 审计全灭反馈重试(SDD 2026-08-06)", () => {
     const dir = mkdtempSync(join(tmpdir(), "gl-deep-repair-stillbad-"));
     const { s, emitted, calls } = svc(dir, [BAD, BAD2]);
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m-repair-stillbad",
       findings: baseFindings as never,
       packs: [pack] as never,
@@ -1132,6 +1145,7 @@ describe("deepen 审计全灭反馈重试(SDD 2026-08-06)", () => {
       }),
       emit: (ch, p) => emitted.push({ ch, p }),
     }).deepen({
+      contentLang: "zh" as const,
       matchId: "m-repair-throws",
       findings: baseFindings as never,
       packs: [pack] as never,
@@ -1180,6 +1194,7 @@ describe("deepen 幂等守卫(周度复核 P2#4)", () => {
       emit: () => {},
     });
     const args = {
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: [
         {
@@ -1403,6 +1418,7 @@ describe("分槽落盘(多模型对比)", () => {
       backendOverride: { backend: "anthropic", model: "claude-opus-4-8" },
     }); // lastSlotKey → anthropic:claude-opus-4-8
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: [
         {
@@ -1443,6 +1459,7 @@ describe("分槽落盘(多模型对比)", () => {
     }); // lastSlotKey → anthropic:claude-opus-4-8
     streamCalls.length = 0; // only care which model this deepen call hits
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: [
         {
@@ -1528,6 +1545,7 @@ describe("分槽落盘(多模型对比)", () => {
     });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     await s.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: [
         {
@@ -1792,6 +1810,7 @@ describe("代际条目回收(周度复核 P3#9)", () => {
     });
 
     const deep = s.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: [] as never,
       packs: [
@@ -1948,6 +1967,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
     },
   ]);
   const input = (_dir: string) => ({
+    contentLang: "zh" as const,
     matchId: "m1",
     fromS: 30,
     toS: 60,
@@ -2209,6 +2229,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
       });
       for (let i = 0; i < 21; i++) {
         const r = await s.analyzeWindow({
+          contentLang: "zh" as const,
           matchId: "m1",
           fromS: i * 100,
           toS: i * 100 + 30,
@@ -2291,6 +2312,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
       emit: () => {},
     });
     const pA = s.analyzeWindow({
+      contentLang: "zh" as const,
       matchId: "m1",
       fromS: 30,
       toS: 60,
@@ -2299,6 +2321,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
       spec: "Holy Paladin",
     });
     const pB = s.analyzeWindow({
+      contentLang: "zh" as const,
       matchId: "m1",
       fromS: 200,
       toS: 230,
@@ -2463,6 +2486,7 @@ describe("analyzeWindow(#16 选段分析)", () => {
       emit: () => {},
     });
     const mk = (fromS: number) => ({
+      contentLang: "zh" as const,
       matchId: "m1",
       fromS,
       toS: 60,
@@ -2518,6 +2542,7 @@ describe("analyzeWindow 审计全灭反馈重试(SDD 2026-08-06)", () => {
     },
   };
   const input = (matchId = "m1") => ({
+    contentLang: "zh" as const,
     matchId,
     fromS: 30,
     toS: 60,
@@ -2838,6 +2863,7 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
       yield { delta: "" };
     });
     const p = s.deepen({
+      contentLang: "zh" as const,
       matchId: "m1",
       findings: [
         {
@@ -2915,6 +2941,32 @@ describe("另一种语言的 AI 内容(§6.13)", () => {
     expect(calls).toBe(1);
     const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
     expect(done.p.contentLang).toBe("en");
+  });
+
+  it("没带 contentLang 的深挖也拒绝(codex A#1):en 槽不会被中文 findings 覆盖", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-cl-deep-untagged-"));
+    mkdirSync(join(dir, "m1"));
+    const key = "anthropic:claude-opus-5-5";
+    const enBefore = v2("en", { [key]: slotOf("Death A") }, key);
+    writeFileSync(join(dir, "m1", "analysis-v2.en.json"), enBefore);
+    let calls = 0;
+    const { s, emitted } = service(dir, { language: "en" }, async function* () {
+      calls++;
+      yield { delta: goodDive };
+    });
+    await (s.deepen as (i: unknown) => Promise<void>)({
+      matchId: "m1",
+      findings: JSON.parse(v2("zh", { [key]: slotOf("死亡A") }, key)).slots[key]
+        .result.findings,
+      packs: [],
+      spec: "Frost Mage",
+    });
+    expect(calls).toBe(0);
+    expect(emitted.filter((e) => e.ch === "gladlog:analysis:done")).toEqual([]);
+    expect(readFileSync(join(dir, "m1", "analysis-v2.en.json"), "utf-8")).toBe(
+      enBefore,
+    );
+    expect((await s.getCached("m1"))?.findings[0]!.title).toBe("Death A");
   });
 
   it("按槽读取(分槽标签)不回退到另一种语言:当前语言里过期的槽 K 读成 null", async () => {
@@ -3047,7 +3099,7 @@ describe("analyzeWindow 选段锚点跟随固定下来的语言(spec §6.5)", ()
       spec: "Holy Paladin",
       ownerName: "O-Realm",
       ...(contentLang ? { contentLang } : {}),
-    });
+    } as Parameters<typeof s.analyzeWindow>[0]);
     return { status: r.status, prompts };
   };
 
@@ -3070,7 +3122,12 @@ describe("analyzeWindow 选段锚点跟随固定下来的语言(spec §6.5)", ()
     const r = await run("en", "zh");
     expect(r.status).toBe("error");
     expect(r.prompts).toEqual([]);
-    // absent = older callers: no check
-    expect((await run("en")).prompts).toHaveLength(1);
+    expect((await run("en", "en")).prompts).toHaveLength(1);
+  });
+
+  it("没带 contentLang 的选段请求也拒绝(codex A#1):不调模型、不写缓存", async () => {
+    const r = await run("en");
+    expect(r.status).toBe("error");
+    expect(r.prompts).toEqual([]);
   });
 });
