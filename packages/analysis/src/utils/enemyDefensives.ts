@@ -1888,6 +1888,11 @@ export interface IEnemyDefensiveEvent {
    * never `removed early` on length alone: its own length is not the
    * pressed spell's. */
   noPressLogged?: true;
+  /** the activation is its proc's own (`selfSaveCasts`' `procOwned`:
+   * Well-Honed Instincts' Frenzied Regeneration) — the line is tagged
+   * `[no press logged]` and no press beside it is its own. The scan of that
+   * tag reads the line's owner here (scan5/pressEffect). */
+  procOwned?: true;
   /** fact3 D35: pressed while the holder was unseen (`hiddenPressMs`) — the
    * press row is lost; `atSeconds` is the instant the log showed its aura,
    * the latest the press can have been. */
@@ -3360,6 +3365,7 @@ export function enemyDefensiveEventsUncached(
       kind: "self-save",
       ...(c.unseenPress ? { unseenPress: true as const } : {}),
       ...(c.noPressLogged ? { noPressLogged: true as const } : {}),
+      ...(c.procOwned ? { procOwned: true as const } : {}),
       ...(mechanism ? { mechanism } : {}),
       ...(mechanism?.kind === "absorb" ? { effect: "absorb" as const } : {}),
       ...(own

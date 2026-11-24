@@ -1,185 +1,178 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- the scan context is a fake */
 /**
- * scan5/pressEffect `noPressButPressed`: a `[no press logged]` line may be a
- * proc's own line (T259 / B192, 11346ea9 r1 1:53: Frenzied Regeneration
- * pressed at .198, then a Well-Honed Instincts proc REFRESH at .937) — only
- * when the second's lines pair one to one, in order, with its activations and
- * the tagged line's activation is an unpressed REFRESH.
+ * scan5/pressEffect `noPressButPressed` driven through `run(ctx)` on lines
+ * rendered from the producer's own events (`enemyDefensiveEvents`, in its
+ * order, as `enemyDef.ts` prints them). A `[no press logged]` line is a
+ * proc's own (T259 / B192: Well-Honed Instincts' Frenzied Regeneration) only
+ * when the producer's event behind that very line says so — the scan reads
+ * the owner, it does not work it out from the aura rows again.
  */
-import { LogEvent } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { ensureAnalysisData } from "@gladlog/analysis";
+import { enemyDefensiveEvents } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  CombatUnitClass,
+  CombatUnitReaction,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
-  activationsInSecond,
-  isProcOwnNoPressLine,
-} from "../scripts/scan5/pressEffect";
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "../../analysis/test/ported/testHelpers";
+import { ownEventOfLine, run } from "../scripts/scan5/pressEffect";
 
-const A = LogEvent.SPELL_AURA_APPLIED as string;
-const R = LogEvent.SPELL_AURA_REFRESH as string;
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
-// 11346ea9: APPLIED .197, press .198, REFRESH + 382912 at .937
-const druid = activationsInSecond(
-  [
-    { event: R, ts: 113_937 },
-    { event: A, ts: 113_197 },
-  ],
-  [113_198],
-  [113_937],
-  113_000,
-);
+const T0 = 1_700_000_000_000;
+const at = (s: number) => T0 + Math.round(s * 1000);
+const FR = "22842";
+const MARKER = "382912";
+const TAG = " [no press logged]";
 
-describe("scan5/pressEffect activationsInSecond", () => {
-  it("orders the second's APPLIED / REFRESH rows and marks which a press explains", () => {
-    expect(druid).toEqual([
-      { refresh: false, pressed: true, proc: false },
-      { refresh: true, pressed: false, proc: true },
-    ]);
+const aura = (event: LogEvent, id: string, s: number) =>
+  makeAuraEvent(event, id, at(s), "p1", "p1", "BUFF");
+const applied = (s: number) => aura(LogEvent.SPELL_AURA_APPLIED, FR, s);
+const refresh = (s: number) => aura(LogEvent.SPELL_AURA_REFRESH, FR, s);
+const marker = (s: number) => aura(LogEvent.SPELL_AURA_APPLIED, MARKER, s);
+const press = (s: number) =>
+  makeSpellCastEvent(
+    FR,
+    at(s),
+    "p1",
+    "p1",
+    "p1",
+    "p1",
+    0,
+    "Frenzied Regeneration",
+  );
+
+/** The round, the producer's events of the druid, and the scan's verdict on
+ * their lines after `retag` (the tag each line carries, by rendered order). */
+function scan(
+  casts: number[],
+  auras: ReturnType<typeof makeAuraEvent>[],
+  retag?: (tagged: boolean[]) => boolean[],
+) {
+  const druid = makeUnit("p1", {
+    name: "Druid",
+    class: CombatUnitClass.Druid,
+    spec: CombatUnitSpec.Druid_Feral,
+    reaction: CombatUnitReaction.Hostile,
+    spellCastEvents: casts.map(press),
+    // log order as given: rows of one millisecond keep it
+    auraEvents: auras,
+  } as any);
+  const combat = {
+    startTime: T0,
+    endTime: T0 + 300_000,
+    units: { p1: druid },
+  };
+  const events = enemyDefensiveEvents(
+    druid,
+    [druid],
+    combat as any,
+    combat.endTime,
+  ).filter((e) => e.spellName === "Frenzied Regeneration");
+  const produced = events.map((e) => e.noPressLogged === true);
+  const tags = retag ? retag(produced) : produced;
+  const lines = events.map((e, i) => {
+    const t = Math.floor(e.atSeconds);
+    const mss = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+    return `${mss}  [ENEMY DEF]   2(Feral) (Feral Druid): Frenzied Regeneration (heal)${tags[i] ? TAG : ""} (at 40% HP)`;
   });
-  it("a REFRESH beside a press, or followed by one, is pressed (D27 163de8f1 1:00)", () => {
-    const sotf = [
-      { event: A, ts: 60_584 },
-      { event: R, ts: 60_932 },
-    ];
-    for (const p of [60_932, 60_960])
-      expect(activationsInSecond(sotf, [p], [], 60_000)[1]!.pressed).toBe(true);
-    // a press in the next second: its line sits at its cast (B192 review 8)
-    expect(activationsInSecond(sotf, [61_400], [], 61_000)).toEqual([
-      { refresh: true, pressed: true, proc: false },
-    ]);
-  });
-  it("only rows inside the line's second count", () => {
-    const rows = [
-      { event: A, ts: 60_100 },
-      { event: R, ts: 61_200 },
-    ];
-    expect(activationsInSecond(rows, [], [], 60_000)).toHaveLength(1);
-  });
-  it("B192 review 3, 11dfa802 r3: one press goes to one activation — the nearest", () => {
-    // APPLIED .906, press .907, REFRESH .921 (the producer's proc row; marker .922)
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 57_906 },
-        { event: R, ts: 57_921 },
-      ],
-      [57_907],
-      [57_921],
-      57_000,
+  const checked: Record<string, number> = {};
+  const violations: { check: string; line: string }[] = [];
+  run({
+    lines,
+    unitOfPid: (pid: string) => (pid === "2" ? druid : undefined),
+    players: [druid],
+    units: [druid],
+    legacy: combat,
+    start: T0,
+    bump: (c: string, n = 1) => (checked[c] = (checked[c] ?? 0) + n),
+    violate: (
+      check: string,
+      _k: string,
+      _t: number,
+      _f: string,
+      _d: string,
+      line: string,
+    ) => violations.push({ check, line }),
+  } as any);
+  return {
+    produced,
+    procOwned: events.map((e) => e.procOwned === true),
+    flagged: violations
+      .filter((v) => v.check === "noPressButPressed")
+      .map((v) => lines.indexOf(v.line)),
+  };
+}
+const swap = (t: boolean[]) => t.map((x) => !x);
+const all = (t: boolean[]) => t.map(() => true);
+
+describe("scan5/pressEffect run — a proc's line beside the player's own press", () => {
+  // 11346ea9 r1 1:53: APPLIED .197, the press .198, the proc's REFRESH +
+  // marker at .937
+  const druid = (retag?: (t: boolean[]) => boolean[]) =>
+    scan(
+      [113.198],
+      [applied(113.197), refresh(113.937), marker(113.937)],
+      retag,
     );
-    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
-      [true, false],
-      [false, true],
-    ]);
-    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(true);
+  it("as rendered: the press's line untagged, the proc's tagged — nothing flagged", () => {
+    const r = druid();
+    expect(r.produced).toEqual([false, true]);
+    expect(r.procOwned).toEqual([false, true]);
+    expect(r.flagged).toEqual([]);
   });
-  it("B192 review 4, bf679e40 r1: a press beside its own row in the next second is that row's", () => {
-    // proc APPLIED + marker 52.172; press 53.500 beside its REFRESH 53.500
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 52_172 },
-        { event: R, ts: 53_500 },
-      ],
-      [53_500],
-      [52_172],
-      52_000,
-    );
-    expect(acts).toEqual([{ refresh: false, pressed: false, proc: true }]);
-    expect(isProcOwnNoPressLine(0, 1, acts)).toBe(true);
+  it("B192 reviews 1 / 2: both tagged, or the tags swapped — the press's line is flagged", () => {
+    expect(druid(all).flagged).toEqual([0]);
+    expect(druid(swap).flagged).toEqual([0]);
   });
-  it("B192 review 7 (constructed): a press 1 ms before the proc's row is never the proc's", () => {
-    // APPLIED .170, press .199, REFRESH + fresh marker .200 (the producer's proc row)
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 10_170 },
-        { event: R, ts: 10_200 },
-      ],
-      [10_199],
-      [10_200],
-      10_000,
-    );
-    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
-      [true, false],
-      [false, true],
-    ]);
-    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(true);
-    expect(isProcOwnNoPressLine(0, 2, acts)).toBe(false);
+
+  // bf679e40 r1: the proc 0:52.172, the druid's press beside its own REFRESH
+  // at 0:53.500 — two seconds, one line each
+  const twoSeconds = (retag?: (t: boolean[]) => boolean[]) =>
+    scan([53.5], [applied(52.172), marker(52.172), refresh(53.5)], retag);
+  it("B192 stack check: a press a second after the proc does not flag the proc's line", () => {
+    const r = twoSeconds();
+    expect(r.produced).toEqual([true, false]);
+    expect(r.flagged).toEqual([]);
   });
-  it("B192 review 7 (constructed): a re-listed marker is no proc — the press's REFRESH stays pressed", () => {
-    // proc 10.000 (the producer's proc row); 11.000 cast + REFRESH + a re-listed marker
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 10_000 },
-        { event: R, ts: 11_000 },
-      ],
-      [11_000],
-      [10_000],
-      11_000,
-    );
-    expect(acts).toEqual([{ refresh: true, pressed: true, proc: false }]);
-    expect(isProcOwnNoPressLine(0, 1, acts)).toBe(false);
+  it("B192 reviews 4 / 5: the tag moved to the press of the next second is flagged", () => {
+    expect(twoSeconds(swap).flagged).toEqual([1]);
+    expect(twoSeconds(all).flagged).toEqual([1]);
   });
-  it("B192 review 8 (constructed): lines in rendered order — a press's line sits at its cast", () => {
-    // APPLIED .170, the proc's REFRESH .200, the cast .201: the proc line renders first
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 10_170 },
-        { event: R, ts: 10_200 },
-      ],
-      [10_201],
-      [10_200],
-      10_000,
-    );
-    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
-      [false, true],
-      [true, false],
-    ]);
-    expect(isProcOwnNoPressLine(0, 2, acts)).toBe(true);
-    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(false);
-  });
-  it("B192 review 8 (constructed): one proc row in a millisecond with two rows marks one", () => {
-    // APPLIED + REFRESH + fresh marker at .200, the cast .201
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 10_200 },
-        { event: R, ts: 10_200 },
-      ],
-      [10_201],
-      [10_200],
-      10_000,
-    );
-    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
-      [false, true],
-      [true, false],
-    ]);
-    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(false);
+
+  // B192 review 9 (constructed): APPLIED, REFRESH, a fresh marker and the
+  // cast row all in one millisecond — the producer puts the press first
+  const tie = (retag?: (t: boolean[]) => boolean[]) =>
+    scan([10.2], [applied(10.2), refresh(10.2), marker(10.2)], retag);
+  it("B192 review 9: rows of one millisecond — the owner is the producer's, in its order", () => {
+    const r = tie();
+    expect(r.produced).toHaveLength(2);
+    const proc = r.procOwned.indexOf(true);
+    expect(proc).toBeGreaterThanOrEqual(0);
+    expect(r.produced[proc]).toBe(true);
+    expect(r.flagged).toEqual([]);
+    // the tag moved to the player's press: that line is flagged
+    expect(tie(swap).flagged).toEqual([1 - proc]);
   });
 });
 
-describe("scan5/pressEffect isProcOwnNoPressLine", () => {
-  it("11346ea9 as rendered: press line untagged, the second (proc) line tagged — exempt", () => {
-    expect(isProcOwnNoPressLine(1, 2, druid)).toBe(true);
+describe("scan5/pressEffect ownEventOfLine", () => {
+  const evs = [{ atSeconds: 10.2 }, { atSeconds: 10.2, procOwned: true }];
+  it("pairs lines and events one to one, in order", () => {
+    expect(ownEventOfLine(1, 2, evs)).toBe(evs[1]);
+    expect(ownEventOfLine(0, 2, evs)).toBe(evs[0]);
   });
-  it("B192 review 1: both lines tagged — the press's tagged line is not exempt", () => {
-    expect(isProcOwnNoPressLine(0, 2, druid)).toBe(false);
-  });
-  it("B192 review 2: tags swapped — the press's tagged line is not exempt", () => {
-    expect(isProcOwnNoPressLine(0, 2, druid)).toBe(false);
-  });
-  it("B192 review 3 (constructed): an unmarked REFRESH a press missed by 83 ms exempts nothing", () => {
-    // Blur: APPLIED 130.167 + cast .168; cast .570, its REFRESH .653
-    const acts = activationsInSecond(
-      [
-        { event: A, ts: 130_167 },
-        { event: R, ts: 130_653 },
-      ],
-      [130_168, 130_570],
-      [],
-      130_000,
-    );
-    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(false);
-  });
-  it("lines and activations that do not pair one to one exempt nothing", () => {
-    expect(isProcOwnNoPressLine(1, 3, druid)).toBe(false);
-    expect(isProcOwnNoPressLine(0, 1, druid.slice(1))).toBe(true);
-    expect(isProcOwnNoPressLine(0, 1, druid)).toBe(false);
-    expect(isProcOwnNoPressLine(-1, 2, druid)).toBe(false);
+  it("counts that differ give no owner — nothing is exempt", () => {
+    expect(ownEventOfLine(0, 1, evs)).toBeUndefined();
+    expect(ownEventOfLine(2, 3, evs)).toBeUndefined();
   });
 });
