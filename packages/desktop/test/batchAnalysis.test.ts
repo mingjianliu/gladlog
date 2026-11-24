@@ -148,6 +148,121 @@ describe("批量分析驱动器", () => {
     });
   });
 
+  it("深挖认这一轮自己的 done(语言 + 槽),不认 getCached:zh 一轮跑完时界面已是 en、en 里有旧的未深挖结果 → 不深挖(codex A#4)", async () => {
+    let lang = "zh";
+    const deepenInputs: Array<{ matchId: string; contentLang?: string }> = [];
+    const doneCbs = new Set<(d: unknown) => void>();
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { get: async () => ({ kind: "match", data: src }) },
+      analysis: {
+        getState: async () => ({ cached: null, lang, running: false }),
+        run: async (input: { matchId: string }) => {
+          lang = "en"; // switched mid-run; main pinned zh
+          for (const cb of doneCbs)
+            cb({
+              matchId: input.matchId,
+              result: {
+                findings: [{ severity: "high", title: "新的" }],
+                hadNarration: true,
+              },
+              slotKey: "anthropic:m",
+              contentLang: "zh",
+            });
+        },
+        // the old English result: what getCached + the new UI language picks
+        getCached: async () => ({
+          findings: [{ severity: "high", title: "Old" }],
+          hadNarration: true,
+          deepened: false,
+          contentLang: "en",
+        }),
+        onDone: (cb: (d: unknown) => void) => {
+          doneCbs.add(cb);
+          return () => doneCbs.delete(cb);
+        },
+        deepen: async (input: { matchId: string; contentLang?: string }) => {
+          deepenInputs.push(input);
+        },
+        cancel: async () => {},
+      },
+    };
+    await startBatch([{ id: "a4", label: "A4" }]);
+    expect(deepenInputs).toEqual([]);
+    expect(getBatchStatus().ok).toBe(1);
+    expect(doneCbs.size).toBe(0); // unsubscribed
+  });
+
+  it("深挖用这一轮 done 带回的 findings 与语言(codex A#4)", async () => {
+    const deepenInputs: Array<{
+      matchId: string;
+      contentLang?: string;
+      findings: Array<{ title: string }>;
+    }> = [];
+    const doneCbs = new Set<(d: unknown) => void>();
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { get: async () => ({ kind: "match", data: src }) },
+      analysis: {
+        getState: async () => ({ cached: null, lang: "en", running: false }),
+        run: async (input: { matchId: string }) => {
+          // another match's done must not be taken
+          for (const cb of doneCbs)
+            cb({
+              matchId: "other",
+              result: { findings: [{ title: "X" }], hadNarration: true },
+              contentLang: "en",
+            });
+          for (const cb of doneCbs)
+            cb({
+              matchId: input.matchId,
+              result: { findings: [{ title: "Fresh" }], hadNarration: true },
+              contentLang: "en",
+            });
+        },
+        getCached: async () => ({
+          findings: [{ title: "Stale read" }],
+          hadNarration: true,
+          contentLang: "en",
+        }),
+        onDone: (cb: (d: unknown) => void) => {
+          doneCbs.add(cb);
+          return () => doneCbs.delete(cb);
+        },
+        deepen: async (input: (typeof deepenInputs)[number]) => {
+          deepenInputs.push(input);
+        },
+        cancel: async () => {},
+      },
+    };
+    await startBatch([{ id: "a4b", label: "A4B" }]);
+    expect(
+      deepenInputs.map((d) => [d.matchId, d.contentLang, d.findings[0]!.title]),
+    ).toEqual([["a4b", "en", "Fresh"]]);
+  });
+
+  it("有 onDone 但这一轮没发 done(失败):记失败,不拿 getCached 的旧结果去深挖(codex A#4)", async () => {
+    const deepened: string[] = [];
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { get: async () => ({ kind: "match", data: src }) },
+      analysis: {
+        getState: async () => ({ cached: null, lang: "zh", running: false }),
+        run: async () => {},
+        getCached: async () => ({
+          findings: [{ title: "旧" }],
+          hadNarration: true,
+          contentLang: "zh",
+        }),
+        onDone: () => () => {},
+        deepen: async (input: { matchId: string }) => {
+          deepened.push(input.matchId);
+        },
+        cancel: async () => {},
+      },
+    };
+    await startBatch([{ id: "a4c", label: "A4C" }]);
+    expect(deepened).toEqual([]);
+    expect(getBatchStatus().failed).toBe(1);
+  });
+
   it("深挖 chips 的语言取结果自己的 contentLang(不回退到 zh),并把它带给 deepen", async () => {
     // getState carries no `lang` (older stub shape), so the fallback would be
     // "zh": only reading the result's own contentLang yields "en" here.

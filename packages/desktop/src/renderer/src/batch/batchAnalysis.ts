@@ -165,58 +165,97 @@ async function processSource(
   const input = buildAnalysisInput(source, matchId);
   if (!input) return "failed";
   inFlight.add(matchId);
+  // This round's own completion (codex A#4): main emits done before the run
+  // invoke resolves, carrying the result it wrote and the language it pinned
+  // at the start. That -- not a later getCached under whatever language the
+  // UI has switched to -- identifies the result to deep-dive. Stubs without
+  // the onDone facet fall back to the getCached read below.
+  let ownDone: {
+    result: CachedResult;
+    contentLang?: Language;
+  } | null = null;
+  let unsubDone: (() => void) | null = null;
+  try {
+    if (typeof ai.onDone === "function")
+      unsubDone = ai.onDone((d) => {
+        if (d.matchId !== matchId) return;
+        ownDone = {
+          result: d.result as CachedResult,
+          contentLang: d.contentLang,
+        };
+      });
+  } catch {
+    unsubDone = null;
+  }
   try {
     // invoke only resolves once the whole round is done (including the disk
     // write and the done emit)
     await ai.run(input);
   } catch {
     return "failed";
+  } finally {
+    unsubDone?.();
   }
   if (status.cancelled) return "failed";
-  // Read the result, *then* the language again: the user may have switched
-  // language while the round ran (main pins the start language, so the round
-  // wrote that language's cache). Under the new language getCached falls back
-  // to exactly that fresh result, and deep-diving it would write it into the
-  // new language's cache (main also refuses that, see deepenInner). Reading
-  // the language after the result means a switch in between can only make
-  // the check stricter.
-  const anyLangResult = (await ai.getCached(matchId)) as CachedResult;
+  // The language now: the user may have switched while the round ran (main
+  // pins the start language, so the round wrote that language's cache, and
+  // main's deepen refuses findings of another language).
   let langNow = lang;
   try {
     langNow = ((await ai.getState(matchId)) as { lang?: string }).lang ?? lang;
   } catch {
     /* keep the pre-run language */
   }
-  const result = inLang(anyLangResult, langNow);
-  if (!result) {
-    // The round finished in the language it started in, which is no longer
-    // the current one: counted, but no deep dive in the wrong language.
-    if (anyLangResult && langNow !== lang && inLang(anyLangResult, lang))
+  let result: CachedResult;
+  if (unsubDone) {
+    // No done event = the round failed or was superseded: nothing of this
+    // round to count or deep-dive (whatever getCached holds is an older
+    // result).
+    const done = ownDone as { result: CachedResult; contentLang?: Language } | null;
+    if (!done?.result) return "failed";
+    const runLang = done.contentLang ?? (lang as Language | undefined);
+    // Finished in the language it started in, which is no longer the current
+    // one: counted, but no deep dive in the wrong language.
+    if (langNow !== undefined && runLang !== undefined && runLang !== langNow)
       return "ok";
-    // No cache = error path or cancelled; run already emitted the error, this
-    // only counts it. (A failed run leaves no current-language cache; the
-    // other language's result getCached falls back to is not counted.)
-    return "failed";
+    result = { ...done.result, ...(runLang ? { contentLang: runLang } : {}) };
+  } else {
+    // Older stubs: read the result, *then* compare the language. Under a new
+    // language getCached falls back to the fresh other-language result, and
+    // deep-diving it would write it into the new language's cache.
+    const anyLangResult = (await ai.getCached(matchId)) as CachedResult;
+    const inCurrent = inLang(anyLangResult, langNow);
+    if (!inCurrent) {
+      if (anyLangResult && langNow !== lang && inLang(anyLangResult, lang))
+        return "ok";
+      // No cache = error path or cancelled; run already emitted the error,
+      // this only counts it.
+      return "failed";
+    }
+    result = inCurrent;
   }
+  if (!result) return "failed";
 
   // Deep-dive round: same trigger conditions as the panel (narration present,
   // findings present, not yet deepened)
   if (result.hadNarration && result.findings.length > 0 && !result.deepened) {
+    // the chips' language = the language main's deepen pins (checked above:
+    // the result is in langNow)
+    const resultLang: Language =
+      result.contentLang ?? (langNow === "en" ? "en" : "zh");
     const packs = buildDeepenPacks(
       source,
       result.findings,
       input.candidates,
       input.ownerName,
-      // the chips' language = the language main's deepen pins (inLang above
-      // guarantees the result is in langNow)
-      result.contentLang ?? (langNow === "en" ? "en" : "zh"),
+      resultLang,
     );
     try {
       await ai.deepen({
         matchId,
         findings: result.findings,
         // main refuses the deep dive when this is not its current language
-        ...(result.contentLang ? { contentLang: result.contentLang } : {}),
+        contentLang: resultLang,
         packs,
         spec: input.spec,
         ownerName: input.ownerName,
