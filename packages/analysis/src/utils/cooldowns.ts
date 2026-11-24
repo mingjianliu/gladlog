@@ -1542,6 +1542,10 @@ export const PASSIVE_PROC_CAST_IDS: ReadonlyMap<string, string> = new Map([
     "341263",
     "Shadowy Apparition (Shadow Priest) — the Shadowy Apparitions talent's trigger row beside its hit 148859: no DB2 SpellCooldowns row (`isButtonPress` false), no target, no CAST_START; 8,710 rows by 41 priests in 58 of the 605 archives, 2,743 of them under 0.75 s after the caster's previous one (pipeline T152, fact14 D19, 95d4affb: `postKick=acted on another school 1.5s later (Shadowy Apparition; not a hard cast)` for a Mind Flay: Insanity channel begun 2 ms later)",
   ],
+  [
+    "1250385",
+    "Spectral Illusion (Priest) — the Spectral Illusion talent 1250378's row behind a Fade press (DB2: the passive talent triggers 1250385, a 4 s summon + aura; no SpellCooldowns row, `isButtonPress` false): 79 rows by 13 priests in 15 of the 605 archives, every one after a Fade 586 of the same caster — 66 in its millisecond, 13 one millisecond later, none without one (pipeline T245, b14ac981 r1 0:53: `[YOU] [CAST]   Spectral Illusion` beside the Fade); scan5 castLineNoButton is this list's forward check",
+  ],
 ]);
 
 /**
