@@ -55,8 +55,30 @@ export function activationsInSecond(
   procTs: readonly number[],
   lo: number,
 ): { refresh: boolean; pressed: boolean; proc: boolean }[] {
+  return activationRows(auras, pressTs, procTs, lo).map(
+    ({ refresh, pressed, proc }) => ({ refresh, pressed, proc }),
+  );
+}
+
+/** `activationsInSecond` with each row's instant and its press's. */
+function activationRows(
+  auras: readonly { event: string; ts: number }[],
+  pressTs: readonly number[],
+  procTs: readonly number[],
+  lo: number,
+): {
+  ts: number;
+  refresh: boolean;
+  pressed: boolean;
+  proc: boolean;
+  lineTs: number;
+}[] {
   const reach = PRESS_AFTER_MS + 50;
-  const procs = new Set(procTs);
+  // the producer's proc rows, as a count per millisecond: of several rows in
+  // one millisecond only as many are a proc's as it named, the first in log
+  // order (its pairing keeps the first row at the closest gap; B192 review 8)
+  const procLeft = new Map<number, number>();
+  for (const t of procTs) procLeft.set(t, (procLeft.get(t) ?? 0) + 1);
   const acts = auras
     .filter(
       (a) =>
@@ -64,13 +86,21 @@ export function activationsInSecond(
         a.ts >= lo - reach &&
         a.ts < lo + 1000 + reach,
     )
-    .sort((x, y) => x.ts - y.ts)
-    .map((a) => ({
-      ts: a.ts,
-      refresh: a.event === REFRESH,
-      pressed: false,
-      proc: procs.has(a.ts),
-    }));
+    .sort((x, y) => x.ts - y.ts) // stable: log order within a millisecond
+    .map((a) => {
+      const left = procLeft.get(a.ts) ?? 0;
+      if (left) procLeft.set(a.ts, left - 1);
+      return {
+        ts: a.ts,
+        refresh: a.event === REFRESH,
+        pressed: false,
+        proc: left > 0,
+        // the line's own instant: a press's line sits at its cast row, any
+        // other at its aura row (B192 review 8: APPLIED .170, the proc's
+        // REFRESH .200, the cast .201 — the proc's line renders first)
+        lineTs: a.ts,
+      };
+    });
   // each press goes to ONE activation that is no proc's: the nearest it fits
   for (const p of [...pressTs].sort((x, y) => x - y)) {
     const best = acts
@@ -82,11 +112,14 @@ export function activationsInSecond(
             (p >= a.ts && p <= a.ts + PRESS_AFTER_MS)),
       )
       .sort((x, y) => Math.abs(p - x.ts) - Math.abs(p - y.ts))[0];
-    if (best) best.pressed = true;
+    if (best) {
+      best.pressed = true;
+      best.lineTs = p;
+    }
   }
   return acts
-    .filter((a) => a.ts >= lo && a.ts < lo + 1000)
-    .map(({ refresh, pressed, proc }) => ({ refresh, pressed, proc }));
+    .filter((a) => a.lineTs >= lo && a.lineTs < lo + 1000)
+    .sort((x, y) => x.lineTs - y.lineTs);
 }
 
 /** Whether the `[no press logged]` line at position `pos` (0-based, in
@@ -156,7 +189,7 @@ export function run(ctx: IRoundCtx): void {
       );
       const keyLines = linesOfKey.get(keyOf(m)) ?? [];
       const pos = keyLines.indexOf(i);
-      const acts = activationsInSecond(
+      const acts = activationRows(
         auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
         presses.map(tsOf),
         procTsOf(unit, name),
@@ -172,28 +205,14 @@ export function run(ctx: IRoundCtx): void {
         if (!own || keyLines.length !== acts.length) continue;
         ctx.bump("noPressButPressed");
         if (!own.pressed) continue;
-        const rowTs = auras
-          .map(tsOf)
-          .filter(
-            (t, k) => ev(auras[k]) === REFRESH && t >= lo && t < lo + 1000,
-          )
-          .sort((x, y) => x - y)[pos]!;
-        const press = presses
-          .filter(
-            (c) =>
-              Math.abs(tsOf(c) - rowTs) <= 50 ||
-              (tsOf(c) >= rowTs && tsOf(c) <= rowTs + PRESS_AFTER_MS),
-          )
-          .sort(
-            (x, y) => Math.abs(tsOf(x) - rowTs) - Math.abs(tsOf(y) - rowTs),
-          )[0];
-        if (!press) continue;
+        const rowTs = own.ts;
+        const pressAt = own.lineTs;
         ctx.violate(
           "noPressButPressed",
           "refreshed",
-          tsOf(press),
-          `${unit.name}#${name}#${tsOf(press)}`,
-          `${unit.name} ${name}: refresh +${rowTs - ctx.start}ms, press +${tsOf(press) - ctx.start}ms`,
+          pressAt,
+          `${unit.name}#${name}#${pressAt}`,
+          `${unit.name} ${name}: refresh +${rowTs - ctx.start}ms, press +${pressAt - ctx.start}ms`,
           line,
         );
         continue;

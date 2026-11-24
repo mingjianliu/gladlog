@@ -39,8 +39,12 @@ describe("scan5/pressEffect activationsInSecond", () => {
       { event: A, ts: 60_584 },
       { event: R, ts: 60_932 },
     ];
-    for (const p of [60_932, 60_960, 61_400])
+    for (const p of [60_932, 60_960])
       expect(activationsInSecond(sotf, [p], [], 60_000)[1]!.pressed).toBe(true);
+    // a press in the next second: its line sits at its cast (B192 review 8)
+    expect(activationsInSecond(sotf, [61_400], [], 61_000)).toEqual([
+      { refresh: true, pressed: true, proc: false },
+    ]);
   });
   it("only rows inside the line's second count", () => {
     const rows = [
@@ -111,6 +115,41 @@ describe("scan5/pressEffect activationsInSecond", () => {
     );
     expect(acts).toEqual([{ refresh: true, pressed: true, proc: false }]);
     expect(isProcOwnNoPressLine(0, 1, acts)).toBe(false);
+  });
+  it("B192 review 8 (constructed): lines in rendered order — a press's line sits at its cast", () => {
+    // APPLIED .170, the proc's REFRESH .200, the cast .201: the proc line renders first
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 10_170 },
+        { event: R, ts: 10_200 },
+      ],
+      [10_201],
+      [10_200],
+      10_000,
+    );
+    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
+      [false, true],
+      [true, false],
+    ]);
+    expect(isProcOwnNoPressLine(0, 2, acts)).toBe(true);
+    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(false);
+  });
+  it("B192 review 8 (constructed): one proc row in a millisecond with two rows marks one", () => {
+    // APPLIED + REFRESH + fresh marker at .200, the cast .201
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 10_200 },
+        { event: R, ts: 10_200 },
+      ],
+      [10_201],
+      [10_200],
+      10_000,
+    );
+    expect(acts.map((a) => [a.pressed, a.proc])).toEqual([
+      [false, true],
+      [true, false],
+    ]);
+    expect(isProcOwnNoPressLine(1, 2, acts)).toBe(false);
   });
 });
 
