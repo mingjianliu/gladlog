@@ -2,7 +2,6 @@ import { readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
-import { type Language, translate } from "../shared/i18n/index";
 import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 
 /** OBS (28+, with obs-websocket built in) stores its server configuration in a
@@ -325,12 +324,13 @@ export function importedPrefsPatch(
   return patch;
 }
 
-export function authUnknownHint(
+/** A failed connection whose auth state could not be read: the settings page
+ * appends the `errors.obs.authUnknown` hint to the raw error. Only the flag
+ * crosses IPC (codex B3fix#2): the renderer words the hint at render time, so
+ * a language switch re-words it. */
+export function isAuthUnknownFailure(
   authRequired: ObsWsDetected["authRequired"],
   ok: boolean,
-  lang: Language = "zh",
-): string | undefined {
-  return authRequired === "unknown" && !ok
-    ? translate(lang, "errors.obs.authUnknown")
-    : undefined;
+): boolean {
+  return authRequired === "unknown" && !ok;
 }

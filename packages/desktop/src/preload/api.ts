@@ -441,7 +441,11 @@ export interface GladlogApi {
       found: boolean;
       enabled: boolean;
       ok: boolean;
+      /** main's raw connection error, untranslated. */
       error?: string;
+      /** The connection failed while OBS's auth state was unknown: the page
+       * appends the errors.obs.authUnknown hint in the current language. */
+      authUnknown?: boolean;
     }>;
     /** The recording associated with this match; none → null. url is a vod://
      * address; startedAt is the playback anchor (epoch ms, = the StartRecord

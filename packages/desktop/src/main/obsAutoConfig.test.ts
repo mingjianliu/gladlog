@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  authUnknownHint,
   detectObsWebsocket,
+  isAuthUnknownFailure,
   obsWebsocketConfigCandidates,
   resolveAutoConfigPassword,
 } from "./obsAutoConfig";
@@ -120,20 +120,15 @@ describe("resolveAutoConfigPassword(#21 item5 三态消费端选择)", () => {
   });
 });
 
-describe("authUnknownHint(#21 item5 unknown 态失败提示)", () => {
-  it("unknown + 连接失败 → 给出人话提示", () => {
-    expect(authUnknownHint("unknown", false)).toMatch(/未知/);
-  });
-  it("界面语言为 en 时提示是英文", () => {
-    expect(authUnknownHint("unknown", false, "en")).toBe(
-      "OBS authentication state unknown (a config field is missing or its format changed), so a password may be needed; tried connecting with the password that was found",
-    );
+describe("isAuthUnknownFailure(#21 item5 unknown 态失败提示;提示文案由 renderer 按当前语言取)", () => {
+  it("unknown + 连接失败 → 需要提示", () => {
+    expect(isAuthUnknownFailure("unknown", false)).toBe(true);
   });
   it("unknown + 连接成功 → 不需要提示", () => {
-    expect(authUnknownHint("unknown", true)).toBeUndefined();
+    expect(isAuthUnknownFailure("unknown", true)).toBe(false);
   });
   it("true/false 态从不附加提示(鉴权状态本就明确)", () => {
-    expect(authUnknownHint(true, false)).toBeUndefined();
-    expect(authUnknownHint(false, false)).toBeUndefined();
+    expect(isAuthUnknownFailure(true, false)).toBe(false);
+    expect(isAuthUnknownFailure(false, false)).toBe(false);
   });
 });

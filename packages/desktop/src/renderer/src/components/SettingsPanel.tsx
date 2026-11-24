@@ -125,9 +125,22 @@ export function SettingsPanel() {
         source: "test" | "autoConfig";
         ok: boolean;
         error?: string | null;
+        /** auto-config only: append the auth-unknown hint, worded at render. */
+        authUnknown?: boolean;
       }
     | null
   >(null);
+  /** A failed connection's line: main's raw error (or the generic copy),
+   * plus the auth-unknown hint in the current language -- the same
+   * `error;hint` shape main used to build. */
+  const connectFailureText = (o: {
+    error?: string | null;
+    authUnknown?: boolean;
+  }): string => {
+    const hint = o.authUnknown ? t("errors.obs.authUnknown") : null;
+    if (hint) return o.error ? `${o.error};${hint}` : hint;
+    return o.error ?? t("recorder.connectFailed");
+  };
   const [keepInput, setKeepInput] = useState("");
   const [saved, setSaved] = useState<{
     group: SettingsGroup;
@@ -825,6 +838,7 @@ export function SettingsPanel() {
                               source: "autoConfig",
                               ok: r.ok,
                               error: r.error,
+                              authUnknown: r.authUnknown === true,
                             },
                       );
                     })
@@ -929,7 +943,7 @@ export function SettingsPanel() {
                                 ? "recorder.autoConfig.ok"
                                 : "recorder.test.ok",
                             )
-                          : `✗ ${obsTest.error ?? t("recorder.connectFailed")}`}
+                          : `✗ ${connectFailureText(obsTest)}`}
                   </span>
                   <span />
                 </>

@@ -37,7 +37,7 @@ import { vodUrl } from "../shared/vod";
 import type { ObsAudioDevice } from "./managedObsBackend";
 import type { ObsInstallProgress } from "./obsAssets";
 import {
-  authUnknownHint,
+  isAuthUnknownFailure,
   detectObsRecordingPrefs,
   detectObsWebsocket,
   importedPrefsPatch,
@@ -387,9 +387,15 @@ export function registerIpc(deps: {
     });
     if (!d.enabled) return { found: true, enabled: false, ok: false };
     const r = await deps.recorder.testConnection({ url, password });
-    const hint = authUnknownHint(d.authRequired, r.ok, uiLang());
-    const error = hint ? (r.error ? `${r.error};${hint}` : hint) : r.error;
-    return { found: true, enabled: true, ok: r.ok, error };
+    // The raw connection error and the auth-unknown flag stay separate: the
+    // settings page words the hint in the current UI language at render time.
+    return {
+      found: true,
+      enabled: true,
+      ok: r.ok,
+      error: r.error,
+      authUnknown: isAuthUnknownFailure(d.authRequired, r.ok),
+    };
   });
   // Task-5b: the renderer's "下载并启用" action. Progress is pushed on a
   // separate emit channel (same pattern as logs:importProgress /

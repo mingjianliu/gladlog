@@ -197,6 +197,35 @@ describe("切换语言后,state 里的结果文案跟着换", () => {
     await screen.findByText("✗ ECONNREFUSED");
   });
 
+  it("设置页:自动检测连接失败 + 鉴权未知:原始错误照原样,提示按当前语言渲染(codex B3fix#2)", async () => {
+    install({
+      recorder: {
+        ...recorderBase,
+        autoConfig: async () => ({
+          found: true,
+          enabled: true,
+          ok: false,
+          error: "ECONNREFUSED",
+          authUnknown: true,
+        }),
+      },
+    });
+    render(
+      <LangProvider>
+        <ToEnglish />
+        <SettingsPanel />
+      </LangProvider>,
+    );
+    fireEvent.click(await screen.findByText("自动检测 OBS"));
+    await screen.findByText(
+      "✗ ECONNREFUSED;OBS 鉴权状态未知(配置字段缺失或格式有变),可能需要密码;已尝试携带读到的密码连接",
+    );
+    await switchToEnglish();
+    await screen.findByText(
+      "✗ ECONNREFUSED;OBS authentication state unknown (a config field is missing or its format changed), so a password may be needed; tried connecting with the password that was found",
+    );
+  });
+
   it("设置页:托管 OBS 安装失败(没有原始错误时的通用文案)", async () => {
     install({
       recorder: {
