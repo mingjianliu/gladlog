@@ -54,8 +54,11 @@ const rule = {
     lastSeen: 0,
     trend: [1, 0, 2],
   },
-  description: { en: "Died to {{hits}} kill windows" },
-  advice: { en: "Trinket earlier" },
+  description: { en: "Died to {{hits}} kill windows" } as {
+    zh?: string;
+    en?: string;
+  },
+  advice: { en: "Trinket earlier" } as { zh?: string; en?: string },
   evidence: ["m1"],
   distilledAt: 0,
   distillModel: "x",
@@ -283,8 +286,8 @@ describe("学到的规则:en 模式回退到中文描述时标语言(§6.13)", (
     install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "en");
     const prev = rule.description;
     const prevAdv = rule.advice;
-    rule.description = { zh: "被击杀窗口打死 {{hits}} 次" } as typeof prev;
-    rule.advice = { zh: "早交饰品" } as typeof prevAdv;
+    rule.description = { zh: "被击杀窗口打死 {{hits}} 次" };
+    rule.advice = { zh: "早交饰品" };
     try {
       const { container } = render(
         <LangProvider>
@@ -316,8 +319,8 @@ describe("学到的规则:en 模式回退到中文描述时标语言(§6.13)", (
     install(async () => [meta({ id: "m1", startTime: Date.now() - H })], "en");
     const prev = rule.description;
     const prevAdv = rule.advice;
-    rule.description = {} as typeof prev;
-    rule.advice = {} as typeof prevAdv;
+    rule.description = {};
+    rule.advice = {};
     try {
       const { container } = render(
         <LangProvider>
