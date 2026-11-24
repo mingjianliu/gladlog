@@ -255,6 +255,77 @@ describe("buildMatchContext on real fixture", () => {
     }
   });
 
+  it("T253 / R106: a teammate's kick refused IMMUNE on an enemy is the same [KICK] line; the owner's own stays on the audit line", () => {
+    const owner = friends.find((u) => u.id === match.playerId)!;
+    const mate = friends.find((u) => u.id !== match.playerId)!;
+    const victim = enemies[0]!;
+    const at = match.startTime + 10_500;
+    const miss = (src: typeof mate, spellId: string, ms: number) =>
+      ({
+        logLine: { event: "SPELL_MISSED", timestamp: ms, parameters: [] },
+        timestamp: ms,
+        spellId,
+        spellName: spellId,
+        srcUnitId: src.id,
+        srcUnitName: src.name,
+        destUnitId: victim.id,
+        destUnitName: victim.name,
+        missType: "IMMUNE",
+        amount: 0,
+      }) as never;
+    const saved = victim.missesIn;
+    const lines = () =>
+      buildMatchContext(match, friends, enemies, {})
+        .split("\n")
+        .filter((l) => l.includes("missed — IMMUNE"));
+    try {
+      // Skull Bash's two ids 1 ms apart: one line, the enemy as the target
+      victim.missesIn = [miss(mate, "93985", at), miss(mate, "106839", at + 1)];
+      expect(lines()).toHaveLength(1);
+      expect(lines()[0]).toMatch(
+        /^0:10 {2}\[KICK\] {3}\d+\([^)]*\)'s Skull Bash on \d+\([^)]*\) missed — IMMUNE$/,
+      );
+      // a row before the round's start is no kick of the round, and does
+      // not swallow the round's own row 1 ms later (codex 85-tk-L4-T253-1 #5)
+      victim.missesIn = [
+        miss(mate, "93985", match.startTime - 1),
+        miss(mate, "106839", match.startTime),
+      ];
+      expect(lines()).toHaveLength(1);
+      expect(lines()[0]).toMatch(/^0:00 /);
+      // a summon that shares the teammate's display name is its owner's:
+      // the owner's pet's kick is not a teammate's (#3)
+      const pet = {
+        ...makeUnit("Pet-0-1-1-1-417-00000001"),
+        name: mate.name,
+        ownerId: owner.id,
+      };
+      (match.units as Record<string, unknown>)[pet.id] = pet;
+      try {
+        victim.missesIn = [
+          {
+            ...(miss(mate, "19647", at) as object),
+            srcUnitId: pet.id,
+          } as never,
+        ];
+        expect(lines()).toHaveLength(0);
+      } finally {
+        delete (match.units as Record<string, unknown>)[pet.id];
+      }
+      // the owner's own refused kick is not this line
+      victim.missesIn = [miss(owner, "93985", at)];
+      expect(lines()).toHaveLength(0);
+      // not IMMUNE, or not a kick: no line
+      victim.missesIn = [
+        { ...(miss(mate, "93985", at) as object), missType: "MISS" } as never,
+        miss(mate, "118", at + 500),
+      ];
+      expect(lines()).toHaveLength(0);
+    } finally {
+      victim.missesIn = saved;
+    }
+  });
+
   it("GH #103 A5: Defensive loadout entries state how long the effect lasts", () => {
     const ctx = buildMatchContext(match, friends, enemies, {});
     // fact2 (kit range): the loadout prints the ledger's earliest–official

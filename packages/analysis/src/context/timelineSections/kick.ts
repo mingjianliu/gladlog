@@ -44,6 +44,106 @@ import type { TimelineCtx } from "./ctx";
  * 1 ms apart) are one `[KICK] … missed — IMMUNE` line. */
 const IMMUNE_KICK_DEDUPE_MS = 50;
 
+/** One refused kick: the miss row, the player it was refused on, and the
+ * unit that kicked (a commanded pet for an owner's command row). */
+export interface IImmuneKickRow {
+  m: NonNullable<ICombatUnit["missesIn"]>[number];
+  victim: ICombatUnit;
+  kicker: { name: string; id: string };
+}
+
+/**
+ * The kicks (`INTERRUPT_SPELL_IDS`, the kit the "enemy interrupts UP" ledger
+ * calls an interrupt) the log refused IMMUNE on `victims`, one row per kick,
+ * for kickers `kickerPlayerOf` resolves to a player (the kicker, or a pet's
+ * owner). The one selection behind every `[KICK] … missed — IMMUNE` line and
+ * its scan (scan5/t253).
+ */
+export function immuneKickRows(o: {
+  victims: readonly ICombatUnit[];
+  kickerPlayerOf: (name: string, unitId?: string) => ICombatUnit | null;
+  units: readonly ICombatUnit[];
+  /** rows before this instant (the round's start) are no kick of the round */
+  fromMs: number;
+}): IImmuneKickRow[] {
+  const kickKitIds = new Set(INTERRUPT_SPELL_IDS);
+  const out: IImmuneKickRow[] = [];
+  const seenImmuneKicks: Array<{ key: string; ms: number }> = [];
+  const commandsOf = new Map<string, ReturnType<typeof petCommands>>();
+  for (const friend of o.victims) {
+    for (const m of friend.missesIn ?? []) {
+      if (m.missType !== "IMMUNE" || !m.spellId) continue;
+      if (!kickKitIds.has(m.spellId)) continue;
+      const kickerPlayer = o.kickerPlayerOf(m.srcUnitName, m.srcUnitId);
+      if (!kickerPlayer) continue;
+      if (m.timestamp < o.fromMs) continue;
+      // fact6 D30's reading for kicks: the owner's command (Command Demon:
+      // Spell Lock 119910) is the pet's kick — the Felhunter's own IMMUNE row
+      // states it; a command no summon row carried out prints once, as the
+      // pet's (`petCommands`)
+      let kicker = { name: m.srcUnitName, id: m.srcUnitId };
+      if (kickerPlayer.id === m.srcUnitId) {
+        let cmd = commandsOf.get(kickerPlayer.id);
+        if (!cmd) {
+          cmd = petCommands(kickerPlayer, { units: o.units });
+          commandsOf.set(kickerPlayer.id, cmd);
+        }
+        const name = getEnglishSpellName(m.spellId, m.spellName ?? "");
+        if (cmd.carriedOutBy(m.timestamp, name)) continue;
+        if (cmd.isCommandRow(m.spellId, m.timestamp, IMMUNE_KICK_DEDUPE_MS)) {
+          const pet = cmd.commandPet(name);
+          if (pet) kicker = { name: pet.name, id: pet.id };
+        }
+      }
+      // one kick, one line: Skull Bash logs its two ids 1 ms apart
+      const key = `${kicker.id}|${friend.id}|${kickCastSpellId(m.spellId)}`;
+      if (
+        seenImmuneKicks.some(
+          (s) =>
+            s.key === key &&
+            Math.abs(s.ms - m.timestamp) <= IMMUNE_KICK_DEDUPE_MS,
+        )
+      )
+        continue;
+      seenImmuneKicks.push({ key, ms: m.timestamp });
+      out.push({ m, victim: friend, kicker });
+    }
+  }
+  return out;
+}
+
+/** The teammate behind a kick (the kicker, or a pet's owner) — never the
+ * owner, whose refused kicks print from the kick audit — or null. */
+export function teammateKickerUnit(
+  ctx: Pick<TimelineCtx, "friends" | "enemies" | "allUnits" | "owner">,
+  name: string,
+  unitId?: string,
+): ICombatUnit | null {
+  const mate = (u: ICombatUnit | undefined) =>
+    u && u.id !== ctx.owner.id ? u : null;
+  // the source GUID decides before any name does: a pet that shares a
+  // teammate's display name is its owner's (codex 85-tk-L4-T253-1 #3)
+  if (unitId) {
+    const byId = ctx.friends.find((f) => f.id === unitId);
+    if (byId) return mate(byId);
+    if ((ctx.enemies ?? []).some((e) => e.id === unitId)) return null;
+  }
+  const src = unitId ? ctx.allUnits?.find((u) => u.id === unitId) : undefined;
+  if (!src?.ownerId) {
+    if (ctx.friends.some((f) => f.name === name))
+      return mate(ctx.friends.find((f) => f.name === name));
+    if ((ctx.enemies ?? []).some((e) => e.name === name)) return null;
+  }
+  const petOwner = resolveSummonOwner({
+    allUnits: ctx.allUnits,
+    friends: ctx.friends,
+    enemies: ctx.enemies,
+    name,
+    sourceId: unitId,
+  });
+  return mate(ctx.friends.find((f) => f.id === petOwner?.id));
+}
+
 export function emitKickEntries(
   ctx: Pick<
     TimelineCtx,
@@ -223,7 +323,6 @@ export function emitKickEntries(
   // when an aura on the victim is officially interrupt-immune (DB2 aura 77
   // mechanic 26, `interruptImmuneWindows`); otherwise bare IMMUNE, never a
   // guess.
-  const kickKitIds = new Set(INTERRUPT_SPELL_IDS);
   const castersById = new Map(_allUnits.map((u) => [u.id, u]));
   const immuneAuraCache = new Map<
     string,
@@ -259,70 +358,51 @@ export function emitKickEntries(
         Math.abs(a.timestamp - m.timestamp) <= 0.5 &&
         (a.logLine.lineIndex ?? 0) > (m.logLine.lineIndex ?? 0),
     );
-  const seenImmuneKicks: Array<{ key: string; ms: number }> = [];
-  const commandsOf = new Map<string, ReturnType<typeof petCommands>>();
-  for (const friend of friends) {
-    for (const m of friend.missesIn ?? []) {
-      if (m.missType !== "IMMUNE" || !m.spellId) continue;
-      if (!kickKitIds.has(m.spellId)) continue;
-      const kickerPlayer = enemyKickerUnit(m.srcUnitName, m.srcUnitId);
-      if (!kickerPlayer) continue;
-      const atSeconds = (m.timestamp - matchStartMs) / 1000;
-      if (atSeconds < 0) continue;
-      // fact6 D30's reading for kicks: the owner's command (Command Demon:
-      // Spell Lock 119910) is the pet's kick — the Felhunter's own IMMUNE row
-      // states it; a command no summon row carried out prints once, as the
-      // pet's (`petCommands`)
-      let kicker = { name: m.srcUnitName, id: m.srcUnitId };
-      if (kickerPlayer.id === m.srcUnitId) {
-        let cmd = commandsOf.get(kickerPlayer.id);
-        if (!cmd) {
-          cmd = petCommands(kickerPlayer, { units: _allUnits });
-          commandsOf.set(kickerPlayer.id, cmd);
-        }
-        const name = getEnglishSpellName(m.spellId, m.spellName ?? "");
-        if (cmd.carriedOutBy(m.timestamp, name)) continue;
-        if (cmd.isCommandRow(m.spellId, m.timestamp, IMMUNE_KICK_DEDUPE_MS)) {
-          const pet = cmd.commandPet(name);
-          if (pet) kicker = { name: pet.name, id: pet.id };
-        }
-      }
-      // one kick, one line: Skull Bash logs its two ids 1 ms apart
-      const key = `${kicker.id}|${friend.id}|${kickCastSpellId(m.spellId)}`;
-      if (
-        seenImmuneKicks.some(
-          (s) =>
-            s.key === key &&
-            Math.abs(s.ms - m.timestamp) <= IMMUNE_KICK_DEDUPE_MS,
-        )
-      )
-        continue;
-      seenImmuneKicks.push({ key, ms: m.timestamp });
-      // every interrupt-immune aura on the victim that covers the miss
-      // (inclusive: one removed in the miss's own millisecond was still
-      // up; 0.5 ms absorbs the seconds round trip), in the order applied —
-      // with two up at once either is a true reason, so both are named
-      const why = [
-        ...new Set(
-          immuneAurasOf(friend)
-            .filter(
-              (i) =>
-                i.from - 0.5 <= m.timestamp &&
-                m.timestamp <= i.to + 0.5 &&
-                !appliedAfterMissRow(friend, i, m),
-            )
-            .sort((a, b) => a.from - b.from)
-            .map((i) => i.auraName),
-        ),
-      ].join(" + ");
-      addEntry(
-        atSeconds,
-        `${fmtTime(atSeconds)}  [KICK]   ${resolveKicker(kicker.name, kicker.id)}'s ${getEnglishSpellName(
-          m.spellId,
-          m.spellName ?? "interrupt",
-        )} on ${pid(friend.name)} missed — IMMUNE${why ? ` (${why})` : ""}`,
-      );
-    }
+  // T253 / R106 (user 2026-11-22): the same line for the other direction — a
+  // TEAMMATE's kick, or a teammate's pet's, refused IMMUNE on an enemy
+  // player. The owner's own refused kicks (and their pet's) keep their
+  // `[KICK]   your …` line from the kick audit below.
+  const immuneKicks = [
+    ...immuneKickRows({
+      victims: friends,
+      kickerPlayerOf: enemyKickerUnit,
+      units: _allUnits,
+      fromMs: matchStartMs,
+    }),
+    ...immuneKickRows({
+      victims: enemies ?? [],
+      kickerPlayerOf: (name, unitId) => teammateKickerUnit(ctx, name, unitId),
+      units: _allUnits,
+      fromMs: matchStartMs,
+    }),
+  ];
+  for (const { m, victim: friend, kicker } of immuneKicks) {
+    const atSeconds = (m.timestamp - matchStartMs) / 1000;
+    if (atSeconds < 0) continue;
+    // every interrupt-immune aura on the victim that covers the miss
+    // (inclusive: one removed in the miss's own millisecond was still
+    // up; 0.5 ms absorbs the seconds round trip), in the order applied —
+    // with two up at once either is a true reason, so both are named
+    const why = [
+      ...new Set(
+        immuneAurasOf(friend)
+          .filter(
+            (i) =>
+              i.from - 0.5 <= m.timestamp &&
+              m.timestamp <= i.to + 0.5 &&
+              !appliedAfterMissRow(friend, i, m),
+          )
+          .sort((a, b) => a.from - b.from)
+          .map((i) => i.auraName),
+      ),
+    ].join(" + ");
+    addEntry(
+      atSeconds,
+      `${fmtTime(atSeconds)}  [KICK]   ${resolveKicker(kicker.name, kicker.id)}'s ${getEnglishSpellName(
+        m.spellId,
+        m.spellName ?? "interrupt",
+      )} on ${friends.some((f) => f.id === friend.id) ? pid(friend.name) : enemyPid(friend.name)} missed — IMMUNE${why ? ` (${why})` : ""}`,
+    );
   }
 
   // B-tier B7a (user ruling 2026-10-06, a fact — never an accusation): the
