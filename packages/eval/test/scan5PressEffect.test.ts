@@ -1,62 +1,69 @@
 /**
- * scan5/pressEffect `noPressButPressed`: a `[no press logged]` line in a
- * second that also holds an unpressed REFRESH (a proc refreshing the aura the
- * press put up) may be that proc's own line (T259 / B192, 11346ea9 r1 1:53) —
- * but only while the press there keeps a line of its own without the tag.
+ * scan5/pressEffect `noPressButPressed`: a `[no press logged]` line may be a
+ * proc's own line (T259 / B192, 11346ea9 r1 1:53: Frenzied Regeneration
+ * pressed at .198, then a Well-Honed Instincts proc REFRESH at .937) — only
+ * when the second's lines pair one to one, in order, with its activations and
+ * the tagged line's activation is an unpressed REFRESH.
  */
 import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import {
+  activationsInSecond,
   isProcOwnNoPressLine,
-  unpressedRefreshesInSecond,
 } from "../scripts/scan5/pressEffect";
 
 const A = LogEvent.SPELL_AURA_APPLIED as string;
 const R = LogEvent.SPELL_AURA_REFRESH as string;
 
-describe("scan5/pressEffect unpressedRefreshesInSecond", () => {
-  it("a proc REFRESH 0.7 s after the press's APPLIED is an activation of its own", () => {
-    // 11346ea9: APPLIED .197, press .198, REFRESH + 382912 at .937
-    const auras = [
-      { event: A, ts: 113_197 },
-      { event: R, ts: 113_937 },
-    ];
-    expect(unpressedRefreshesInSecond(auras, [113_198], 113_000)).toBe(1);
+// 11346ea9: APPLIED .197, press .198, REFRESH + 382912 at .937
+const druid = activationsInSecond(
+  [
+    { event: R, ts: 113_937 },
+    { event: A, ts: 113_197 },
+  ],
+  [113_198],
+  113_000,
+);
+
+describe("scan5/pressEffect activationsInSecond", () => {
+  it("orders the second's APPLIED / REFRESH rows and marks which a press explains", () => {
+    expect(druid).toEqual([
+      { refresh: false, pressed: true },
+      { refresh: true, pressed: false },
+    ]);
   });
-  it("a REFRESH beside a press, or followed by one, is that press (D27 stays a violation)", () => {
-    // 163de8f1 1:00: SotF APPLIED .584, the hunter's own press at .932 refreshing it
-    const auras = [
+  it("a REFRESH beside a press, or followed by one, is pressed (D27 163de8f1 1:00)", () => {
+    const sotf = [
       { event: A, ts: 60_584 },
       { event: R, ts: 60_932 },
     ];
-    expect(unpressedRefreshesInSecond(auras, [60_932], 60_000)).toBe(0);
-    expect(unpressedRefreshesInSecond(auras, [60_960], 60_000)).toBe(0);
-    expect(unpressedRefreshesInSecond(auras, [61_400], 60_000)).toBe(0);
+    for (const p of [60_932, 60_960, 61_400])
+      expect(activationsInSecond(sotf, [p], 60_000)[1]!.pressed).toBe(true);
   });
-  it("only a REFRESH inside the line's second counts", () => {
-    const auras = [
+  it("only rows inside the line's second count", () => {
+    const rows = [
       { event: A, ts: 60_100 },
       { event: R, ts: 61_200 },
     ];
-    expect(unpressedRefreshesInSecond(auras, [60_101], 60_000)).toBe(0);
-    expect(
-      unpressedRefreshesInSecond([{ event: A, ts: 60_500 }], [], 60_000),
-    ).toBe(0);
+    expect(activationsInSecond(rows, [], 60_000)).toHaveLength(1);
   });
 });
 
 describe("scan5/pressEffect isProcOwnNoPressLine", () => {
-  it("11346ea9 as rendered: the press keeps its labelled line, the one tagged line is the proc's", () => {
-    expect(isProcOwnNoPressLine(0, 1, 1, 1)).toBe(true);
+  it("11346ea9 as rendered: press line untagged, the second (proc) line tagged — exempt", () => {
+    expect(isProcOwnNoPressLine(1, 2, druid)).toBe(true);
   });
-  it("B192 review mutation: the press relabelled [no press logged] beside the proc is still caught", () => {
-    // both lines tagged, no labelled line for the logged press
-    expect(isProcOwnNoPressLine(0, 1, 0, 1)).toBe(false);
-    expect(isProcOwnNoPressLine(1, 1, 0, 1)).toBe(false);
+  it("B192 review 1: both lines tagged — the press's tagged line is not exempt", () => {
+    expect(isProcOwnNoPressLine(0, 2, druid)).toBe(false);
   });
-  it("no more tagged lines are exempt than there are unpressed REFRESHes", () => {
-    expect(isProcOwnNoPressLine(1, 1, 1, 1)).toBe(false);
-    expect(isProcOwnNoPressLine(0, 0, 1, 1)).toBe(false);
+  it("B192 review 2: tags swapped — the press's tagged line is not exempt", () => {
+    expect(isProcOwnNoPressLine(0, 2, druid)).toBe(false);
+  });
+  it("lines and activations that do not pair one to one exempt nothing", () => {
+    expect(isProcOwnNoPressLine(1, 3, druid)).toBe(false);
+    expect(isProcOwnNoPressLine(0, 1, druid.slice(1))).toBe(true);
+    expect(isProcOwnNoPressLine(0, 1, druid)).toBe(false);
+    expect(isProcOwnNoPressLine(-1, 2, druid)).toBe(false);
   });
 });

@@ -33,57 +33,61 @@ const LINE = new RegExp(
 );
 const spellOf = (rest: string): string =>
   /^(.+?)(?: \(| \[|$)/.exec(rest)?.[1] ?? rest;
-/** The REFRESHes inside the line's second that no press of the name
- * explains (no press within 50 ms of one, none in `PRESS_AFTER_MS` after it):
- * activations of their own, each of which a `[no press logged]` line in that
- * second may be about instead of a pressed APPLIED beside it. 11346ea9 r1 1:53
- * (T259 / B192): Frenzied Regeneration APPLIED .197 with the druid's press at
- * .198 (its own line), then at .937 a REFRESH carrying the Well-Honed
- * Instincts marker 382912, the proc the second line prints. */
-export function unpressedRefreshesInSecond(
+/** The aura's activations (APPLIED / REFRESH rows) inside the line's second,
+ * in log order, each marked pressed when a press of the name stands within 50
+ * ms of it or in `PRESS_AFTER_MS` after it. An unpressed REFRESH is an
+ * activation of its own: 11346ea9 r1 1:53 (T259 / B192), Frenzied
+ * Regeneration APPLIED .197 with the druid's press at .198, then at .937 a
+ * REFRESH carrying the Well-Honed Instincts marker 382912 (the proc). */
+export function activationsInSecond(
   auras: readonly { event: string; ts: number }[],
   pressTs: readonly number[],
   lo: number,
-): number {
-  return auras.filter(
-    (a) =>
-      a.event === REFRESH &&
-      a.ts >= lo &&
-      a.ts < lo + 1000 &&
-      !pressTs.some(
+): { refresh: boolean; pressed: boolean }[] {
+  return auras
+    .filter(
+      (a) =>
+        (a.event === APPLIED || a.event === REFRESH) &&
+        a.ts >= lo &&
+        a.ts < lo + 1000,
+    )
+    .sort((x, y) => x.ts - y.ts)
+    .map((a) => ({
+      refresh: a.event === REFRESH,
+      pressed: pressTs.some(
         (p) =>
           Math.abs(p - a.ts) <= 50 || (p >= a.ts && p <= a.ts + PRESS_AFTER_MS),
       ),
-  ).length;
+    }));
 }
 
-/** Whether the `nth` (0-based) `[no press logged]` line of a unit's spell in
- * one second is a proc's own line: only while every press of the name logged
- * in that second already has a line of its own without the tag, and only up to
- * the number of unpressed REFRESHes there. A press relabelled `[no press
- * logged]` beside a proc is still caught (B192 review: both lines tagged, the
- * labelled-press count falls short of the presses). */
+/** Whether the `[no press logged]` line at position `pos` (0-based, in
+ * rendered order) among the `lineCount` lines of a unit's spell in one second
+ * is a proc's own line: only when the lines and the second's activations pair
+ * one to one in order and the activation at `pos` is an unpressed REFRESH.
+ * B192 review: both lines tagged flags the press's; the tags swapped (press
+ * tagged, proc untagged) flags the press's too. */
 export function isProcOwnNoPressLine(
-  nth: number,
-  unpressedRefreshes: number,
-  labelledPressLines: number,
-  pressesInSecond: number,
+  pos: number,
+  lineCount: number,
+  activations: readonly { refresh: boolean; pressed: boolean }[],
 ): boolean {
-  return nth < unpressedRefreshes && labelledPressLines >= pressesInSecond;
+  const a = activations[pos];
+  return lineCount === activations.length && !!a && a.refresh && !a.pressed;
 }
 
 export function run(ctx: IRoundCtx): void {
-  // per unit-spell-second: lines without the tag, and tagged lines seen so far
+  // per unit-spell-second: its lines' indices in rendered order
   const keyOf = (m: RegExpExecArray): string =>
     `${m[3]}|${spellOf(m[4]!)}|${+m[1]! * 60 + +m[2]!}`;
-  const labelled = new Map<string, number>();
-  for (const line of ctx.lines) {
+  const linesOfKey = new Map<string, number[]>();
+  ctx.lines.forEach((line, i) => {
     const m = LINE.exec(line);
-    if (m && !line.includes("[no press logged]"))
-      labelled.set(keyOf(m), (labelled.get(keyOf(m)) ?? 0) + 1);
-  }
-  const taggedSeen = new Map<string, number>();
-  for (const line of ctx.lines) {
+    if (!m) return;
+    const k = keyOf(m);
+    linesOfKey.set(k, [...(linesOfKey.get(k) ?? []), i]);
+  });
+  for (const [i, line] of ctx.lines.entries()) {
     const m = LINE.exec(line);
     if (!m) continue;
     const unit = ctx.unitOfPid(m[3]);
@@ -104,19 +108,16 @@ export function run(ctx: IRoundCtx): void {
       );
       if (!up) continue;
       ctx.bump("noPressButPressed");
-      const key = keyOf(m);
-      const nth = taggedSeen.get(key) ?? 0;
-      taggedSeen.set(key, nth + 1);
+      const keyLines = linesOfKey.get(keyOf(m)) ?? [];
       if (
         isProcOwnNoPressLine(
-          nth,
-          unpressedRefreshesInSecond(
+          keyLines.indexOf(i),
+          keyLines.length,
+          activationsInSecond(
             auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
             presses.map(tsOf),
             lo,
           ),
-          labelled.get(key) ?? 0,
-          presses.filter((c) => tsOf(c) >= lo && tsOf(c) < lo + 1000).length,
         )
       )
         continue;
