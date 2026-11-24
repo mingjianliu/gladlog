@@ -54,12 +54,16 @@ export function activationsInSecond(
   markerTs: readonly number[],
   lo: number,
 ): { refresh: boolean; pressed: boolean; proc: boolean }[] {
+  // paired over every row a press or marker of the second's rows could also
+  // fit, then cut to the second (B192 review 4, bf679e40 r1: the proc 0:52.172,
+  // the press 0:53.500 beside its own REFRESH — the press is the REFRESH's)
+  const reach = PRESS_AFTER_MS + PROC_MARKER_PAIR_MS;
   const acts = auras
     .filter(
       (a) =>
         (a.event === APPLIED || a.event === REFRESH) &&
-        a.ts >= lo &&
-        a.ts < lo + 1000,
+        a.ts >= lo - reach &&
+        a.ts < lo + 1000 + reach,
     )
     .sort((x, y) => x.ts - y.ts)
     .map((a) => ({
@@ -88,7 +92,9 @@ export function activationsInSecond(
     "pressed",
   );
   give(markerTs, (m, a) => Math.abs(m - a.ts) <= PROC_MARKER_PAIR_MS, "proc");
-  return acts.map(({ refresh, pressed, proc }) => ({ refresh, pressed, proc }));
+  return acts
+    .filter((a) => a.ts >= lo && a.ts < lo + 1000)
+    .map(({ refresh, pressed, proc }) => ({ refresh, pressed, proc }));
 }
 
 /** Whether the `[no press logged]` line at position `pos` (0-based, in

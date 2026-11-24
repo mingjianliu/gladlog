@@ -1312,6 +1312,25 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
       expect(text(a).includes(KILL_ATTEMPTS_PROC_LEGEND)).toBe(kind === "proc");
     },
   );
+  it("review 4 (d59fd620 r1): the proc ended before the attempt, the press before it covers it → popped … [up since the press]", async () => {
+    await ensureAnalysisData();
+    const a = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("22842", "e1", 8.4),
+          auraOn("382912", "e1", 8.4),
+          auraOff("22842", "e1", 8.8),
+          auraOn("22842", "e1", 9),
+        ],
+        spellCastEvents: [frCast(9)],
+      }),
+    );
+    expect(text(a)).toMatch(
+      /FAILED: popped Frenzied Regeneration \[up since 0:09\]$/m,
+    );
+    expect(text(a)).toContain("Frenzied Regeneration already up since 0:09");
+  });
 
   it("ruling D8: a Nature's Guardian heal on itself inside the span → self-saved (it was immunity-baited); outside it → not a cause", async () => {
     await ensureAnalysisData();

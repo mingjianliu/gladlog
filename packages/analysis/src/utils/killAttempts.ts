@@ -2719,9 +2719,14 @@ function attributeFailure(
       // a press of the save that counts for the span too is stated: a proc's
       // own activation reads `self-saved (X)` only when no press of X counts
       // (B192 review 4 — 36-3 0:30 / 130-1 0:52: Well-Honed Instincts'
-      // Frenzied Regeneration, the druid's own press of it 1–2 s on)
+      // Frenzied Regeneration, the druid's own press of it 1–2 s on) — at
+      // the press's own second (review 4, d59fd620 r1: the proc 1:03 ended
+      // before the 1:05 attempt, the press 1:04 covered it: `[up since 1:04]`)
       const k = c.procOwned ? -1 : selfSavedByProc.indexOf(c.spellName);
-      if (k >= 0) selfSavedByProc.splice(k, 1);
+      if (k >= 0) {
+        selfSavedByProc.splice(k, 1);
+        selfSavedAtS[selfSaved.indexOf(c.spellName)] = c.atSeconds;
+      }
       continue;
     }
     if (!absorbCovers(c.spellId)) continue;

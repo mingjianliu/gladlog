@@ -66,6 +66,20 @@ describe("scan5/pressEffect activationsInSecond", () => {
     ]);
     expect(isProcOwnNoPressLine(1, 2, acts)).toBe(true);
   });
+  it("B192 review 4, bf679e40 r1: a press beside its own row in the next second is that row's", () => {
+    // proc APPLIED + marker 52.172; press 53.500 beside its REFRESH 53.500
+    const acts = activationsInSecond(
+      [
+        { event: A, ts: 52_172 },
+        { event: R, ts: 53_500 },
+      ],
+      [53_500],
+      [52_172],
+      52_000,
+    );
+    expect(acts).toEqual([{ refresh: false, pressed: false, proc: true }]);
+    expect(isProcOwnNoPressLine(0, 1, acts)).toBe(true);
+  });
 });
 
 describe("scan5/pressEffect isProcOwnNoPressLine", () => {
