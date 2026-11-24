@@ -624,6 +624,11 @@ export function StructuredAnalysisPanel({
     // -- main's deepen writes into the current language's cache, so it would
     // merge the other language's findings into it.
     if ((result.contentLang ?? lang) !== lang) return;
+    // Never while a first round is running (codex F2#2): e.g. remounting with
+    // a cached result while main still runs a round (restored `running`). The
+    // deep dive bumps the match's generation in main, which would cancel that
+    // paid round. The effect re-runs when the round's done lands.
+    if (state === "running") return;
     if (!result.hadNarration || result.deepened) return;
     if (result.findings.length === 0) return;
     try {
@@ -655,7 +660,7 @@ export function StructuredAnalysisPanel({
     // Re-running is harmless: the main-side idempotency guard plus the
     // deepened flag are a double safeguard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, matchId, input, lang]);
+  }, [result, matchId, input, lang, state]);
 
   // The split predicate is single-source with buildFindingsPrompt's whole-round
   // decision: a missing facts.t means a whole-match observation (cd-waste etc.)

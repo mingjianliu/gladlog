@@ -738,6 +738,56 @@ describe("AI 卡片:另一种语言的完成 / 在跑 / 无候选(codex A#7·B1#
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("getState 给 en 未深挖结果 + 一轮 zh 在跑:在跑期间不自动深挖;那一轮结束后才深挖(codex F2#2)", async () => {
+    let done: ((d: unknown) => void) | null = null;
+    let runningNow = true;
+    const getState = vi.fn(async () => ({
+      cached: { ...enResult, contentLang: "en" },
+      lang: "en",
+      running: runningNow,
+      runningMeta: runningNow
+        ? {
+            since: Date.now(),
+            backend: "anthropic",
+            model: "claude-opus-5-5",
+            retrying: false,
+            reviewing: false,
+          }
+        : null,
+      slots: [],
+      activeKey: null,
+    }));
+    const calls = installBridge({
+      language: "en",
+      cached: enResult,
+      contentLang: "en",
+      analysisOverrides: {
+        getState,
+        onDone: (cb: (d: unknown) => void) => {
+          done = cb;
+          return () => {
+            done = null;
+          };
+        },
+      },
+    });
+    vi.mocked(buildAnalysisInput).mockReturnValue(fakeInput as never);
+    renderPanel();
+    expect(await screen.findByText(/No defensive was up/)).toBeTruthy();
+    await screen.findByRole("button", { name: "Analyzing…" });
+    await new Promise((r) => setTimeout(r, 50));
+    // a deep dive here would bump the match's generation in main and cancel
+    // the running zh round
+    expect(calls.deepen).not.toHaveBeenCalled();
+    // the zh round finishes (saved to the zh cache): the panel re-resolves
+    runningNow = false;
+    await act(async () => {
+      done!({ matchId: "m1", result: zhResult, contentLang: "zh" });
+    });
+    await waitFor(() => expect(calls.deepen).toHaveBeenCalledTimes(1));
+    expect(calls.deepen.mock.calls[0]![0].contentLang).toBe("en");
+  });
+
   it("en 无候选(hadNarration=false, no-candidates):空状态是英文,不出中文", async () => {
     const empty = {
       findings: [],
