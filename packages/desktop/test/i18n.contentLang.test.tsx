@@ -128,6 +128,8 @@ function installBridge(opts: {
   cached: unknown;
   contentLang: Language;
   video?: boolean;
+  /** Replaces analysis-facet members (e.g. a capturing onDone). */
+  analysisOverrides?: Record<string, unknown>;
 }): Calls {
   const calls: Calls = {
     run: vi.fn().mockResolvedValue(undefined),
@@ -167,6 +169,7 @@ function installBridge(opts: {
     run: calls.run,
     deepen: calls.deepen,
     analyzeWindow: calls.analyzeWindow,
+    ...opts.analysisOverrides,
   };
   const surface = (name: string) =>
     new Proxy(
@@ -663,5 +666,88 @@ describe("问教练:发送时固定语言 + 另一种语言的历史(codex B2#1 
       await switchLang!("en");
     });
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("AI 卡片:另一种语言的完成 / 在跑 / 无候选(codex A#7·B1#1·B2#2 / B2#3 / B2#8)", () => {
+  it("en 结果在屏上时到达 zh 一轮的 done:不替换,按 getState 重新取(仍是 en 结果)", async () => {
+    let done: ((d: unknown) => void) | null = null;
+    const getState = vi.fn(async () => ({
+      cached: { ...enResult, contentLang: "en" },
+      lang: "en",
+      running: false,
+      runningMeta: null,
+      slots: [],
+      activeKey: null,
+    }));
+    installBridge({
+      language: "en",
+      cached: enResult,
+      contentLang: "en",
+      analysisOverrides: {
+        getState,
+        onDone: (cb: (d: unknown) => void) => {
+          done = cb;
+          return () => {
+            done = null;
+          };
+        },
+      },
+    });
+    renderPanel();
+    expect(await screen.findByText(/No defensive was up/)).toBeTruthy();
+    const before = getState.mock.calls.length;
+    await act(async () => {
+      done!({ matchId: "m1", result: zhResult, contentLang: "zh" });
+    });
+    await waitFor(() =>
+      expect(getState.mock.calls.length).toBeGreaterThan(before),
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText(/No defensive was up/)).toBeTruthy();
+    expect(screen.queryByText(/第30秒阵亡/)).toBeNull();
+    expect(screen.queryByTestId("content-lang-badge")).toBeNull();
+  });
+
+  it("getState 同时给回退内容和 running:恢复在跑状态(按钮禁用),回退内容照常在下面显示", async () => {
+    installBridge({
+      language: "en",
+      cached: zhResult,
+      contentLang: "zh",
+      analysisOverrides: {
+        getState: async () => ({
+          cached: { ...zhResult, contentLang: "zh" },
+          lang: "en",
+          running: true,
+          runningMeta: {
+            since: Date.now(),
+            backend: "anthropic",
+            model: "claude-opus-5-5",
+            retrying: false,
+            reviewing: false,
+          },
+          slots: [],
+          activeKey: null,
+        }),
+      },
+    });
+    vi.mocked(buildAnalysisInput).mockReturnValue(fakeInput as never);
+    renderPanel();
+    expect(await screen.findByText(/第30秒阵亡/)).toBeTruthy();
+    const btn = await screen.findByRole("button", { name: "Analyzing…" });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("en 无候选(hadNarration=false, no-candidates):空状态是英文,不出中文", async () => {
+    const empty = {
+      findings: [],
+      dropped: 0,
+      hadNarration: false,
+      fallbackReason: "no-candidates",
+    };
+    installBridge({ language: "en", cached: empty, contentLang: "en" });
+    const { container } = renderPanel();
+    await screen.findByTestId("zero-finding-reason");
+    expect(visibleCjk(container)).toEqual([]);
   });
 });

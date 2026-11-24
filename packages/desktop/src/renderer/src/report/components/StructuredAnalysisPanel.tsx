@@ -156,7 +156,15 @@ export function StructuredAnalysisPanel({
   // getState's cached answer overwrote the done payload. LangProvider renders
   // its children only once the language is known, so this value is stable
   // from the first render and changes only on a real user switch.
-  const { lang, t } = useT();
+  const { lang, t, namesVersion } = useT();
+  /** The current language for the event listeners, which subscribe once per
+   * match (a completion of another language is not displayed, see onDone). */
+  const langRef = useRef(lang);
+  langRef.current = lang;
+  /** Bumped to re-run the cache query below without a match/language change:
+   * a completion of another language arrived, so the panel re-resolves what
+   * the current language should show (codex A#7). */
+  const [resync, setResync] = useState(0);
   // Settings snapshot for the split-button menu (Task 4): only the sentinel
   // fields (key truthiness) and the current global default backend/model.
   const [aiSettings, setAiSettings] = useState<{
@@ -351,12 +359,18 @@ export function StructuredAnalysisPanel({
           // independent of docActiveKey's specific value.
           resultOwnerRef.current = "active";
           setResult(cached);
-          setState("done");
-        } else if (running) {
-          // On remount (returning via tab/match switch), if the first round is
-          // still running in the main process, show "analyzing…" instead of
-          // idle — otherwise the user assumes it was lost and clicking again
-          // would run it twice. The done event fills in the result.
+        }
+        if (!running) {
+          if (cached) setState("done");
+        } else {
+          // On remount (returning via tab/match switch), if a round is still
+          // running in the main process, show "analyzing…" instead of idle —
+          // otherwise the user assumes it was lost and clicking again would
+          // run it twice. The done event fills in the result. This holds with
+          // cached content too (codex B2#3: e.g. the other language's
+          // fallback while its re-analysis runs): the content stays visible
+          // beneath, exactly as runAnalyze leaves it, but the button stays
+          // disabled so a second click cannot supersede the run.
           setState("running");
           // meta 缺席(旧 stub)时退化为从现在起计——比不显示强,且只低估
           setRunMeta(
@@ -374,7 +388,7 @@ export function StructuredAnalysisPanel({
     return () => {
       cancelled = true;
     };
-  }, [matchId, lang]);
+  }, [matchId, lang, resync]);
 
   useEffect(() => {
     // After persistent mounting this effect runs in every view; a missing
@@ -406,6 +420,19 @@ export function StructuredAnalysisPanel({
           contentLang?: Language;
         }) => {
           if (d.matchId !== matchId) return;
+          // A round pinned to another language (started before a language
+          // switch) finished: it must not replace what this language shows
+          // -- a valid current-language result may be on screen (codex A#7,
+          // B1#1, B2#2). Re-resolve from getState instead, which returns the
+          // current language's result when there is one, else the fallback
+          // (now this fresh round, labelled).
+          if (
+            d.contentLang !== undefined &&
+            d.contentLang !== langRef.current
+          ) {
+            setResync((n) => n + 1);
+            return;
+          }
           resultForRef.current = matchId;
           // Invariant (Task 4 handover fix -- the original comment assumed
           // "the finished run = the default slot from settings", which the
@@ -545,9 +572,12 @@ export function StructuredAnalysisPanel({
     dataReady,
   );
 
+  // namesVersion: in en the moment titles read English spell names, which
+  // load after first paint (codex B1#4, B2#7).
   const keyMoments = useMemo(
     () => deriveKeyMoments(source, undefined, lang),
-    [source, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, lang, namesVersion],
   );
 
   // #15 inline icons: built once per match / per language; rebuilt once
@@ -1108,6 +1138,7 @@ export function StructuredAnalysisPanel({
               <FindingsList
                 findings={[]}
                 onSelect={setActiveEventIds}
+                lang={lang}
                 habitOf={habitOf}
                 rich={rich}
               />

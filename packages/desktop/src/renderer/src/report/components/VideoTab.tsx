@@ -77,7 +77,7 @@ export function VideoTab({
   timeline?: TimelineData;
   bands?: VulnBand[];
 }) {
-  const { t, lang } = useT();
+  const { t, lang, namesVersion } = useT();
   const ref = useRef<HTMLVideoElement | null>(null);
   const [durationS, setDurationS] = useState(0);
   const [aiChips, setAiChips] = useState<AiChipLike[]>([]);
@@ -149,8 +149,11 @@ export function VideoTab({
   const moments: VideoMoment[] = useMemo(
     // Same per-language key-moments slot as the AI panel's axis
     // (deriveKeyMoments(source, undefined, lang)): computed once per language.
+    // namesVersion: the titles read English spell names in en, which load
+    // after first paint (codex B1#4, B2#7).
     () => deriveVideoMoments(source, aiChips, lang),
-    [source, aiChips, lang],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [source, aiChips, lang, namesVersion],
   );
   useEffect(() => {
     momentsRef.current = moments;
