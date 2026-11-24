@@ -173,6 +173,7 @@ async function processSource(
   let ownDone: {
     result: CachedResult;
     contentLang?: Language;
+    persisted?: false;
   } | null = null;
   let unsubDone: (() => void) | null = null;
   try {
@@ -182,6 +183,7 @@ async function processSource(
         ownDone = {
           result: d.result as CachedResult,
           contentLang: d.contentLang,
+          persisted: d.persisted,
         };
       });
   } catch {
@@ -214,8 +216,12 @@ async function processSource(
     const done = ownDone as {
       result: CachedResult;
       contentLang?: Language;
+      persisted?: false;
     } | null;
     if (!done?.result) return "failed";
+    // The round ran but its cache write failed (GH #230): nothing on disk for
+    // listAnalyzed / the report to find, so it is not a success.
+    if (done.persisted === false) return "failed";
     const runLang = done.contentLang ?? (lang as Language | undefined);
     // Finished in the language it started in, which is no longer the current
     // one: counted, but no deep dive in the wrong language.

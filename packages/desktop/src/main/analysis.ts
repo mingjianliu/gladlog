@@ -660,9 +660,17 @@ export function createAnalysisService(deps: {
   // in-flight analysis judge itself stale, abort, and never write its cache
   // -- that is exactly the root of "looking at another match threw away the
   // previous analysis".
+  //
+  // Values come from one monotonic sequence shared by every match (GH #230),
+  // never a per-match count restarting at 1: an entry is reaped once its
+  // match is quiet (reapGeneration), and a superseded round can still be
+  // awaiting its backend at that point. With per-match counting the next
+  // round would be handed 1 again and that stale round, holding 1 as well,
+  // would judge itself current and write/emit its old result.
   const generations = new Map<string, number>();
+  let genSeq = 0;
   const nextGen = (matchId: string) => {
-    const g = (generations.get(matchId) ?? 0) + 1;
+    const g = ++genSeq;
     generations.set(matchId, g);
     return g;
   };
@@ -702,8 +710,10 @@ export function createAnalysisService(deps: {
     }
   >();
 
-  /** matchIds currently deep-diving -- the idempotency guard, see deepen. */
-  const deepening = new Set<string>();
+  /** matchId -> the deep dive that owns this match's slot in the
+   * idempotency guard (see deepen). `gen` is null until deepenInner takes its
+   * generation (synchronously, in the call's first tick). */
+  const deepening = new Map<string, { gen: number | null }>();
 
   /** In-flight window analyses (#16), keyed `${matchId}:${windowKey}`. A
    * window analysis is a single request/response and never races run/deepen
@@ -775,6 +785,7 @@ export function createAnalysisService(deps: {
     const finish = (result: AnalysisResult, record = false) => {
       clearRunning();
       const dir = join(deps.matchesDir, input.matchId);
+      let persisted = false;
       try {
         mkdirSync(dir, { recursive: true });
         // Slotted persistence (multi-model comparison): one matchId+lang file
@@ -812,8 +823,10 @@ export function createAnalysisService(deps: {
         const tmp = `${target}.tmp`;
         writeFileSync(tmp, JSON.stringify(doc), "utf-8");
         renameSync(tmp, target);
+        persisted = true;
       } catch {
-        /* best-effort */
+        /* the result is still shown from the done event below; the event says
+           it never reached disk (GH #230) */
       }
       // slotKey rides along on the done event (Task 4 handoff item): the slot
       // this run just wrote is exactly the lastSlotKey upsertSlot has just
@@ -823,10 +836,16 @@ export function createAnalysisService(deps: {
       // StructuredAnalysisPanel.tsx).
       // contentLang: the language pinned at the start of this run (Review
       // Focus 4) -- a settings switch mid-run does not relabel the result.
+      //
+      // A failed write (GH #230) still emits done -- the panel shows the
+      // in-memory result -- but without slotKey (nothing was written, so
+      // there is no written slot; same rule as deepenInner's write-failure
+      // branch) and with `persisted: false`, so the batch driver does not
+      // count a round getCached() cannot return as a success.
       deps.emit("gladlog:analysis:done", {
         matchId: input.matchId,
         result,
-        slotKey,
+        ...(persisted ? { slotKey } : { persisted: false }),
         contentLang: lang,
       });
       if (record) {
@@ -1178,17 +1197,30 @@ export function createAnalysisService(deps: {
    * both read false, and it stops nothing.
    */
   async function deepen(input: DeepenInput): Promise<void> {
-    if (deepening.has(input.matchId)) return;
-    deepening.add(input.matchId);
+    // Only a deep dive that is still current holds the guard (GH #230): one
+    // superseded by a re-analysis (or a cancel) is going to exit on its next
+    // stream event without writing, but that event may be far off. Dropping
+    // the new result's deep dive behind it would leave the new result
+    // undeepened until the panel remounts. The superseded one keeps running
+    // to its next generation check and exits; ownership moves to this call.
+    const owner = deepening.get(input.matchId);
+    if (owner && (owner.gen === null || isCurrent(input.matchId, owner.gen)))
+      return;
+    const me: { gen: number | null } = { gen: null };
+    deepening.set(input.matchId, me);
     try {
-      await deepenInner(input);
+      await deepenInner(input, me);
     } finally {
-      deepening.delete(input.matchId);
+      if (deepening.get(input.matchId) === me)
+        deepening.delete(input.matchId);
       reapGeneration(input.matchId);
     }
   }
 
-  async function deepenInner(input: DeepenInput): Promise<void> {
+  async function deepenInner(
+    input: DeepenInput,
+    me: { gen: number | null },
+  ): Promise<void> {
     const settings = deps.getSettings();
     const lang: Language = settings.language ?? "zh";
     // Defence in depth (spec §6.13): findings from the other language (e.g. a
@@ -1236,6 +1268,7 @@ export function createAnalysisService(deps: {
     // done handler is not refused.
     if (running.has(input.matchId)) return;
     const myGen = nextGen(input.matchId);
+    me.gen = myGen;
     // Review I-1: the deep dive must follow the backend/model of the slot
     // `lastSlotKey` points at, not the global default in settings -- after an
     // overridden round (say agy:flash), an automatic deep dive still hitting
@@ -1367,6 +1400,7 @@ export function createAnalysisService(deps: {
         deps.emit("gladlog:analysis:done", {
           matchId: input.matchId,
           result: { findings, dropped: 0, hadNarration: true, deepened: true },
+          persisted: false,
           contentLang: lang,
         });
       }
@@ -1764,15 +1798,14 @@ export function createAnalysisService(deps: {
       // in-flight run/deepen -- the global version would also abort another
       // match the user is manually analyzing (agy flash review F1).
       if (matchId !== undefined) {
-        const g = generations.get(matchId);
-        if (g !== undefined) generations.set(matchId, g + 1);
+        if (generations.has(matchId)) generations.set(matchId, ++genSeq);
         running.delete(matchId);
         runningMeta.delete(matchId); // 与 running 同生命周期(agy review #3:漏删则每个取消过的场泄一个对象)
         return;
       }
-      // Cancel everything: +1 to every match's generation, so every running
-      // run/deepen loop aborts on its next tick.
-      for (const [id, g] of generations) generations.set(id, g + 1);
+      // Cancel everything: a fresh value for every match's generation, so
+      // every running run/deepen loop aborts on its next tick.
+      for (const id of generations.keys()) generations.set(id, ++genSeq);
       running.clear();
       runningMeta.clear();
     },

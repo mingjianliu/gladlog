@@ -1039,6 +1039,46 @@ describe("deepen(深挖轮)", () => {
     const done = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
     expect(done.p.result.deepened).toBe(true);
     expect(done.p.slotKey).toBeUndefined();
+    expect(done.p.persisted).toBe(false);
+  });
+
+  // GH #230 (2): run's finish() swallowed a failed cache write and emitted a
+  // done that looked like any other, so the batch driver counted a round
+  // getCached() cannot return as a success.
+  it("run 写盘失败 → done 带 persisted:false、不带 slotKey;写成功不带 persisted(GH #230)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gl-run-writefail-"));
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const s = createAnalysisService({
+      getSettings: () => ({}) as never,
+      matchesDir: dir,
+      clientFactory: () => null as never,
+      emit: (ch, p) => emitted.push({ ch, p }),
+    });
+    const writeSpy = vi.mocked(writeFileSync);
+    const callsBefore = writeSpy.mock.calls.length;
+    writeSpy.mockImplementationOnce(() => {
+      throw new Error("EACCES (simulated disk-write failure)");
+    });
+    const runInput = {
+      matchId: "m1",
+      candidates: [] as never,
+      richContext: "ctx",
+      spec: "s",
+    };
+    await s.run(runInput);
+    expect(writeSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+    const failed = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
+    expect(failed.p.persisted).toBe(false);
+    expect(failed.p.slotKey).toBeUndefined();
+    expect(failed.p.result.fallbackReason).toBe("no-candidates");
+    expect(await s.getCached("m1")).toBeNull();
+
+    emitted.length = 0;
+    await s.run(runInput);
+    const ok = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
+    expect(ok.p.persisted).toBeUndefined();
+    expect(typeof ok.p.slotKey).toBe("string");
+    expect(await s.getCached("m1")).not.toBeNull();
   });
 });
 
@@ -1288,6 +1328,92 @@ describe("deepen 幂等守卫(周度复核 P2#4)", () => {
     release = () => {};
     await s.deepen(args);
     expect(streamCalls).toBe(2);
+  });
+
+  // GH #230 (1): a deep dive on the old result is waiting on its backend; the
+  // user re-analyzes and the new first round lands first. The panel's deep
+  // dive for the new result used to be dropped by the guard (the old one
+  // still held it), and the old one then exited as superseded -- nothing
+  // retried, the fresh result stayed undeepened.
+  it("旧深挖被重新分析取代后,新结果的深挖不被守卫吞掉(GH #230)", async () => {
+    const runReply = JSON.stringify([
+      {
+        eventIds: ["death:a:30"],
+        severity: "high",
+        category: "survival",
+        title: "Death",
+        explanation: "You died at {{t}}s.",
+      },
+    ]);
+    const divePayload = JSON.stringify([
+      {
+        findingIndex: 0,
+        deepDive: "At {{p1.t}}s the healer ate {{p1.spell}}. Swap earlier.",
+        citedKeys: ["p1"],
+      },
+    ]);
+    let releaseOldDive!: () => void;
+    const oldDiveStuck = new Promise<void>((r) => (releaseOldDive = r));
+    // Call order: 1 run, 2 old deep dive (stuck), 3 re-analysis, 4 new deep dive.
+    let calls = 0;
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const s = createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-deep-supersede-")),
+      clientFactory: () =>
+        ({
+          stream: () => {
+            const n = ++calls;
+            return (async function* () {
+              if (n === 2) await oldDiveStuck;
+              yield { delta: n === 2 || n === 4 ? divePayload : runReply };
+            })();
+          },
+        }) as never,
+      emit: (ch, p) => emitted.push({ ch, p }),
+    });
+    const packs = [
+      {
+        findingIndex: 0,
+        anchorFrom: 0,
+        anchorTo: 30,
+        items: [
+          {
+            key: "p1",
+            kind: "cc" as const,
+            t: 28,
+            label: "Fear → Healer",
+            unitNames: ["Healer-R"],
+            facts: { t: "28", spell: "Fear" },
+          },
+        ],
+        facts: { "p1.t": "28", "p1.spell": "Fear" },
+      },
+    ] as never;
+    const dive = async () =>
+      s.deepen({
+        contentLang: "zh" as const,
+        matchId: "m1",
+        findings: (await s.getCached("m1"))!.findings,
+        packs,
+        spec: "Discipline Priest",
+      });
+
+    await s.run(input);
+    const oldDive = dive();
+    await vi.waitFor(() => expect(calls).toBe(2));
+    await s.run(input); // lands while the old deep dive still waits
+    emitted.length = 0;
+    await dive(); // the panel's deep dive for the new result
+    expect(calls).toBe(4); // not dropped: a model call was made
+    const done = emitted.filter((e) => e.ch === "gladlog:analysis:done").pop()!;
+    expect(done.p.result.deepened).toBe(true);
+    expect(done.p.result.findings[0].deepDive).toBeDefined();
+    releaseOldDive();
+    await oldDive; // exits as superseded, writes nothing
+    const cached = (await s.getCached("m1"))!;
+    expect(cached.deepened).toBe(true);
+    expect(cached.findings[0].deepDive).toBeDefined();
   });
 });
 
@@ -1887,6 +2013,57 @@ describe("代际条目回收(周度复核 P3#9)", () => {
     await p;
     expect(s.__generationCount()).toBe(0); // reaped once it lands
     expect((await s.getState("m1")).cached).not.toBeNull(); // not wrongly aborted
+  });
+
+  // GH #230 enabler: generation values used to be a per-match count starting
+  // at 1. Run A (stalled backend) is superseded by run B; B lands and the
+  // match's entry is reaped while A still waits; run C then got 1 again --
+  // A's own value -- and A, released, judged itself current and emitted its
+  // stale done (and cleared C's running entry).
+  it("回收后新一轮不复用旧世代号:被取代的旧轮放行后不发 done(GH #230)", async () => {
+    const { mkdtempSync } = await import("fs");
+    const { tmpdir } = await import("os");
+    const { join } = await import("path");
+    const gates: Array<() => void> = [];
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const s = createAnalysisService({
+      getSettings: () => ({ anthropicApiKey: "k" }) as never,
+      matchesDir: mkdtempSync(join(tmpdir(), "gl-gen-aba-")),
+      clientFactory: () =>
+        ({
+          stream: () => {
+            let open!: () => void;
+            const gate = new Promise<void>((r) => (open = r));
+            gates.push(open);
+            return (async function* () {
+              await gate;
+              yield { delta: "[]" };
+            })();
+          },
+        }) as never,
+      emit: (ch, p) => emitted.push({ ch, p }),
+    });
+    const a = s.run(input("m1"));
+    await vi.waitFor(() => expect(gates.length).toBe(1));
+    const b = s.run(input("m1"));
+    await vi.waitFor(() => expect(gates.length).toBe(2));
+    gates[1]();
+    await b;
+    expect(s.__generationCount()).toBe(0); // reaped while A still waits
+    const c = s.run(input("m1"));
+    await vi.waitFor(() => expect(gates.length).toBe(3));
+    emitted.length = 0;
+    gates[0]();
+    await a;
+    expect(emitted.filter((e) => e.ch === "gladlog:analysis:done")).toEqual(
+      [],
+    );
+    expect(await s.isRunning("m1")).toBe(true); // C still owns the match
+    gates[2]();
+    await c;
+    expect(
+      emitted.filter((e) => e.ch === "gladlog:analysis:done"),
+    ).toHaveLength(1);
   });
 });
 

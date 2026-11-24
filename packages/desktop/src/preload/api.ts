@@ -381,6 +381,10 @@ export interface GladlogApi {
         slotKey?: string;
         /** Language the round ran in (pinned at its start). */
         contentLang?: Language;
+        /** `false` when the result could not be written to the cache (GH
+         * #230): it is shown, but getCached() will not return it. Absent =
+         * written (or a deep dive with no cache to write into). */
+        persisted?: false;
       }) => void,
     ): () => void;
     onError(cb: (d: { matchId: string; message: string }) => void): () => void;

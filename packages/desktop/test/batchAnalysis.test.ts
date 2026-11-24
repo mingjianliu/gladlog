@@ -263,6 +263,39 @@ describe("批量分析驱动器", () => {
     expect(getBatchStatus().failed).toBe(1);
   });
 
+  it("这一轮发了 done 但缓存没写进去(persisted:false):记失败、不深挖(GH #230)", async () => {
+    const deepened: string[] = [];
+    const doneCbs = new Set<(d: unknown) => void>();
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { get: async () => ({ kind: "match", data: src }) },
+      analysis: {
+        getState: async () => ({ cached: null, lang: "zh", running: false }),
+        run: async (input: { matchId: string }) => {
+          for (const cb of doneCbs)
+            cb({
+              matchId: input.matchId,
+              result: { findings: [{ title: "新" }], hadNarration: true },
+              contentLang: "zh",
+              persisted: false,
+            });
+        },
+        getCached: async () => null,
+        onDone: (cb: (d: unknown) => void) => {
+          doneCbs.add(cb);
+          return () => doneCbs.delete(cb);
+        },
+        deepen: async (input: { matchId: string }) => {
+          deepened.push(input.matchId);
+        },
+        cancel: async () => {},
+      },
+    };
+    await startBatch([{ id: "g230", label: "G230" }]);
+    expect(deepened).toEqual([]);
+    expect(getBatchStatus().failed).toBe(1);
+    expect(getBatchStatus().ok).toBe(0);
+  });
+
   it("深挖 chips 的语言取结果自己的 contentLang(不回退到 zh),并把它带给 deepen", async () => {
     // getState carries no `lang` (older stub shape), so the fallback would be
     // "zh": only reading the result's own contentLang yields "en" here.
