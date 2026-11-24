@@ -363,7 +363,11 @@ export function StructuredAnalysisPanel({
         if (cancelled) return;
         setSlots(slotSummaries ?? []);
         setActiveKey(docActiveKey ?? null);
-        if (cached) {
+        // A result that landed while this query was in flight (a done, or a
+        // slot click) is newer than this snapshot: keep it. Without this an
+        // unsaved round's text (GH #230) was replaced by the older saved
+        // result, its `unsaved` flag left set over it (codex re-review).
+        if (cached && resultForRef.current !== matchId) {
           resultForRef.current = matchId;
           // getState's cached is always resolveActiveSlot's content (single-
           // source decision on the main side), so this is always "active",
@@ -746,7 +750,10 @@ export function StructuredAnalysisPanel({
   const handleSelectSlot = (key: string) => {
     if (key === displayedSlotKey) return;
     const forMatch = matchId;
-    setUnsaved(false);
+    // `unsaved` stays set until the slot's content lands (codex re-review):
+    // cleared now, the tab would light up over the unsaved text while the
+    // read is pending -- and stay so if the read fails, with a repeat click
+    // then a no-op.
     setSelectedSlotKey(key);
     slotRequestRef.current = key;
     void bridge()
@@ -764,6 +771,7 @@ export function StructuredAnalysisPanel({
           resultOwnerRef.current =
             key === activeKeyRef.current ? "active" : "other";
           setResult(cached as AnalysisResult);
+          setUnsaved(false);
           setState("done");
           setDisplayEmpty(null);
         } else {
@@ -777,6 +785,7 @@ export function StructuredAnalysisPanel({
           // it restores instantly without another IPC round-trip) -- we only
           // flip this flag and let the render layer swap the result area for a
           // placeholder note.
+          setUnsaved(false);
           setDisplayEmpty("stale");
         }
       })

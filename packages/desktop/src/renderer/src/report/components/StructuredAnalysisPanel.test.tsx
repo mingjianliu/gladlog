@@ -583,6 +583,94 @@ describe("多模型槽 tab 切换(Task 3)", () => {
     expect(activeTabs()).toHaveLength(1);
   });
 
+  const unsavedDone = {
+    matchId: "m1",
+    result: {
+      findings: [
+        {
+          eventIds: ["e3"],
+          severity: "high",
+          category: "survival",
+          title: "没存下的",
+          explanation: "这一轮写盘失败了。",
+        },
+      ],
+      dropped: 0,
+      hadNarration: true,
+    },
+    persisted: false,
+  };
+
+  it("未保存结果上点 tab:内容到之前不亮 tab;读失败仍不亮、再点会重读(GH #230 复核)", async () => {
+    const { fx, getDoneCb } = twoSlotFixture();
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await screen.findByText(/第30秒阵亡/);
+    const tabs = await screen.findByTestId("analysis-slot-tabs");
+    const activeTabs = () =>
+      within(tabs)
+        .getAllByRole("button")
+        .filter((b) => b.className.split(/\s+/).includes("active"));
+    act(() => {
+      (getDoneCb() as unknown as (d: unknown) => void)?.(unsavedDone);
+    });
+    await screen.findByText(/这一轮写盘失败了/);
+    await waitFor(() => expect(activeTabs()).toHaveLength(0));
+    let rejectRead!: (e: Error) => void;
+    fx.analysis.getCached = vi.fn(
+      () =>
+        new Promise((_, rej) => {
+          rejectRead = rej;
+        }),
+    );
+    fireEvent.click(within(tabs).getAllByRole("button")[1]); // agy:pro
+    expect(activeTabs()).toHaveLength(0); // read pending: unsaved text, no tab
+    await act(async () => {
+      rejectRead(new Error("ipc boom"));
+    });
+    expect(activeTabs()).toHaveLength(0);
+    expect(screen.getByText(/这一轮写盘失败了/)).toBeTruthy();
+    fx.analysis.getCached = vi.fn(() => Promise.resolve(resultA));
+    fireEvent.click(within(tabs).getAllByRole("button")[1]); // retried
+    expect(fx.analysis.getCached).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/第30秒阵亡/)).toBeTruthy();
+    expect(activeTabs()).toHaveLength(1);
+  });
+
+  it("初次加载还没回来时到了一轮未保存结果:晚到的旧快照不覆盖它(GH #230 复核)", async () => {
+    const { fx, getDoneCb } = twoSlotFixture();
+    // every getState (the initial load, and the refresh onDone fires) waits
+    const pendingStates: Array<(v: unknown) => void> = [];
+    fx.analysis.getState = vi.fn(
+      () =>
+        new Promise((r) => {
+          pendingStates.push(r);
+        }),
+    );
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await waitFor(() => expect(fx.analysis.getState).toHaveBeenCalled());
+    act(() => {
+      (getDoneCb() as unknown as (d: unknown) => void)?.(unsavedDone);
+    });
+    await screen.findByText(/这一轮写盘失败了/);
+    expect(pendingStates.length).toBeGreaterThanOrEqual(1);
+    await act(async () => {
+      for (const r of pendingStates)
+        r({ cached: resultA, running: false, ...twoSlotSummary });
+    });
+    expect(screen.getByText(/这一轮写盘失败了/)).toBeTruthy();
+    expect(screen.queryByText(/第30秒阵亡/)).toBeNull();
+  });
+
   it("onDone 后重新拉取 getState,tab 条按最新槽摘要更新(agy flash 复核 F2)", async () => {
     const { getDoneCb, setDocSummary } = twoSlotFixture();
     render(
