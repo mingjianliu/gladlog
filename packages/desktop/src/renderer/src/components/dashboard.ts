@@ -392,6 +392,10 @@ export interface CharacterCard {
   name: string;
   games: number;
   lastPlayed: number;
+  /** Spec / class of the character's most recent match that carries one
+   * (`playerSpecId`); absent on an index built before the field existed. */
+  specId?: number;
+  classId?: number;
   /** Most played bracket first. */
   lines: BracketLine[];
 }
@@ -489,11 +493,21 @@ export function deriveCharacterCards(
       (l) => !bracket || l.bracket === bracket,
     );
     if (lines.length === 0) continue;
+    let latest: StoredMatchMeta | undefined;
+    for (const m of metas)
+      if (
+        m.playerName === name &&
+        m.playerSpecId &&
+        (!latest || m.startTime > latest.startTime)
+      )
+        latest = m;
     all.push({
       name,
       games: lines.reduce((a, l) => a + l.games, 0),
       lastPlayed: Math.max(...lines.map((l) => l.lastPlayed)),
       lines,
+      ...(latest?.playerSpecId ? { specId: latest.playerSpecId } : {}),
+      ...(latest?.playerClassId ? { classId: latest.playerClassId } : {}),
     });
   }
   all.sort((a, b) => b.lastPlayed - a.lastPlayed);

@@ -379,6 +379,7 @@ type AnalyzedMatchDir = {
     zoneId?: string;
     result?: string;
     bracket?: string;
+    playerName?: string;
   } | null;
 };
 
@@ -1939,6 +1940,9 @@ export function createAnalysisService(deps: {
           zoneId?: string;
           result?: string;
           bracket?: string;
+          /** the recording character (meta.playerName): the record page
+           * filters the notebook per character */
+          playerName?: string;
           contentLang: Language;
         }>;
       }>
@@ -1960,6 +1964,7 @@ export function createAnalysisService(deps: {
         zoneId?: string;
         result?: string;
         bracket?: string;
+        playerName?: string;
         contentLang: Language;
       };
       const byCategory = new Map<string, Entry[]>();
@@ -1987,6 +1992,7 @@ export function createAnalysisService(deps: {
             zoneId: meta.zoneId,
             result: meta.result,
             bracket: meta.bracket,
+            ...(meta.playerName ? { playerName: meta.playerName } : {}),
             contentLang,
           });
           byCategory.set(f.category, list);

@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import type { StoredMatchMeta } from "../../../main/matchStore";
 import type { TFn } from "../../../shared/i18n";
 import { useT } from "../i18n/LangProvider";
+import { useIconDataUrl } from "../report/components/useIconDataUrl";
+import {
+  classColor,
+  specIconName,
+  specName,
+} from "../report/data/gameConstants";
 import { shortUnitName } from "../report/derive/teamSide";
 import {
   bracketLabel,
@@ -24,6 +30,65 @@ import {
  */
 
 const realmOf = (name: string): string => name.split("-")[1] ?? "";
+
+/** The character's most recent spec (`playerSpecId` on its index rows). */
+export function latestSpecOf(
+  metas: StoredMatchMeta[],
+  name: string,
+): { specId?: number; classId?: number } {
+  let latest: StoredMatchMeta | undefined;
+  for (const m of metas)
+    if (
+      m.playerName === name &&
+      m.playerSpecId &&
+      (!latest || m.startTime > latest.startTime)
+    )
+      latest = m;
+  return latest
+    ? { specId: latest.playerSpecId, classId: latest.playerClassId }
+    : {};
+}
+
+/**
+ * Round spec icon with a class-coloured ring (the record page's character
+ * avatar). The icon comes through the same main-process icon cache as the
+ * match list's SpecDot; without a spec (an index built before playerSpecId)
+ * or without the icon it falls back to the name's initial.
+ */
+export function SpecAvatar({
+  name,
+  specId,
+  classId,
+  size = "md",
+}: {
+  name: string;
+  specId?: number;
+  classId?: number;
+  size?: "sm" | "md" | "lg";
+}) {
+  const { dataUrl } = useIconDataUrl(specId ? specIconName(specId) : null);
+  const ring = classId ? classColor(classId) : undefined;
+  const cls = `cs-avatar cs-avatar-${size}`;
+  if (dataUrl && specId)
+    return (
+      <img
+        className={`${cls} cs-avatar-icon`}
+        src={dataUrl}
+        alt=""
+        title={specName(specId)}
+        style={ring ? { borderColor: ring } : undefined}
+      />
+    );
+  return (
+    <span
+      className={cls}
+      aria-hidden="true"
+      style={ring ? { borderColor: ring, color: ring } : undefined}
+    >
+      {shortUnitName(name).slice(0, 1)}
+    </span>
+  );
+}
 
 const fmtDay = (t: TFn, ms: number): string => {
   const d = new Date(ms);
@@ -144,7 +209,12 @@ export function CharacterOverview({
   onBracket,
   onPick,
   onShowAll,
+  onRebuild,
+  rebuilding,
 }: {
+  /** Rebuild the index (backfills playerSpecId for the avatars). */
+  onRebuild?: () => void;
+  rebuilding?: boolean;
   /** Offered on the empty state when a shorter period hides older matches. */
   onShowAll?: () => void;
   cards: CharacterCard[];
@@ -240,9 +310,11 @@ export function CharacterOverview({
               })}
             >
               <span className="cs-card-head">
-                <span className="cs-avatar" aria-hidden="true">
-                  {shortUnitName(c.name).slice(0, 1)}
-                </span>
+                <SpecAvatar
+                  name={c.name}
+                  specId={c.specId}
+                  classId={c.classId}
+                />
                 <span className="cs-card-title">
                   <span className="cs-card-name">
                     {shortUnitName(c.name)}{" "}
@@ -269,6 +341,21 @@ export function CharacterOverview({
         </div>
       )}
 
+      {onRebuild &&
+        cards.concat(minor).some((c) => c.specId === undefined) && (
+          <div className="cs-minor">
+            <span className="cs-dim">{t("stats.cs.noSpecIcons")}</span>
+            <button
+              className="cs-chip"
+              disabled={rebuilding}
+              onClick={onRebuild}
+              data-testid="cs-rebuild"
+            >
+              {rebuilding ? t("stats.cs.rebuilding") : t("stats.cs.rebuild")}
+            </button>
+          </div>
+        )}
+
       {(minor.length > 0 || unnamed > 0) && (
         <div className="cs-minor">
           {minor.length > 0 && (
@@ -282,6 +369,12 @@ export function CharacterOverview({
               className="cs-chip"
               onClick={() => onPick(c.name)}
             >
+              <SpecAvatar
+                name={c.name}
+                size="sm"
+                specId={c.specId}
+                classId={c.classId}
+              />
               {shortUnitName(c.name)} ·{" "}
               {c.lines.map((l) => bracketLabel(l.bracket)).join("/")}{" "}
               {t("common.matchCountPlural", { n: c.games })}
@@ -504,6 +597,7 @@ export function CharacterDetail({
     ? deriveCharacterBracket(metas, period, now, character, line.bracket)
     : null;
   const total = lines.reduce((a, l) => a + l.games, 0);
+  const heroSpec = latestSpecOf(metas, character);
   return (
     <div className="cs" data-testid="cs-detail">
       <div className="cs-crumbs">
@@ -518,15 +612,14 @@ export function CharacterDetail({
             aria-pressed={n === character}
             onClick={() => onPick(n)}
           >
+            <SpecAvatar name={n} size="sm" {...latestSpecOf(metas, n)} />
             {shortUnitName(n)}
           </button>
         ))}
       </div>
 
       <div className="cs-hero">
-        <span className="cs-avatar cs-avatar-lg" aria-hidden="true">
-          {shortUnitName(character).slice(0, 1)}
-        </span>
+        <SpecAvatar name={character} size="lg" {...heroSpec} />
         <span className="cs-card-title">
           <span className="cs-hero-name">
             {shortUnitName(character)}{" "}

@@ -245,6 +245,10 @@ export interface StoredMatchMeta {
   /** The recorder's own personal rating (used for the rating curve; the team
    * average avgRating is kept as a fallback). */
   playerRating?: number | null;
+  /** The recorder's spec / class in this match (the record page's character
+   * avatar). Old rows lack it → backfilled by rebuildIndex. */
+  playerSpecId?: number;
+  playerClassId?: number;
   /** Number of events in this match (definition: see EVENT_ARRAY_FIELDS —
    * only the caster-side arrays are summed). Used by the developer page's fact
    * card: computing it on demand means walking the whole doc, exactly the long
@@ -401,6 +405,8 @@ function metaExtras(src: {
   | "teams"
   | "playerName"
   | "playerRating"
+  | "playerSpecId"
+  | "playerClassId"
   | "eventCount"
 > {
   const durationS = Math.max(
@@ -450,6 +456,8 @@ function metaExtras(src: {
     teams: [own, foe],
     playerName,
     playerRating,
+    ...(recorder?.specId ? { playerSpecId: recorder.specId } : {}),
+    ...(recorder?.classId ? { playerClassId: recorder.classId } : {}),
     eventCount,
   };
 }

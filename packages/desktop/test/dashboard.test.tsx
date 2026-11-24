@@ -508,3 +508,67 @@ describe("战绩页改版:按角色 × 赛制", () => {
     expect(await screen.findByTestId("cs-overview")).toBeTruthy();
   });
 });
+
+describe("战绩页:专精头像 + 按角色的错题本", () => {
+  const now = Date.now();
+  const H2 = 3600_000;
+  const lib = (): StoredMatchMeta[] => [
+    meta({ id: "a1", playerName: "Dr-Tich", startTime: now - 5 * H2, playerRating: 2000, playerSpecId: 1467, playerClassId: 13 }),
+    meta({ id: "a2", playerName: "Dr-Tich", startTime: now - 4 * H2, playerRating: 2010, playerSpecId: 1468, playerClassId: 13 }),
+    meta({ id: "a3", playerName: "Dr-Tich", startTime: now - 3 * H2, playerRating: 2020 }),
+    meta({ id: "b1", playerName: "Pal-Illi", startTime: now - 2 * H2, playerRating: 1800 }),
+    meta({ id: "b2", playerName: "Pal-Illi", startTime: now - H2, playerRating: 1810 }),
+    meta({ id: "b3", playerName: "Pal-Illi", startTime: now - H2 / 2, playerRating: 1820 }),
+  ];
+
+  it("卡片取该角色最近一场带专精的记录;旧索引没有专精时不编一个", () => {
+    const { cards } = deriveCharacterCards(lib(), "all", now);
+    const dr = cards.find((c) => c.name === "Dr-Tich")!;
+    expect([dr.specId, dr.classId]).toEqual([1468, 13]);
+    const pal = cards.find((c) => c.name === "Pal-Illi")!;
+    expect(pal.specId).toBeUndefined();
+  });
+
+  it("错题本:总览标出角色,进角色页只剩这个角色的条目", async () => {
+    const entry = (matchId: string, playerName: string, title: string) => ({
+      matchId,
+      flagKey: title,
+      flag: null,
+      title,
+      explanation: "",
+      severity: "medium",
+      startTime: now - H2,
+      playerName,
+    });
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: { list: async () => lib() },
+      analysis: {
+        notebook: async () => [
+          {
+            category: "positioning",
+            count: 2,
+            recurring: 0,
+            done: 0,
+            entries: [
+              entry("a1", "Dr-Tich", "龙站位"),
+              entry("b1", "Pal-Illi", "骑士站位"),
+            ],
+          },
+        ],
+      },
+    };
+    render(<StatsDashboard />);
+    const nb = await screen.findByTestId("dash-notebook");
+    fireEvent.click(nb.querySelector(".dash-nb-head")!);
+    expect(
+      [...nb.querySelectorAll(".dash-nb-char")].map((e) => e.textContent),
+    ).toEqual(["Dr", "Pal"]);
+    fireEvent.click(screen.getByLabelText(/查看 Dr 的战绩/));
+    const nb2 = await screen.findByTestId("dash-notebook");
+    expect(nb2.querySelector(".dash-nb-count")!.textContent).toBe("×1");
+    // the category stays open from the overview (openCats is per category)
+    expect(nb2.textContent).toContain("龙站位");
+    expect(nb2.textContent).not.toContain("骑士站位");
+    expect(nb2.querySelector(".dash-nb-char")).toBeNull();
+  });
+});

@@ -22,6 +22,7 @@ export const enStats = {
   "stats.kpi.medianDuration": "Median duration",
   "stats.practice.title":
     "What to practise this week — mistakes notebook + long-term patterns",
+  "stats.practice.patternsOnOverview": "Long-term patterns are computed across all characters — see the overview.",
   "stats.learning.consolidating": "Consolidating…",
   "stats.learning.consolidate": "Consolidate again",
   "stats.learning.backfill": "Backfilling past analyses… {scanned}/{total}",
@@ -93,6 +94,9 @@ export const enStats = {
   "stats.cs.emptyPeriod": "No matches in this period.",
   "stats.cs.emptyCharacter": "This character has no matches in this period.",
   "stats.cs.showAll": "Show all time",
+  "stats.cs.noSpecIcons": "Some characters have no spec icon yet (the index predates it).",
+  "stats.cs.rebuild": "Rebuild index",
+  "stats.cs.rebuilding": "Rebuilding… (re-reads every match, may take minutes)",
   "stats.cs.openCharacter": "Open {name}'s record",
   "stats.cs.cardMeta": (p: MessageParams) =>
     `${plural(p.n, "match", "matches")} · last ${p.day}`,

@@ -264,6 +264,8 @@ interface NotebookEntry {
   zoneId?: string;
   result?: string;
   bracket?: string;
+  /** Recording character (absent on older backends / stubs). */
+  playerName?: string;
   /** Language the finding was generated in (spec §6.13); absent from older
    * stubs, read as the current language. */
   contentLang?: Language;
@@ -540,16 +542,37 @@ export function StatsDashboard({
     effBracket && /shuffle/i.test(effBracket)
       ? ("stats.row.rounds" as const)
       : ("stats.row.games" as const);
+  // The mistakes notebook follows the page: every character on the overview,
+  // one character on its page (entries carry the recording character). The
+  // long-term patterns are computed over the whole ledger, so they stay on
+  // the overview only.
+  const shownNotebook = useMemo(() => {
+    if (!character) return notebook;
+    const out: NotebookGroup[] = [];
+    for (const g of notebook) {
+      const entries = g.entries.filter((e) => e.playerName === character);
+      if (entries.length === 0) continue;
+      out.push({
+        ...g,
+        count: entries.length,
+        recurring: entries.filter((e) => e.flag === "recurring").length,
+        done: entries.filter((e) => e.flag === "done").length,
+        entries,
+      });
+    }
+    return out.sort((a, b) => b.count - a.count);
+  }, [notebook, character]);
+  const showLearning = !character && !!(rulesDoc || learnState);
   // Shared between the legacy layout and the per-character pages.
   const practiceCard = (
     <>
-        {(notebook.length > 0 || rulesDoc || learnState) && (
+        {(shownNotebook.length > 0 || showLearning) && (
           <div className="dash-card" data-testid="dash-practice">
             <span className="dash-card-head">
               <span className="rpt-card-label">
                 {t("stats.practice.title")}
               </span>
-              {(rulesDoc || learnState) && (
+              {showLearning && (
                 <>
                   <button
                     className="dash-learning-run"
@@ -578,7 +601,7 @@ export function StatsDashboard({
             structural — cross-match stable patterns first (high impact),
             notebook entries by frequency behind them; no synthetic score is
             invented. */}
-            {(rulesDoc || learnState) && (
+            {showLearning && (
               <div data-testid="dash-learning">
                 <p className="dash-learning-meta">
                   {learnState?.backfill?.running
@@ -731,9 +754,14 @@ export function StatsDashboard({
                   )}
               </div>
             )}
-            {notebook.length > 0 && (
+            {character && (rulesDoc || learnState) && (
+              <p className="dash-learning-meta">
+                {t("stats.practice.patternsOnOverview")}
+              </p>
+            )}
+            {shownNotebook.length > 0 && (
               <div data-testid="dash-notebook">
-                {notebook.map((g) => {
+                {shownNotebook.map((g) => {
                   const open = !!openCats[g.category];
                   return (
                     <div key={g.category} className="dash-nb-group">
@@ -775,6 +803,11 @@ export function StatsDashboard({
                               {new Date(e.startTime).getMonth() + 1}/
                               {new Date(e.startTime).getDate()}
                             </span>
+                            {!character && e.playerName && (
+                              <span className="dash-nb-char">
+                                {shortUnitName(e.playerName)}
+                              </span>
+                            )}
                             <span className="dash-nb-meta">
                               {e.zoneId
                                 ? (zoneMetadata[e.zoneId]?.name ??
@@ -1079,6 +1112,7 @@ export function StatsDashboard({
             setDetailBracket(undefined);
           }}
         >
+          {practiceCard}
           {detailTables}
         </CharacterDetail>
       ) : perCharacter ? (
@@ -1092,6 +1126,8 @@ export function StatsDashboard({
             bracket={overviewBracket}
             onBracket={setOverviewBracket}
             onShowAll={period !== "all" ? () => setPeriod("all") : undefined}
+            onRebuild={runRebuild}
+            rebuilding={rebuild.running}
             onPick={(n) => {
               setCharacter(n);
               setDetailBracket(overviewBracket);
