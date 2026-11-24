@@ -33,19 +33,19 @@ const LINE = new RegExp(
 );
 const spellOf = (rest: string): string =>
   /^(.+?)(?: \(| \[|$)/.exec(rest)?.[1] ?? rest;
-/** A REFRESH inside the line's second that no press of the name explains (no
- * press within 50 ms of it, none in `PRESS_AFTER_MS` after it) is an
- * activation of its own, and a `[no press logged]` line in that second may be
- * about it, not about a pressed APPLIED beside it. 11346ea9 r1 1:53 (T259 /
- * B192): Frenzied Regeneration APPLIED .197 with the druid's press at .198
- * (its own line), then at .937 a REFRESH carrying the Well-Honed Instincts
- * marker 382912, the proc the second line prints. */
-export function unpressedRefreshInSecond(
+/** The REFRESHes inside the line's second that no press of the name
+ * explains (no press within 50 ms of one, none in `PRESS_AFTER_MS` after it):
+ * activations of their own, each of which a `[no press logged]` line in that
+ * second may be about instead of a pressed APPLIED beside it. 11346ea9 r1 1:53
+ * (T259 / B192): Frenzied Regeneration APPLIED .197 with the druid's press at
+ * .198 (its own line), then at .937 a REFRESH carrying the Well-Honed
+ * Instincts marker 382912, the proc the second line prints. */
+export function unpressedRefreshesInSecond(
   auras: readonly { event: string; ts: number }[],
   pressTs: readonly number[],
   lo: number,
-): boolean {
-  return auras.some(
+): number {
+  return auras.filter(
     (a) =>
       a.event === REFRESH &&
       a.ts >= lo &&
@@ -54,10 +54,35 @@ export function unpressedRefreshInSecond(
         (p) =>
           Math.abs(p - a.ts) <= 50 || (p >= a.ts && p <= a.ts + PRESS_AFTER_MS),
       ),
-  );
+  ).length;
+}
+
+/** Whether the `nth` (0-based) `[no press logged]` line of a unit's spell in
+ * one second is a proc's own line: only while every press of the name logged
+ * in that second already has a line of its own without the tag, and only up to
+ * the number of unpressed REFRESHes there. A press relabelled `[no press
+ * logged]` beside a proc is still caught (B192 review: both lines tagged, the
+ * labelled-press count falls short of the presses). */
+export function isProcOwnNoPressLine(
+  nth: number,
+  unpressedRefreshes: number,
+  labelledPressLines: number,
+  pressesInSecond: number,
+): boolean {
+  return nth < unpressedRefreshes && labelledPressLines >= pressesInSecond;
 }
 
 export function run(ctx: IRoundCtx): void {
+  // per unit-spell-second: lines without the tag, and tagged lines seen so far
+  const keyOf = (m: RegExpExecArray): string =>
+    `${m[3]}|${spellOf(m[4]!)}|${+m[1]! * 60 + +m[2]!}`;
+  const labelled = new Map<string, number>();
+  for (const line of ctx.lines) {
+    const m = LINE.exec(line);
+    if (m && !line.includes("[no press logged]"))
+      labelled.set(keyOf(m), (labelled.get(keyOf(m)) ?? 0) + 1);
+  }
+  const taggedSeen = new Map<string, number>();
   for (const line of ctx.lines) {
     const m = LINE.exec(line);
     if (!m) continue;
@@ -79,11 +104,19 @@ export function run(ctx: IRoundCtx): void {
       );
       if (!up) continue;
       ctx.bump("noPressButPressed");
+      const key = keyOf(m);
+      const nth = taggedSeen.get(key) ?? 0;
+      taggedSeen.set(key, nth + 1);
       if (
-        unpressedRefreshInSecond(
-          auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
-          presses.map(tsOf),
-          lo,
+        isProcOwnNoPressLine(
+          nth,
+          unpressedRefreshesInSecond(
+            auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
+            presses.map(tsOf),
+            lo,
+          ),
+          labelled.get(key) ?? 0,
+          presses.filter((c) => tsOf(c) >= lo && tsOf(c) < lo + 1000).length,
         )
       )
         continue;
