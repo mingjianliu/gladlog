@@ -215,7 +215,7 @@ export const STEALTH_KEPT_BY_ALLOWED_PRESS_IDS: ReadonlySet<string> = new Set([
  * `STEALTH_KEPT_BY_ALLOWED_PRESS_IDS` aura, a press stealth allows.
  *
  * With `units`, also a debuff the holder put on another unit
- * (`openerDebuffBeforeMs`): an unseen unit's cast row is not always
+ * (`openerDebuffBefore`): an unseen unit's cast row is not always
  * written, and its opener then shows only as the aura it landed (fact7 D59).
  */
 export function holderFirstOwnActionAfterMs(
@@ -308,9 +308,9 @@ export function holderFirstOwnActionAfterMs(
       continue;
     if (after(t, d.logLine.lineIndex) && t < first) first = t;
   }
-  return units
-    ? openerDebuffBeforeMs(holder, after, first, units, allowed)
-    : first;
+  if (!units) return first;
+  const opener = openerDebuffBefore(holder, after, first, units, allowed);
+  return opener ? opener.logLine.timestamp : first;
 }
 
 /**
@@ -343,23 +343,27 @@ function rowAfterApplication(
       line > fromLine);
 }
 
+/** An aura row of the round, as `openerDebuffBefore` returns it. */
+type OpenerDebuffRow = NonNullable<ICombatUnit["auraEvents"]>[number];
+
 /**
- * The debuff-opener leg of `holderFirstOwnActionAfterMs` alone (log ms, or
- * Infinity): the first debuff the holder landed on another unit after the
- * application of `auraId` at `afterMs` (row order inside that millisecond)
- * that says it acted (`openerDebuffBeforeMs`). Exported for scan5
- * effectEnd's `unseenEndOpener`, which checks the burst ledger's printed
- * length against exactly this reading (codex 85-mac-minifix-T261-1 #1).
+ * The debuff-opener leg of `holderFirstOwnActionAfterMs` alone: the first
+ * debuff row the holder landed on another unit after the application of
+ * `auraId` at `afterMs` (row order inside that millisecond) that says it
+ * acted (`openerDebuffBefore`), or undefined. Exported for scan5 effectEnd's
+ * `unseenEndOpener`, which checks the burst ledger's printed length against
+ * exactly this reading and names the row it returns (codex
+ * 85-mac-minifix-T261-1 #1, -1b #2).
  */
-export function holderOpenerDebuffAfterMs(
+export function holderOpenerDebuffAfter(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents"> &
     Partial<Pick<ICombatUnit, "auraEvents">>,
   afterMs: number,
   auraId: string,
   units: readonly ICombatUnit[],
   afterLine?: number,
-): number {
-  return openerDebuffBeforeMs(
+): OpenerDebuffRow | undefined {
+  return openerDebuffBefore(
     holder,
     rowAfterApplication(holder, afterMs, auraId, afterLine),
     Infinity,
@@ -419,14 +423,15 @@ const stealthAllowsPress =
  * before Greater Invisibility, its debuff written below the invisibility).
  */
 
-function openerDebuffBeforeMs(
+function openerDebuffBefore(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents">,
   after: (t: number, line: number | undefined) => boolean,
   firstMs: number,
   units: readonly ICombatUnit[],
   stealthAllows: (spellId: string) => boolean,
-): number {
+): OpenerDebuffRow | undefined {
   let first = firstMs;
+  let row: OpenerDebuffRow | undefined;
   for (const u of units) {
     if (u.id === holder.id) continue;
     for (const a of u.auraEvents ?? []) {
@@ -475,8 +480,11 @@ function openerDebuffBeforeMs(
           (c.logLine.lineIndex !== undefined ||
             !after(c.logLine.timestamp, Infinity)),
       );
-      if (!ownLanding) first = t;
+      if (!ownLanding) {
+        first = t;
+        row = a;
+      }
     }
   }
-  return first;
+  return row;
 }
