@@ -2145,8 +2145,8 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
     ).toMatchObject([{ unitId: "F1", spellId: LASSO_AURA, tMs: 28_014 }]);
   });
   it("codex review: a non-control cast aimed at the target between Ring of Frost and its aura does not time it", () => {
-    // opener 10 s, response deadline 18 s: Ring of Frost (untargeted) 17.5 s,
-    // Frostbolt at E1 18.5 s, the Ring's aura 82691 on E1 at 19 s
+    // Ring of Frost (untargeted) 17.5 s, Frostbolt at E1 18.5 s, the Ring's
+    // aura 82691 on E1 at 19 s — inside the span (R109: the landing decides)
     const casts = [
       { unitId: "F1", spellId: "113724", dest: undefined, tMs: 17_500 },
       { unitId: "F1", spellId: "116", dest: "E1", tMs: 18_500 },
@@ -2158,9 +2158,64 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
         (id) => id,
         casts,
         10_000,
-        18_000,
+        19_500,
       ),
     ).toMatchObject([{ unitId: "F1", spellId: "82691", tMs: 17_500 }]);
+  });
+  describe("a press whose control lands later: the landing decides, the press is printed (user ruling R109, T256)", () => {
+    const DEEP_BREATH = "357210";
+    const TERROR = "372245";
+    const press = (tMs: number) => [
+      { unitId: "F1", spellId: DEEP_BREATH, dest: undefined, tMs },
+    ];
+    const run = (pressMs: number, auraMs: number, src = "F1") =>
+      controlLandedResponses(
+        [
+          {
+            id: "E1",
+            auraEvents: [
+              {
+                timestamp: auraMs,
+                spellId: TERROR,
+                srcUnitId: src,
+                logLine: { event: "SPELL_AURA_APPLIED" },
+              },
+            ],
+          },
+        ],
+        new Set(["E1"]),
+        (id) => (id === "F1" || id.endsWith("-F1") ? "F1" : undefined),
+        press(pressMs),
+        10_000,
+        19_500,
+      );
+    it("pressed inside the span, landed inside: unchanged, no second instant", () => {
+      const [r] = run(10_500, 11_300);
+      expect(r).toMatchObject({ tMs: 10_500, auraAtMs: 11_300 });
+      // ranked where it is printed: only a summon-timed control has a
+      // second ranking instant
+      expect(r!.orderAtMs).toBeUndefined();
+    });
+    it("pressed before the span, landed inside: an answer, printed at the press", () => {
+      expect(run(9_200, 10_400)).toMatchObject([
+        { unitId: "F1", spellId: TERROR, tMs: 9_200, auraAtMs: 10_400 },
+      ]);
+    });
+    it("pressed inside the span, landed past it: no answer", () => {
+      expect(run(19_000, 20_100)).toEqual([]);
+    });
+    it("a pet sent by its owner's press follows the same rule", () => {
+      expect(run(19_000, 20_100, "Pet-0-1-F1")).toEqual([]);
+      expect(run(9_200, 10_400, "Pet-0-1-F1")).toMatchObject([
+        { tMs: 9_200, auraAtMs: 10_400 },
+      ]);
+    });
+    it("a totem or guardian its summon does not time keeps the press for both (R90 scope note)", () => {
+      expect(run(19_000, 20_100, "Creature-0-T-F1")).toMatchObject([
+        { tMs: 19_000 },
+      ]);
+      expect(run(9_200, 10_400, "Creature-0-T-F1")).toEqual([]);
+    });
   });
   it("codex 35-CD-08: a failed aimed control does not swallow a landed AoE one", () => {
     // burst 10 s; the monk's Spear Hand Strike at E1 11 s (no interrupt),

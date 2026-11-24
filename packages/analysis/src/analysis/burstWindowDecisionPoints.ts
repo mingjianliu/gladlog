@@ -1233,6 +1233,38 @@ export function landedControlInstantMs(x: {
 }
 
 /**
+ * The instant that decides whether a landed control ANSWERS a window (is it
+ * inside the response span), beside the instant it is printed at
+ * (`landedControlInstantMs`): the control's LANDING — user rulings R90 (a
+ * totem or guardian timed by its summon) and R109 (a press of the answering
+ * player whose control lands later). The printed instant only for a totem's
+ * or guardian's control its summon does not time (`fromSummon`, no summon
+ * instant: the R90 scope note). The one reading `controlLandedResponses`
+ * and scan5/t256.ts share.
+ */
+export function landedControlMemberAtMs(x: {
+  printedMs: number;
+  auraMs: number;
+  summonedMs: number | null;
+  /** the aura's source is a totem or guardian of the answering player
+   * (neither the player nor a `Pet-` unit) */
+  fromSummon: boolean;
+}): number {
+  return x.fromSummon && x.summonedMs === null ? x.printedMs : x.auraMs;
+}
+
+/**
+ * The response span of a burst window opened at the whole second `tMs`:
+ * `[tMs − BURST_RESPONSE_PRE_MS, tMs + BURST_RESPONSE_WINDOW_MS]`.
+ */
+export function burstResponseSpanMs(tMs: number): { w0: number; w1: number } {
+  return {
+    w0: tMs - BURST_RESPONSE_PRE_MS,
+    w1: tMs + BURST_RESPONSE_WINDOW_MS,
+  };
+}
+
+/**
  * The latest relocation (`TOTEM_RELOCATION_IDS`) by `unitId` of a totem
  * summoned at `summonedMs` before its control landed at `auraMs` — over the
  * totem's whole life, not the ground-control fuse (batch review
@@ -1458,14 +1490,35 @@ export function controlLandedResponses(
       // rogue 14 ms before he pressed is an answer ("2.0s before it
       // opened", 8f110f66 7:44); one dropped 4.8 s after a Bestial Wrath
       // whose root reached the hunter at 8.8 s is none (28c39eb1 r2 0:06).
-      // Every other source keeps one instant for both.
-      const memberAtMs = summonAtMs !== null ? a.timestamp : tMs;
+      // User ruling R109 (2026-11-22, T256) extends the same two instants
+      // to a PRESS of the answering player whose control lands later (Deep
+      // Breath 357210 → Terror of the Skies 372245, a Ring of Frost walked
+      // into, a trap stepped on, a pet sent to stun): the landing decides
+      // membership, the press is printed. What keeps its printed instant
+      // for both is a totem's or guardian's control that its summon does
+      // not time — the coordinator's reading of R90's scope, with its
+      // pinned example (61740741 5:11: Capacitor Totem pressed 7.8 s into
+      // the window, Static Charge at 9.8 s, reads "in 7.8s").
+      const memberAtMs = landedControlMemberAtMs({
+        printedMs: tMs,
+        auraMs: a.timestamp,
+        summonedMs: summonAtMs,
+        fromSummon: a.srcUnitId !== unitId && !fromPet,
+      });
       if (memberAtMs < w0 || memberAtMs > w1) continue;
       out.push({
         unitId,
         spellId: sid,
         tMs,
-        ...(memberAtMs !== tMs ? { orderAtMs: memberAtMs } : {}),
+        // ranked by its landing only when its summon times it (R90, batch
+        // review 80-PIPE-181-B167 #1: a drop can be 14 s old). A press
+        // whose control lands within the fuse keeps its printed instant as
+        // its rank — R109 moved membership and nothing else (ranking those
+        // by the landing would rename the credited answer of 14 windows of
+        // the 605; not asked)
+        ...(summonAtMs !== null && memberAtMs !== tMs
+          ? { orderAtMs: memberAtMs }
+          : {}),
         ...(caster.id !== undefined ? { holderId: caster.id } : {}),
         auraSrcId: a.srcUnitId,
         auraAtMs: a.timestamp,
@@ -2106,8 +2159,7 @@ export function burstWindowDecisionPoints(
       ];
 
       // ── responses: any friendly, [tMs - pre, tMs + 8s] ──────────────────
-      const w0 = tMs - BURST_RESPONSE_PRE_MS;
-      const w1 = tMs + BURST_RESPONSE_WINDOW_MS;
+      const { w0, w1 } = burstResponseSpanMs(tMs);
       const casterIdSet = new Set(casterIds);
       // whose control answers THIS burst: a caster of the lead or of an extra
       // inside the 8 s the sentence judges — the CDs `burstExtrasLabel`

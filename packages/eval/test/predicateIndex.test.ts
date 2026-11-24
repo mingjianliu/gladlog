@@ -4261,6 +4261,18 @@ const INDEX: PredicateRow[] = [
     symbol: "controlLandedResponses",
     mod: burstWindowDecisionPoints,
   },
+  // T256 (ruling R109): the instant a landed control's membership is
+  // decided at, and the response span
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "landedControlMemberAtMs",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "burstResponseSpanMs",
+    mod: burstWindowDecisionPoints,
+  },
   // T183 (ruling R73): the span a burst window's pressured trough is read
   // over past its horizon, and the suffix that states it
   {
