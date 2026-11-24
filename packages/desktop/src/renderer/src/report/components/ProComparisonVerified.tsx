@@ -18,6 +18,7 @@ import {
   type AiModelSelection,
   resolveAiModel,
 } from "../../../../shared/aiModels";
+import type { Language } from "../../../../shared/i18n/index";
 import { bridge } from "../../bridge";
 import { useT } from "../../i18n/LangProvider";
 import { SPEC_NAMES_ZH } from "../data/specNames";
@@ -97,6 +98,12 @@ export function ProComparisonVerified({
     model: string;
   } | null>(null);
   const elapsedS = useElapsedSince(state === "running" ? startedAt : null);
+  /** Bumped to re-run the mount check (a completion of another language). */
+  const [resync, setResync] = useState(0);
+  /** The current language for the event listeners, which subscribe once per
+   * match. */
+  const langRef = useRef(lang);
+  langRef.current = lang;
 
   useEffect(() => {
     // The bridge surface may be missing (fixture stub)
@@ -137,6 +144,8 @@ export function ProComparisonVerified({
   // back to getCached silently.
   // `lang` is a dependency too: main keys the compare cache by language, so a
   // language switch must re-read it (same as StructuredAnalysisPanel).
+  // `resync` re-runs it when a completion of another language arrives (see
+  // the done listener below).
   useEffect(() => {
     let cancelled = false;
     setResult(null);
@@ -187,7 +196,7 @@ export function ProComparisonVerified({
     return () => {
       cancelled = true;
     };
-  }, [matchId, lang]);
+  }, [matchId, lang, resync]);
 
   // Subscribe to the (verified) done + error events. We deliberately do NOT
   // display onDelta text: streamed deltas are interpolated but not yet
@@ -197,8 +206,15 @@ export function ProComparisonVerified({
       if (d.matchId === matchId) setState("running");
     });
     const offDone = bridge().compare.onDone(
-      (d: { matchId: string; result: unknown }) => {
+      (d: { matchId: string; result: unknown; contentLang?: Language }) => {
         if (d.matchId !== matchId) return;
+        // A run pinned to another language (codex A#3): its commentary is
+        // not this panel's language and there is no badge here, so do not
+        // show it -- re-read the state for the current language instead.
+        if (d.contentLang !== undefined && d.contentLang !== langRef.current) {
+          setResync((n) => n + 1);
+          return;
+        }
         setResult(d.result as CompareResult);
         setState("done");
         setError("");
@@ -207,6 +223,10 @@ export function ProComparisonVerified({
     );
     const offError = bridge().compare.onError((d) => {
       if (d.matchId !== matchId) return;
+      if (d.contentLang !== undefined && d.contentLang !== langRef.current) {
+        setResync((n) => n + 1);
+        return;
+      }
       setState("error");
       setError(d.message);
       setStartedAt(null);

@@ -149,4 +149,49 @@ describe("同水平对比自动补跑", () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(run).not.toHaveBeenCalled();
   });
+
+  it("en 模式下收到 zh 的 done(codex A#3):不显示 zh 解说,改按 getState 重新取当前语言的状态", async () => {
+    let doneCb: ((d: unknown) => void) | null = null;
+    const getState = vi
+      .fn()
+      .mockResolvedValueOnce({ phase: "running", startedAt: Date.now() })
+      .mockResolvedValue({ phase: "done", result: cachedResult });
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      settings: { get: vi.fn().mockResolvedValue({ language: "en" }) },
+      analysis: {
+        getState: vi.fn().mockResolvedValue({ cached: null, running: false }),
+      },
+      compare: {
+        getState,
+        getCached: vi.fn().mockResolvedValue(null),
+        run: vi.fn().mockResolvedValue(undefined),
+        cancel: vi.fn(),
+        onDelta: () => () => {},
+        onDone: (cb: (d: unknown) => void) => {
+          doneCb = cb;
+          return () => {
+            doneCb = null;
+          };
+        },
+        onError: () => () => {},
+      },
+    };
+    render(
+      <LangProvider firstRunPicker={false}>
+        <ProComparisonVerified source={m} matchId="m-lang" hideActions />
+      </LangProvider>,
+    );
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(doneCb).not.toBeNull());
+    doneCb!({
+      matchId: "m-lang",
+      result: { ...cachedResult, report: "中文解说" },
+      contentLang: "zh",
+    });
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+    expect(
+      (await screen.findAllByText(/cached report text/)).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/中文解说/)).toBeNull();
+  });
 });

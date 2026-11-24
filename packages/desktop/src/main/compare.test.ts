@@ -559,4 +559,54 @@ describe("createCompareService", () => {
     expect(await s.getCached(input.matchId)).toBeNull();
     expect((await s.getState(input.matchId)).phase).toBe("idle");
   });
+
+  it("内存终态按语言:zh 跑完、设置换成 en → getState 不把 zh 结果当当前结果(codex A#3);done 事件带 contentLang", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cmp-lang-"));
+    const settings: { language: "zh" | "en" } = { language: "zh" };
+    const emitted: Array<{ ch: string; p: any }> = [];
+    const s = createCompareService({
+      getSettings: () => ({
+        anthropicApiKey: "k",
+        wowDirectory: null,
+        language: settings.language,
+      }),
+      clientFactory: () => ({
+        async *stream() {
+          yield { delta: "You hit {{offensiveIndex.you}}." };
+        },
+      }),
+      loadCorpus: () => corpus,
+      gameBuild: () => "12.1.0.68629",
+      matchesDir: dir,
+      emit: (ch, p) => emitted.push({ ch, p }),
+    });
+    await s.run(input);
+    const done = emitted.find((e) => e.ch === "gladlog:compare:done")!;
+    expect(done.p.contentLang).toBe("zh");
+    expect((await s.getState(input.matchId)).phase).toBe("done");
+    settings.language = "en";
+    expect(await s.getCached(input.matchId)).toBeNull();
+    expect((await s.getState(input.matchId)).phase).toBe("idle");
+    settings.language = "zh";
+    expect((await s.getState(input.matchId)).phase).toBe("done");
+  });
+
+  it("错误终态也按语言:换语言后不再当当前状态(codex A#3)", async () => {
+    const settings: { language: "zh" | "en" } = { language: "zh" };
+    const s = createCompareService({
+      getSettings: () => ({
+        anthropicApiKey: "k",
+        wowDirectory: null,
+        language: settings.language,
+      }),
+      loadCorpus: () => null,
+      gameBuild: () => "12.1.0.68629",
+      matchesDir: "/tmp/nonexistent-" + Math.random(),
+      emit: () => {},
+    });
+    await s.run(input);
+    expect((await s.getState(input.matchId)).phase).toBe("error");
+    settings.language = "en";
+    expect((await s.getState(input.matchId)).phase).toBe("idle");
+  });
 });

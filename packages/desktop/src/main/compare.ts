@@ -134,6 +134,15 @@ type CompareState =
   | { phase: "done"; result: CompareResult }
   | { phase: "error"; message: string };
 
+/** A terminal state as kept in memory: tagged with the language its run
+ * pinned (spec §6.13, codex A#3), so getState never hands back another
+ * language's commentary as the current result. */
+type StoredCompareState =
+  | Extract<CompareState, { phase: "running" }>
+  | (Extract<CompareState, { phase: "done" | "error" }> & {
+      contentLang: Language;
+    });
+
 const major = (v: string) => v.split(".").slice(0, 2).join(".");
 
 export type CompareService = ReturnType<typeof createCompareService>;
@@ -170,30 +179,43 @@ export function createCompareService(deps: {
    */
   const generations = new Map<string, number>();
   /** Terminal comparison states known to this process (see CompareState). */
-  const states = new Map<string, CompareState>();
+  const states = new Map<string, StoredCompareState>();
 
   /** Record the terminal state + emit, as one exit — miss a spot here and that
-   * is one more result that can never be pulled back. */
-  const emitDone = (matchId: string, result: CompareResult) => {
-    states.set(matchId, { phase: "done", result });
-    deps.emit("gladlog:compare:done", { matchId, result });
+   * is one more result that can never be pulled back. Both carry the run's
+   * pinned language (codex A#3): the renderer drops a completion that is not
+   * in its current language. */
+  const emitDone = (
+    matchId: string,
+    result: CompareResult,
+    contentLang: Language,
+  ) => {
+    states.set(matchId, { phase: "done", result, contentLang });
+    deps.emit("gladlog:compare:done", { matchId, result, contentLang });
   };
-  const emitError = (matchId: string, message: string) => {
-    states.set(matchId, { phase: "error", message });
-    deps.emit("gladlog:compare:error", { matchId, message });
+  const emitError = (
+    matchId: string,
+    message: string,
+    contentLang: Language,
+  ) => {
+    states.set(matchId, { phase: "error", message, contentLang });
+    deps.emit("gladlog:compare:error", { matchId, message, contentLang });
   };
 
   async function run(input: CompareInput): Promise<void> {
     const myGen = (generations.get(input.matchId) ?? 0) + 1;
     generations.set(input.matchId, myGen);
     const superseded = () => generations.get(input.matchId) !== myGen;
+    // The commentary language is pinned once, here: the cache write, the
+    // in-memory terminal state and the done event all carry this one value.
+    const lang: Language = deps.getSettings().language ?? "zh";
     states.set(input.matchId, {
       phase: "running",
       startedAt: Date.now(),
       autoTriggered: input.autoTriggered === true,
     });
     try {
-      await runInner(input, superseded);
+      await runInner(input, superseded, lang);
     } catch (err) {
       // Superseded by a later run of the same match: stay silent (that run
       // emits and records its own state).
@@ -201,6 +223,7 @@ export function createCompareService(deps: {
       emitError(
         input.matchId,
         err instanceof Error ? err.message : String(err),
+        lang,
       );
     }
   }
@@ -216,15 +239,15 @@ export function createCompareService(deps: {
   async function runInner(
     input: CompareInput,
     superseded: () => boolean,
+    lang: Language,
   ): Promise<void> {
     const corpus = deps.loadCorpus();
     if (!corpus) {
       // 环境缺件(没装/没载到语料),不是这场对局的结论 → 不落盘,重启后重试。
-      emitError(input.matchId, "NO_CORPUS");
+      emitError(input.matchId, "NO_CORPUS", lang);
       return;
     }
     const settings = deps.getSettings();
-    const lang: Language = settings.language ?? "zh";
     /** 磁盘缓存的唯一写入口(读侧是 getCached,判据共用
      *  isCacheableCompareResult)。best-effort:写不进去也还有内存终态兜着。 */
     const writeCache = (result: CompareResult) => {
@@ -307,7 +330,7 @@ export function createCompareService(deps: {
       // 贵的是它把「已经算过、算不出来」这件事只存在内存里:重启一次就退回
       // 未知,renderer 的自动补跑于是每次重启后重跑一遍(GH #27)。
       writeCache(result);
-      emitDone(input.matchId, result);
+      emitDone(input.matchId, result, lang);
       return;
     }
 
@@ -354,7 +377,7 @@ export function createCompareService(deps: {
         cellMeta,
       };
       writeCache(result);
-      emitDone(input.matchId, result);
+      emitDone(input.matchId, result, lang);
     };
 
     if (vc.dims.length === 0) {
@@ -457,7 +480,19 @@ export function createCompareService(deps: {
      */
     async getState(matchId: string): Promise<CompareState> {
       const live = states.get(matchId);
-      if (live) return live;
+      // A terminal state from another language is not the current state
+      // (codex A#3): fall through to the disk cache, which is keyed by
+      // language. The panel has no other-language badge, so it is absent
+      // rather than a labelled fallback. A run in flight shows as running
+      // whatever its language (its done event is then dropped by the panel,
+      // which re-reads this state).
+      const lang: Language = deps.getSettings().language ?? "zh";
+      if (live && (live.phase === "running" || live.contentLang === lang)) {
+        if (live.phase === "running") return live;
+        return live.phase === "done"
+          ? { phase: "done", result: live.result }
+          : { phase: "error", message: live.message };
+      }
       const cached = await this.getCached(matchId);
       return cached ? { phase: "done", result: cached } : { phase: "idle" };
     },

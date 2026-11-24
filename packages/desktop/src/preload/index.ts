@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webFrame } from "electron";
 
+import type { Language } from "../shared/i18n/index";
 import { OPEN_TRACE_CHANNEL, type OpenTraceIo } from "../shared/openTrace";
 // Consumer-side parsing of the direct doc-bytes path: implementation and notes
 // live in shared/parseDocBytes (the tests deep-equal it against the old
@@ -147,8 +148,12 @@ const api: GladlogApi = {
     getState: (matchId) =>
       ipcRenderer.invoke("gladlog:compare:getState", matchId),
     onDelta: sub<{ matchId: string; text: string }>("gladlog:compare:delta"),
-    onDone: sub<{ matchId: string; result: unknown }>("gladlog:compare:done"),
-    onError: sub<{ matchId: string; message: string }>("gladlog:compare:error"),
+    onDone: sub<{ matchId: string; result: unknown; contentLang?: Language }>(
+      "gladlog:compare:done",
+    ),
+    onError: sub<{ matchId: string; message: string; contentLang?: Language }>(
+      "gladlog:compare:error",
+    ),
   },
   analysis: {
     run: (input) => ipcRenderer.invoke("gladlog:analysis:run", input),

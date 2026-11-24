@@ -181,8 +181,22 @@ export interface GladlogApi {
       | { phase: "error"; message: string }
     >;
     onDelta(cb: (d: { matchId: string; text: string }) => void): () => void;
-    onDone(cb: (d: { matchId: string; result: unknown }) => void): () => void;
-    onError(cb: (d: { matchId: string; message: string }) => void): () => void;
+    /** contentLang: the language the run pinned (spec §6.13); the panel
+     * drops a completion that is not in its current language. */
+    onDone(
+      cb: (d: {
+        matchId: string;
+        result: unknown;
+        contentLang?: Language;
+      }) => void,
+    ): () => void;
+    onError(
+      cb: (d: {
+        matchId: string;
+        message: string;
+        contentLang?: Language;
+      }) => void,
+    ): () => void;
   };
   analysis: {
     run(input: {
