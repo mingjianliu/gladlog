@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import type { ObsAudioDevice } from "../../../main/managedObsBackend";
 import type { GladlogSettings } from "../../../main/settingsStore";
-import type { TFn } from "../../../shared/i18n";
+import type { MessageKey, TFn } from "../../../shared/i18n";
 import {
   DEFAULT_AUDIO_DEVICE_ID,
   type ManagedObsPrefs,
@@ -54,6 +54,14 @@ function audioOptions(
   return opts;
 }
 
+/** A setting "import from my OBS" applied, and its dictionary label. */
+type ImportedPart = "directory" | "desktopAudio" | "mic";
+const IMPORTED_PART_KEY = {
+  directory: "recorder.prefs.import.part.directory",
+  desktopAudio: "recorder.prefs.import.part.desktopAudio",
+  mic: "recorder.prefs.import.part.mic",
+} as const satisfies Record<ImportedPart, MessageKey>;
+
 /**
  * Managed-OBS prefs (2026-09-04): three settings rows rendered inside the
  * recording card when the managed instance is installed — desktop audio
@@ -69,7 +77,14 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
     output: ObsAudioDevice[];
     input: ObsAudioDevice[];
   }>({ output: [], input: [] });
-  const [importMsg, setImportMsg] = useState<string | null>(null);
+  // The import outcome, worded at render time so a language switch re-words
+  // a result already on screen (`error` is the raw message, kept as is).
+  const [importResult, setImportResult] = useState<
+    | { kind: "notFound" }
+    | { kind: "done"; parts: ImportedPart[] }
+    | { kind: "failed"; error: string }
+    | null
+  >(null);
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
@@ -95,36 +110,45 @@ export function ManagedObsPrefsRows({ settings, save, reload }: Props) {
 
   async function runImport(): Promise<void> {
     setImporting(true);
-    setImportMsg(null);
+    setImportResult(null);
     try {
       const r = await bridge().recorder.importObsPrefs();
       if (!r.found) {
-        setImportMsg(t("recorder.prefs.import.notFound"));
+        setImportResult({ kind: "notFound" });
         return;
       }
       await reload();
-      const parts: string[] = [];
+      const parts: ImportedPart[] = [];
       const a = r.applied ?? {};
-      if ("recordingDirectory" in a)
-        parts.push(t("recorder.prefs.import.part.directory"));
-      if ("managedDesktopAudioDevice" in a)
-        parts.push(t("recorder.prefs.import.part.desktopAudio"));
-      if ("managedMicDevice" in a)
-        parts.push(t("recorder.prefs.import.part.mic"));
-      setImportMsg(
-        t("recorder.prefs.import.done", {
-          items:
-            parts.join(t("recorder.prefs.import.listSeparator")) ||
-            t("recorder.prefs.import.nothing"),
-          note: prefsSavedNote,
-        }),
-      );
+      if ("recordingDirectory" in a) parts.push("directory");
+      if ("managedDesktopAudioDevice" in a) parts.push("desktopAudio");
+      if ("managedMicDevice" in a) parts.push("mic");
+      setImportResult({ kind: "done", parts });
     } catch (e) {
-      setImportMsg(`✗ ${e instanceof Error ? e.message : String(e)}`);
+      setImportResult({
+        kind: "failed",
+        error: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setImporting(false);
     }
   }
+
+  const importMsg =
+    importResult === null
+      ? null
+      : importResult.kind === "notFound"
+        ? t("recorder.prefs.import.notFound")
+        : importResult.kind === "done"
+          ? t("recorder.prefs.import.done", {
+              items:
+                importResult.parts
+                  .map((p) => t(IMPORTED_PART_KEY[p]))
+                  .join(t("recorder.prefs.import.listSeparator")) ||
+                t("recorder.prefs.import.nothing"),
+              note: prefsSavedNote,
+            })
+          : `✗ ${importResult.error}`;
 
   async function pickDirectory(): Promise<void> {
     const dir = await bridge().recorder.selectRecordingDirectory();

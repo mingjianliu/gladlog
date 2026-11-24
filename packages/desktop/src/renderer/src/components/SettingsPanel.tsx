@@ -115,7 +115,19 @@ export function SettingsPanel() {
   const [cmdInput, setCmdInput] = useState("");
   const [obsUrlInput, setObsUrlInput] = useState("");
   const [obsPwInput, setObsPwInput] = useState("");
-  const [obsTest, setObsTest] = useState<string | null>(null);
+  // The OBS connection-test / auto-config outcome, worded at render time so a
+  // language switch re-words it (`error` is main's raw message, kept as is).
+  const [obsTest, setObsTest] = useState<
+    | { kind: "notFound" }
+    | { kind: "wsDisabled" }
+    | {
+        kind: "connect";
+        source: "test" | "autoConfig";
+        ok: boolean;
+        error?: string | null;
+      }
+    | null
+  >(null);
   const [keepInput, setKeepInput] = useState("");
   const [saved, setSaved] = useState<{
     group: SettingsGroup;
@@ -168,7 +180,11 @@ export function SettingsPanel() {
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] =
     useState<ObsInstallProgress | null>(null);
-  const [installError, setInstallError] = useState<string | null>(null);
+  // `error` is main's raw message; without one the generic failure is worded
+  // at render time (so a language switch re-words it).
+  const [installError, setInstallError] = useState<{
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -191,13 +207,13 @@ export function SettingsPanel() {
     try {
       const r = await bridge().recorder.installObs();
       if (!r.ok) {
-        setInstallError(r.error ?? t("recorder.install.failed"));
+        setInstallError({ error: r.error });
         return;
       }
       const state = await bridge().recorder.getObsInstallState();
       setObsInstall(state);
     } catch (e) {
-      setInstallError(e instanceof Error ? e.message : String(e));
+      setInstallError({ error: e instanceof Error ? e.message : String(e) });
     } finally {
       setInstalling(false);
     }
@@ -793,7 +809,7 @@ export function SettingsPanel() {
                     .recorder.autoConfig()
                     .then(async (r) => {
                       if (!r.found) {
-                        setObsTest(t("recorder.autoConfig.notFound"));
+                        setObsTest({ kind: "notFound" });
                         return;
                       }
                       // Address/password are already persisted on the main side —
@@ -803,10 +819,13 @@ export function SettingsPanel() {
                       setObsUrlInput(next.obsWebsocketUrl ?? "");
                       setObsTest(
                         !r.enabled
-                          ? t("recorder.autoConfig.wsDisabled")
-                          : r.ok
-                            ? t("recorder.autoConfig.ok")
-                            : `✗ ${r.error ?? t("recorder.connectFailed")}`,
+                          ? { kind: "wsDisabled" }
+                          : {
+                              kind: "connect",
+                              source: "autoConfig",
+                              ok: r.ok,
+                              error: r.error,
+                            },
                       );
                     })
                 }
@@ -883,11 +902,12 @@ export function SettingsPanel() {
                           : {}),
                       })
                       .then((r) =>
-                        setObsTest(
-                          r.ok
-                            ? t("recorder.test.ok")
-                            : `✗ ${r.error ?? t("recorder.connectFailed")}`,
-                        ),
+                        setObsTest({
+                          kind: "connect",
+                          source: "test",
+                          ok: r.ok,
+                          error: r.error,
+                        }),
                       )
                   }
                 >
@@ -898,7 +918,19 @@ export function SettingsPanel() {
               {obsTest && (
                 <>
                   <span className="settings-k" />
-                  <span className="settings-v">{obsTest}</span>
+                  <span className="settings-v">
+                    {obsTest.kind === "notFound"
+                      ? t("recorder.autoConfig.notFound")
+                      : obsTest.kind === "wsDisabled"
+                        ? t("recorder.autoConfig.wsDisabled")
+                        : obsTest.ok
+                          ? t(
+                              obsTest.source === "autoConfig"
+                                ? "recorder.autoConfig.ok"
+                                : "recorder.test.ok",
+                            )
+                          : `✗ ${obsTest.error ?? t("recorder.connectFailed")}`}
+                  </span>
                   <span />
                 </>
               )}
@@ -980,7 +1012,9 @@ export function SettingsPanel() {
               {installError && (
                 <>
                   <span />
-                  <span className="set-rec-error">{installError}</span>
+                  <span className="set-rec-error">
+                    {installError.error ?? t("recorder.install.failed")}
+                  </span>
                   <span />
                 </>
               )}

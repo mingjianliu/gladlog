@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { StoredMatchMeta } from "../../../main/matchStore";
 import type { DiagnosticEntry, LogsStatusSnapshot } from "../../../preload/api";
-import type { MessageKey } from "../../../shared/i18n";
+import type { MessageKey, MessageParams } from "../../../shared/i18n";
 import { anonymizeMatchDoc } from "../../../shared/anonymizeFixture";
 import {
   type DiagnosticLevel,
@@ -373,8 +373,17 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<readonly string[]>([]);
   const [autoExpand, setAutoExpand] = useState<readonly string[]>([]);
-  const [searchNote, setSearchNote] = useState<string | null>(null);
-  const [action, setAction] = useState<string | null>(null);
+  // Outcomes, not their text: worded at render time so a language switch
+  // re-words a note already on screen.
+  const [searchNote, setSearchNote] = useState<{
+    n: number;
+    scanned: number;
+    truncated: boolean;
+  } | null>(null);
+  const [action, setAction] = useState<{
+    key: MessageKey;
+    params?: MessageParams;
+  } | null>(null);
   const reqId = useRef(0);
 
   const filtered = useMemo(() => {
@@ -424,21 +433,13 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
       const r = searchKeyPaths(detail, q);
       setHits(r.paths);
       setAutoExpand(r.paths.flatMap((p) => [...ancestorPaths(p), p]));
-      setSearchNote(
-        r.paths.length === 0
-          ? t("dev.inspect.noHits", {
-              scanned: r.scanned,
-              capped: r.truncated ? t("dev.inspect.capped") : "",
-            })
-          : r.truncated
-            ? t("dev.inspect.hitsTruncated", {
-                n: r.paths.length,
-                scanned: r.scanned,
-              })
-            : t("dev.inspect.hits", { n: r.paths.length }),
-      );
+      setSearchNote({
+        n: r.paths.length,
+        scanned: r.scanned,
+        truncated: r.truncated,
+      });
     },
-    [query, detail, t],
+    [query, detail],
   );
 
   const meta = metas.find((m) => m.id === selected) ?? null;
@@ -446,15 +447,15 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
   const copyNode = async () => {
     try {
       await navigator.clipboard.writeText(stringifyNode(nodeValue));
-      setAction(t("dev.inspect.copied"));
+      setAction({ key: "dev.inspect.copied" });
     } catch {
-      setAction(t("dev.inspect.copyFailed"));
+      setAction({ key: "dev.inspect.copyFailed" });
     }
   };
 
   const exportFixture = async () => {
     if (detail == null || !selected) return;
-    setAction(t("dev.inspect.anonymizing"));
+    setAction({ key: "dev.inspect.anonymizing" });
     const { text, players } = anonymizeMatchDoc(detail);
     const saved = await safe(
       () =>
@@ -466,8 +467,8 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
     );
     setAction(
       saved
-        ? t("dev.inspect.exported", { players, path: saved })
-        : t("dev.inspect.cancelled"),
+        ? { key: "dev.inspect.exported", params: { players, path: saved } }
+        : { key: "dev.inspect.cancelled" },
     );
   };
 
@@ -527,7 +528,21 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
           />
           <button type="submit">{t("dev.inspect.search")}</button>
         </form>
-        {searchNote && <p className="rpt-dim dev-search-note">{searchNote}</p>}
+        {searchNote && (
+          <p className="rpt-dim dev-search-note">
+            {searchNote.n === 0
+              ? t("dev.inspect.noHits", {
+                  scanned: searchNote.scanned,
+                  capped: searchNote.truncated ? t("dev.inspect.capped") : "",
+                })
+              : searchNote.truncated
+                ? t("dev.inspect.hitsTruncated", {
+                    n: searchNote.n,
+                    scanned: searchNote.scanned,
+                  })
+                : t("dev.inspect.hits", { n: searchNote.n })}
+          </p>
+        )}
         {loading && <p className="rpt-dim">{t("dev.inspect.loading")}</p>}
         {!loading && detail == null && (
           <p className="rpt-dim">{t("dev.inspect.pickMatch")}</p>
@@ -556,11 +571,11 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
               onClick={() => {
                 void safe(() => bridge().matches.openDir(selected), false).then(
                   (ok) =>
-                    setAction(
-                      ok
-                        ? t("dev.inspect.dirOpened")
-                        : t("dev.inspect.openFailed"),
-                    ),
+                    setAction({
+                      key: ok
+                        ? "dev.inspect.dirOpened"
+                        : "dev.inspect.openFailed",
+                    }),
                 );
               }}
             >
@@ -578,15 +593,15 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
               type="button"
               data-testid="dev-reparse"
               onClick={() => {
-                setAction(t("dev.inspect.reparsing"));
+                setAction({ key: "dev.inspect.reparsing" });
                 void safe(() => bridge().matches.reparse(selected), {
                   ok: false,
                 }).then((r) =>
-                  setAction(
-                    r.ok
-                      ? t("dev.inspect.reparsed")
-                      : t("dev.inspect.reparseFailed"),
-                  ),
+                  setAction({
+                    key: r.ok
+                      ? "dev.inspect.reparsed"
+                      : "dev.inspect.reparseFailed",
+                  }),
                 );
               }}
             >
@@ -605,7 +620,7 @@ function InspectZone({ metas }: { metas: StoredMatchMeta[] }) {
                 className="rpt-dim dev-action-note"
                 data-testid="dev-action-note"
               >
-                {action}
+                {t(action.key, action.params)}
               </p>
             )}
             <DocFacts

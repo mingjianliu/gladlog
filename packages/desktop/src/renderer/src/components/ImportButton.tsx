@@ -8,60 +8,93 @@ import { useT } from "../i18n/LangProvider";
  * Stored matches enter the list live via the matchStored event; no refresh
  * needed.
  */
+type ImportStatus =
+  | {
+      kind: "progress";
+      i: number;
+      n: number;
+      file: string;
+      stored: number;
+      dup: number;
+    }
+  | { kind: "done"; files: number; stored: number; dup: number; failed: number }
+  // `error` is the raw message (from main, already in its language).
+  | { kind: "failed"; error: string }
+  | null;
+
 export function ImportButton() {
   const { t } = useT();
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<string>("");
+  // The outcome, not its text: rendered with the current language so a
+  // language switch re-words a summary already on screen.
+  const [status, setStatus] = useState<ImportStatus>(null);
 
   useEffect(() => {
     try {
       return bridge().logs.onImportProgress((p) =>
-        setProgress(
-          t("matchList.import.progress", {
-            i: p.i,
-            n: p.n,
-            file: p.file,
-            stored: p.stored,
-            dupPart: p.dup
-              ? t("matchList.import.progressDup", { dup: p.dup })
-              : "",
-          }),
-        ),
+        setStatus({
+          kind: "progress",
+          i: p.i,
+          n: p.n,
+          file: p.file,
+          stored: p.stored,
+          dup: p.dup,
+        }),
       );
     } catch {
       return undefined;
     }
-  }, [t]);
+  }, []);
 
   const run = async () => {
     setBusy(true);
-    setProgress("");
+    setStatus(null);
     try {
       const r = await bridge().logs.importFiles();
-      if (r === null) {
-        setProgress("");
-      } else {
-        setProgress(
-          t("matchList.import.done", {
-            files: r.files,
-            stored: r.stored,
-            dup: r.dup,
-            failedPart: r.failed
-              ? t("matchList.import.doneFailed", { failed: r.failed })
-              : "",
-          }),
-        );
-      }
-    } catch (e) {
-      setProgress(
-        t("matchList.import.failed", {
-          error: e instanceof Error ? e.message : String(e),
-        }),
+      setStatus(
+        r === null
+          ? null
+          : {
+              kind: "done",
+              files: r.files,
+              stored: r.stored,
+              dup: r.dup,
+              failed: r.failed,
+            },
       );
+    } catch (e) {
+      setStatus({
+        kind: "failed",
+        error: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setBusy(false);
     }
   };
+
+  const progress =
+    status === null
+      ? ""
+      : status.kind === "progress"
+        ? t("matchList.import.progress", {
+            i: status.i,
+            n: status.n,
+            file: status.file,
+            stored: status.stored,
+            dupPart: status.dup
+              ? t("matchList.import.progressDup", { dup: status.dup })
+              : "",
+          })
+        : status.kind === "done"
+          ? t("matchList.import.done", {
+              files: status.files,
+              stored: status.stored,
+              dup: status.dup,
+              failedPart: status.failed
+                ? t("matchList.import.doneFailed", { failed: status.failed })
+                : "",
+            })
+          : t("matchList.import.failed", { error: status.error });
 
   return (
     <span className="import-btn">
