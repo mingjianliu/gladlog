@@ -1,5 +1,4 @@
 import type { StoredMatchMeta } from "../../../main/matchStore";
-import { effectiveLanguage, type Language } from "../../../shared/i18n";
 import { bridge } from "../bridge";
 import {
   type BatchItem,
@@ -7,7 +6,7 @@ import {
   startBatch,
   subscribeBatch,
 } from "./batchAnalysis";
-import { batchItemLabel } from "./itemLabel";
+import type { BatchItemLabel } from "./itemLabel";
 
 type LiveStoredMatchMeta = StoredMatchMeta & { live?: boolean };
 
@@ -27,19 +26,20 @@ type LiveStoredMatchMeta = StoredMatchMeta & { live?: boolean };
  * into this queue.
  */
 const pending: string[] = [];
-const pendingLabels = new Map<string, string>();
+const pendingLabels = new Map<string, BatchItemLabel>();
 
 /** Unsubscribe handle for waiting while busy; non-null means we are already
  * waiting for one idle notification, so concurrent drain() calls do not attach
  * several subscribeBatch listeners for the same pending batch. */
 let waitingForIdle: (() => void) | null = null;
 
-/** Same label as the batch bar (batchItemLabel); with no valid startTime it
- * degrades to the first eight characters of the id. */
-function labelFor(meta: StoredMatchMeta, lang: Language): string {
+/** Same label as the batch bar (worded by formatBatchItemLabel at render);
+ * with no valid startTime it degrades to the first eight characters of the
+ * id. */
+function labelFor(meta: StoredMatchMeta): BatchItemLabel {
   if (Number.isNaN(new Date(meta.startTime).getTime()))
     return meta.id.slice(0, 8);
-  return batchItemLabel(meta.startTime, meta.bracket, lang);
+  return { startTime: meta.startTime, bracket: meta.bracket };
 }
 
 function drain(): void {
@@ -66,30 +66,25 @@ function drain(): void {
   void startBatch(items);
 }
 
-function enqueue(meta: StoredMatchMeta, lang: Language): void {
+function enqueue(meta: StoredMatchMeta): void {
   // Deduplicate: repeated notifications for the same match queue only once
   if (pending.includes(meta.id)) return;
   pending.push(meta.id);
-  pendingLabels.set(meta.id, labelFor(meta, lang));
+  pendingLabels.set(meta.id, labelFor(meta));
   drain();
 }
 
 async function handleMatchStored(meta: LiveStoredMatchMeta): Promise<void> {
   // Iron rule: the import path carries no live flag and is blocked right here
   if (!meta.live) return;
-  let settings: { autoAnalyzeNew: boolean; language?: Language | null };
+  let settings: { autoAnalyzeNew: boolean };
   try {
     settings = await bridge().settings.get();
   } catch {
     return; // stub without a settings surface (some test beds / fixtures)
   }
   if (!settings.autoAnalyzeNew) return;
-  // The UI language, resolved by the same rule LangProvider uses.
-  const lang = effectiveLanguage(
-    settings.language,
-    typeof navigator === "undefined" ? undefined : navigator.language,
-  );
-  enqueue(meta, lang);
+  enqueue(meta);
 }
 
 /**

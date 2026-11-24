@@ -105,7 +105,8 @@ describe("autoAnalyze(自动分析新对局队列)", () => {
     expect(startBatchMock).toHaveBeenCalledTimes(1);
     const items = startBatchMock.mock.calls[0]![0] as BatchItem[];
     expect(items.map((i) => i.id)).toEqual(["m-live"]);
-    expect(items[0]!.label).toContain("3v3");
+    // The label stays unformatted (worded by the bar in the current language).
+    expect(items[0]!.label).toMatchObject({ bracket: "3v3" });
     unlisten();
   });
 

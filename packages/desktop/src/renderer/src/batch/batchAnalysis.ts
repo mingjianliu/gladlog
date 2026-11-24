@@ -8,10 +8,12 @@ import {
 } from "../report/derive/analysisInput";
 import { ensureRawStreams } from "../report/derive/rawStreamsCache";
 import type { ReportSource } from "../report/derive/types";
+import type { BatchItemLabel } from "./itemLabel";
 
 /** One entry in the batch queue (computed from the meta list on the UI side;
- * the driver knows nothing about meta). */
-export type BatchItem = { id: string; label: string };
+ * the driver knows nothing about meta). The label stays unformatted: the bar
+ * words it in the current UI language (formatBatchItemLabel). */
+export type BatchItem = { id: string; label: BatchItemLabel };
 
 export type BatchStatus = {
   running: boolean;
@@ -21,7 +23,8 @@ export type BatchStatus = {
   ok: number;
   skipped: number;
   failed: number;
-  currentLabel: string | null;
+  /** Labels of the matches in flight, in start order (empty when none). */
+  currentLabels: BatchItemLabel[];
   cancelled: boolean;
   /** End time of the most recent batch (drives showing/hiding the completion
    * summary); cleared when a new batch starts. */
@@ -52,7 +55,7 @@ const status: BatchStatus = {
   ok: 0,
   skipped: 0,
   failed: 0,
-  currentLabel: null,
+  currentLabels: [],
   cancelled: false,
   finishedAt: null,
 };
@@ -265,21 +268,20 @@ export async function startBatch(
   status.failed = 0;
   status.cancelled = false;
   status.finishedAt = null;
-  status.currentLabel = null;
+  status.currentLabels = [];
   notify();
 
-  // Display: the labels of the matches in flight (several rounds of the same
-  // match show up only once)
-  const activeLabels = new Set<string>();
+  // Display: the matches in flight (several rounds of the same match show up
+  // only once)
+  const activeItems = new Set<BatchItem>();
   const updateLabel = () => {
-    status.currentLabel =
-      activeLabels.size > 0 ? [...activeLabels].join(" / ") : null;
+    status.currentLabels = [...activeItems].map((it) => it.label);
   };
 
   const settleItem = (st: ItemState) => {
     if (st.settled) return;
     st.settled = true;
-    activeLabels.delete(st.item.label);
+    activeItems.delete(st.item);
     updateLabel();
     if (st.anyFailed) status.failed++;
     else if (st.anyOk) status.ok++;
@@ -359,7 +361,7 @@ export async function startBatch(
     while (!status.cancelled) {
       const u = await takeUnitLocked();
       if (!u) return;
-      activeLabels.add(u.st.item.label);
+      activeItems.add(u.st.item);
       updateLabel();
       notify();
       let r: "ok" | "skipped" | "failed";
@@ -399,7 +401,7 @@ export async function startBatch(
   } finally {
     inFlight.clear();
     status.running = false;
-    status.currentLabel = null;
+    status.currentLabels = [];
     status.finishedAt = Date.now();
     notify();
   }

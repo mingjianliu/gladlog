@@ -9,7 +9,7 @@ import {
   startBatch,
   subscribeBatch,
 } from "../batch/batchAnalysis";
-import { batchItemLabel } from "../batch/itemLabel";
+import { formatBatchItemLabel } from "../batch/itemLabel";
 import { bridge } from "../bridge";
 import { useT } from "../i18n/LangProvider";
 
@@ -39,14 +39,18 @@ export function BatchAnalyzeBar({
   const [st, setSt] = useState<BatchStatus>(getBatchStatus);
   const [n, setN] = useState(10);
   const [skipAnalyzed, setSkipAnalyzed] = useState(true);
-  const [note, setNote] = useState<string | null>(null);
+  // Which empty work set the last start hit, worded at render time (a
+  // language switch re-words it).
+  const [emptyNote, setEmptyNote] = useState<"selected" | "recent" | null>(
+    null,
+  );
 
   useEffect(() => subscribeBatch(() => setSt(getBatchStatus())), []);
 
   const selCount = selected?.size ?? 0;
 
   const start = async () => {
-    setNote(null);
+    setEmptyNote(null);
     let analyzed: Set<string>;
     try {
       analyzed = new Set(await bridge().analysis.listAnalyzed());
@@ -71,12 +75,10 @@ export function BatchAnalyzeBar({
         : metas.filter(preFilter).slice(0, Math.max(1, n))
     ).map((m) => ({
       id: m.id,
-      label: batchItemLabel(m.startTime, m.bracket, lang),
+      label: { startTime: m.startTime, bracket: m.bracket },
     }));
     if (items.length === 0) {
-      setNote(
-        selCount > 0 ? t("batch.empty.selected") : t("batch.empty.recent"),
-      );
+      setEmptyNote(selCount > 0 ? "selected" : "recent");
       return;
     }
     void startBatch(items, { skipAnalyzed });
@@ -86,11 +88,16 @@ export function BatchAnalyzeBar({
   };
 
   if (st.running) {
+    // Labels are worded here, in the current language; rounds of one match
+    // and same-named matches collapse to one entry.
+    const current = [
+      ...new Set(st.currentLabels.map((l) => formatBatchItemLabel(l, lang))),
+    ].join(" / ");
     return (
       <div className="batch-bar" data-testid="batch-bar">
         <span className="batch-progress">
           {t("batch.running", { done: st.done, total: st.total })}
-          {st.currentLabel ? ` · ${st.currentLabel}` : ""}
+          {current ? ` · ${current}` : ""}
         </span>
         <button className="batch-cancel" onClick={() => cancelBatch()}>
           {t("batch.cancel")}
@@ -125,10 +132,7 @@ export function BatchAnalyzeBar({
 
   return (
     <div className="batch-bar" data-testid="batch-bar">
-      <span
-        className="batch-title"
-        title={t("batch.titleHint")}
-      >
+      <span className="batch-title" title={t("batch.titleHint")}>
         {t("batch.title")}
       </span>
       {selCount > 0 ? (
@@ -159,10 +163,7 @@ export function BatchAnalyzeBar({
           {t("batch.recentAfter")}
         </label>
       )}
-      <label
-        className="batch-skip"
-        title={t("batch.skipHint")}
-      >
+      <label className="batch-skip" title={t("batch.skipHint")}>
         <input
           type="checkbox"
           data-testid="batch-skip"
@@ -176,7 +177,15 @@ export function BatchAnalyzeBar({
           ? t("batch.startSelected", { n: selCount })
           : t("batch.start")}
       </button>
-      {note && <span className="batch-note">{note}</span>}
+      {emptyNote && (
+        <span className="batch-note">
+          {t(
+            emptyNote === "selected"
+              ? "batch.empty.selected"
+              : "batch.empty.recent",
+          )}
+        </span>
+      )}
     </div>
   );
 }

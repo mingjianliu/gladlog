@@ -15,7 +15,7 @@ vi.mock("../src/renderer/src/batch/batchAnalysis", () => ({
     ok: 0,
     skipped: 0,
     failed: 0,
-    currentLabel: null,
+    currentLabels: [],
     cancelled: false,
     finishedAt: null,
   }),

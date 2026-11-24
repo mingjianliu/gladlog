@@ -19,3 +19,21 @@ export function batchItemLabel(
   });
   return `${day} ${hh}:${mm} · ${bracket}`;
 }
+
+/**
+ * What a batch item is called, kept unformatted so the batch bar words it in
+ * the current UI language at render time (a language switch mid-batch
+ * re-words the label on screen). A string is language-neutral text shown as
+ * is (an id prefix when the match has no valid start time).
+ */
+export type BatchItemLabel = string | { startTime: number; bracket: string };
+
+/** `label` worded in `lang` (see BatchItemLabel). */
+export function formatBatchItemLabel(
+  label: BatchItemLabel,
+  lang: Language,
+): string {
+  return typeof label === "string"
+    ? label
+    : batchItemLabel(label.startTime, label.bracket, lang);
+}
