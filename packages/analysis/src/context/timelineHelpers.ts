@@ -1,4 +1,5 @@
 import {
+  type AtomicArenaCombat,
   CombatUnitReaction,
   CombatUnitType,
   getUnitReaction,
@@ -2548,6 +2549,11 @@ export function buildKillSequenceBlock(params: {
   allUnits?: ReadonlyArray<{ id: string; ownerId?: string }>;
   /** Arena zone id — `enemyTargetReaches`' line-of-sight test (GH #141). */
   zoneId?: string;
+  /** The round — the healer lock chain asks the shared cooldown model
+   * whether a heal was spent across a lockout (`healerLockIntervals`, the
+   * reading death-setup makes with the same argument; pipeline T240).
+   * Absent: the static cooldown. */
+  combat?: AtomicArenaCombat;
 }): string[] {
   const {
     matchStartMs,
@@ -2614,6 +2620,7 @@ export function buildKillSequenceBlock(params: {
               lockSources,
               (params.allUnits ?? []) as readonly ICombatUnit[],
             ),
+            params.combat,
           ),
           deathMs,
           KILL_SEQ_LOCK_LOOKBACK_S * 1000,

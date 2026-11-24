@@ -1,4 +1,8 @@
-import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { OWN_FLIGHT_AURA_IDS } from "../data/occupancyAuras";
@@ -24,6 +28,8 @@ import { isCompanionCastRow } from "./castPress";
 import { charmedAt } from "./charmedPlayer";
 import {
   playerTalentIdSets,
+  pressReadyAgainAtSeconds,
+  unitCooldownEntry,
   REACTION_WINDOW_S,
   unitCooldownOf,
   USABLE_WHILE_CONFUSED_SPELL_IDS,
@@ -364,24 +370,41 @@ export function pressedHeals(
 
 /**
  * Was this single-charge heal spent for the whole of `iv`? A press before it
- * whose cooldown on this unit (`unitCooldownOf`: Rushing Wind Kick is 12 s on a
- * Mistweaver, 10 s in DB2; codex 20-F21-07) outlasts it, and no press inside it
- * (the press is the proof, whatever a talent took off the cooldown). A charge
- * spell is not read: nothing here counts its charges. 51 lockouts of the 605 raw
- * logs had only such a heal left (Rushing Wind Kick 43).
+ * that was not back in hand before the interval ended, and no press inside it
+ * (the press is the proof, whatever a talent took off the cooldown). "Back in
+ * hand" is the shared model's realised ready instant of that press
+ * (`unitCooldownEntry` + `pressReadyAgainAtSeconds`: per-press effects,
+ * resets, reductions), the same reading the cooldown lines print; without a
+ * `combat` (or when the model has no such press) it is the press plus the
+ * unit's static cooldown (`unitCooldownOf`: Rushing Wind Kick is 12 s on a
+ * Mistweaver, 10 s in DB2; codex 20-F21-07). A charge spell is not read:
+ * nothing here counts its charges. 51 lockouts of the 605 raw logs had only
+ * such a heal left (Rushing Wind Kick 43); pipeline T240: a Thunder Focus Tea
+ * press resets that kick and the kick it empowers is back 3 s later, which
+ * the static 12 s could not see.
  */
 function healSpentAcross(
   unit: ICombatUnit,
   spellId: string,
   presses: readonly number[],
   iv: Pick<NamedCannotCastInterval, "from" | "to">,
+  combat?: AtomicArenaCombat,
 ): boolean {
   const cd = unitCooldownOf(unit, spellId);
   if (!cd || cd.charges > 1) return false;
   if (presses.some((t) => t >= iv.from && t <= iv.to)) return false;
-  return presses.some(
-    (t) => t < iv.from && t + cd.cooldownSeconds * 1000 >= iv.to,
-  );
+  const entry = combat ? unitCooldownEntry(unit, combat, spellId) : undefined;
+  if (entry && (entry.charges ?? 1) > 1) return false;
+  const readyAgainMs = (pressMs: number): number => {
+    const modelled =
+      entry && combat
+        ? pressReadyAgainAtSeconds(entry, (pressMs - combat.startTime) / 1000)
+        : null;
+    return modelled === null || !combat
+      ? pressMs + cd.cooldownSeconds * 1000
+      : combat.startTime + modelled * 1000;
+  };
+  return presses.some((t) => t < iv.from && readyAgainMs(t) >= iv.to);
 }
 
 /**
@@ -397,14 +420,20 @@ function healSpentAcross(
 export function healerLockIntervals<
   T extends Parameters<typeof intervalBlocksSpell>[0] &
     Pick<NamedCannotCastInterval, "from" | "to">,
->(unit: ICombatUnit, named: readonly T[]): T[] {
+>(
+  unit: ICombatUnit,
+  named: readonly T[],
+  /** the round, for the shared cooldown model (`healSpentAcross`) */
+  combat?: AtomicArenaCombat,
+): T[] {
   const heals = [...pressedHeals(unit)];
   return named.filter(
     (iv) =>
       !iv.lockout ||
       heals.every(
         ([id, presses]) =>
-          intervalBlocksSpell(iv, id) || healSpentAcross(unit, id, presses, iv),
+          intervalBlocksSpell(iv, id) ||
+          healSpentAcross(unit, id, presses, iv, combat),
       ),
   );
 }

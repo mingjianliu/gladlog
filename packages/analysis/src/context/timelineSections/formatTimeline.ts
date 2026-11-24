@@ -771,6 +771,7 @@ export function formatTimeline(
       rosterSides,
       allUnits,
       zoneId: ctx.params.zoneId,
+      combat: ctx.params.combat,
     }),
   );
 

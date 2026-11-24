@@ -4759,6 +4759,7 @@ function extractDeathSetups(
                 enemySourceIds(enemies, units),
                 units,
               ),
+              combat,
             ),
             roots: healerSummary.rootInstances,
             matchStartMs: start,

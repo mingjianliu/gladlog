@@ -1183,7 +1183,58 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     },
     note: "Energy Cycle + Ultimate Serenity — Surge of Light spent: Holy Word: Serenity −4 s",
   },
+  // Mistweaver's kick (pipeline T240): Rising Sun Kick 107428 and the talent
+  // that replaces it, Rushing Wind Kick 467307, spend the same DB2 charge
+  // category (1518, 10 s; +2 s on the Mistweaver passive 1258138, aura 453).
+  // 605 files, 12.1.0: 1,107 of 1,574 Rushing Wind Kick re-presses came
+  // inside that 12 s. Three logged mechanisms, DB2 12.1.0.69587 and
+  // 12.1.5.70391 alike (dummy rows, aura 4, no mask — the tooltips name
+  // Rising Sun Kick), read off the press before each of the 1,107:
+  //  - 493: it spent a Thunder Focus Tea stack (below);
+  //  - 266: a Thunder Focus Tea press came between (the reset further down);
+  //  - 348 neither: 125 with a Blackout Kick between (Teachings of the
+  //    Monastery 116645, "a 12 % chance to reset" — no row in the log) and
+  //    223 at 0.7–0.9 of the cooldown, which is haste (GH #219: no haste is
+  //    read). Not modelled, so the number still errs long for those.
+  //
+  // Thunder Focus Tea 116680, effect 0 (−9000): "Rising Sun Kick: Cooldown
+  // reduced by 9 sec" for the kick the buff empowers. A use is the buff
+  // REMOVED (or a dose of it — Focused Thunder holds two) within 0.1 s of
+  // the unit's own kick: cc0a95d4 r411, kick 48.52 s on a tea pressed
+  // 48.31 s, the next kick 51.94 s. Baseline for the spec.
+  "116680:kick": {
+    targets: ["107428", "467307"],
+    talentSpellId: "116680",
+    ownedBySpecIds: ["270"],
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["116680"],
+      byCastIds: ["107428", "467307"],
+      withinMs: 100,
+    },
+    seconds: 9,
+    note: "Thunder Focus Tea — the kick it empowers has 9 s less cooldown",
+  },
+  // Pool of Mists (173841, effect 2: 1000):
+  // "Renewing Mist … reduces the remaining cooldown of Rising Sun Kick by
+  // 1 sec." Held by all 126 Mistweaver rounds with a re-pressed kick.
+  "173841": {
+    targets: ["107428", "467307"],
+    triggerCastIds: ["115151"],
+    seconds: 1,
+    note: "Pool of Mists — Renewing Mist: Rising Sun Kick −1 s",
+  },
   // RESETS (seconds: Infinity — back at the trigger, every charge).
+  //
+  // Morning Breeze (1277302, Mistweaver; pipeline T240, evidence above): "Rising Sun Kick's
+  // damage is increased by your Mastery rating and Thunder Focus Tea resets
+  // its cooldown." Held by all 126 rounds.
+  "1277302": {
+    targets: ["107428", "467307"],
+    triggerCastIds: ["116680"],
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Morning Breeze — Thunder Focus Tea resets Rising Sun Kick",
+  },
   //
   // Apotheosis (Holy, 200183): 「$?s235587[获得一次圣言术的使用次数]
   // [重置圣言术的冷却时间]」 — one charge of each Holy Word with Miracle

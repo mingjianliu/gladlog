@@ -20,7 +20,7 @@ import "./resLedgerPrune";
 import "./stackedDefensives";
 import "./unitLabel";
 
-import { ICombatUnit } from "@gladlog/parser-compat";
+import { type AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
@@ -220,6 +220,9 @@ export interface BuildMatchTimelineParams {
   allUnits?: ICombatUnit[];
   /** Arena zone id — the line-of-sight check of `summonReach` needs the map. */
   zoneId?: string;
+  /** The round, for readers of the shared cooldown model
+   * (`buildKillSequenceBlock`'s healer lock chain; pipeline T240). */
+  combat?: AtomicArenaCombat;
   stasisEvents?: IStasisEvent[];
   spiritOfRedemptionIntervals?: Array<{
     player: ICombatUnit;
