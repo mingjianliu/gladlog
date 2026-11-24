@@ -26,21 +26,21 @@ import {
 import type { UpdaterService } from "./updater";
 
 type CoachChatService = ReturnType<typeof createCoachChatService>;
+import { type Language, translate } from "../shared/i18n/index";
 import {
   formatOpenTrace,
   OPEN_TRACE_CHANNEL,
   type OpenTraceRead,
   type OpenTraceRecord,
 } from "../shared/openTrace";
-import { type Language, translate } from "../shared/i18n/index";
 import { vodUrl } from "../shared/vod";
 import type { ObsAudioDevice } from "./managedObsBackend";
 import type { ObsInstallProgress } from "./obsAssets";
 import {
-  isAuthUnknownFailure,
   detectObsRecordingPrefs,
   detectObsWebsocket,
   importedPrefsPatch,
+  isAuthUnknownFailure,
   resolveAutoConfigPassword,
 } from "./obsAutoConfig";
 
