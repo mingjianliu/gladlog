@@ -29,8 +29,8 @@ import { charmedAt } from "./charmedPlayer";
 import {
   playerTalentIdSets,
   pressReadyAgainAtSeconds,
-  unitCooldownEntry,
   REACTION_WINDOW_S,
+  unitCooldownEntry,
   unitCooldownOf,
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
