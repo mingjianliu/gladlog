@@ -356,6 +356,10 @@ async function windowSmoke() {
   const spec = specToString(healer.spec);
   const candidates = extractCandidateFindings(round);
   const durS = Math.floor((round.endTime - round.startTime) / 1000);
+  // getSettings() carries no language, so main pins zh; the packs' chip
+  // labels are built in the same language and the request says so
+  // (analyzeWindow refuses a missing or mismatched contentLang).
+  const lang = "zh" as const;
   type WindowHit = NonNullable<ReturnType<typeof buildWindowPack>> & {
     fromS: number;
     toS: number;
@@ -369,6 +373,7 @@ async function windowSmoke() {
       fromS + 20,
       candidates,
       healer.name,
+      lang,
     );
     if (w)
       hits.push({
@@ -404,6 +409,7 @@ async function windowSmoke() {
       kind: w.kind,
       spec,
       ownerName: healer.name,
+      contentLang: lang,
       force: true,
     });
     console.log(`status=${r.status}`);
