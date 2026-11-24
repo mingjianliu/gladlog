@@ -41,6 +41,7 @@ import {
   type ControlLandingAura,
   pressDidNotReachPressured,
   SELF_SAVE_ANSWER_IDS,
+  TEAM_HEAL_WALL_ANSWER_IDS,
 } from "../analysis/burstWindowDecisionPoints";
 import {
   type IPlayerCCTrinketSummary,
@@ -285,6 +286,9 @@ export function creditedAnswer(p: BurstWindowDecisionPoint) {
 export function answersPressured(
   pr: NonNullable<BurstWindowDecisionPoint["pressured"]>,
   r: BurstResponseCast,
+  /** R110: read another teammate's team-heal wall as an answer too — the
+   * fallback credit `teamHealWallCredit` asks; every other rule holds */
+  opts?: { teamHealWall?: boolean },
 ): boolean {
   if (r.afterPressuredDeath) return false;
   // user ruling R80 (2026-11-19): a self-save (Alter Time, Mass
@@ -312,7 +316,8 @@ export function answersPressured(
   if (
     r.category === "wall" &&
     r.casterId !== undefined &&
-    r.casterId !== pr.unitId
+    r.casterId !== pr.unitId &&
+    !(opts?.teamHealWall && TEAM_HEAL_WALL_ANSWER_IDS.has(r.spellId))
   )
     return false;
   // T123: an answer counts for a unit only when its effect is on that unit
@@ -345,6 +350,32 @@ export function answersPressured(
   )
     return false;
   return true;
+}
+
+/**
+ * User ruling R110 (2026-11-22, T257; GH #226-40): another teammate's
+ * team-heal wall — Tree of Life, Ancient of Lore, Ultimate Penitence, the
+ * pressed Spirit of Redemption (`TEAM_HEAL_WALL_ANSWER_IDS`, R93) — stops
+ * the accusation and was never named. It is named ONLY in a window that
+ * has no other credited answer (`creditedAnswer` is undefined): the first
+ * such wall that passes every other rule of `answersPressured`. A window
+ * with another answer keeps naming that one, and `formatBurstAnsweredLines`
+ * gives these windows only the cap slots the others leave. Mass
+ * Invisibility stays unnamed (R80). Exported for scan5/t257.ts.
+ */
+export function teamHealWallCredit(
+  p: BurstWindowDecisionPoint,
+): BurstResponseCast | undefined {
+  const pr = p.pressured;
+  if (!pr || creditedAnswer(p) !== undefined) return undefined;
+  return p.responseCasts.find(
+    (r) =>
+      r.category === "wall" &&
+      TEAM_HEAL_WALL_ANSWER_IDS.has(r.spellId) &&
+      r.casterId !== undefined &&
+      r.casterId !== pr.unitId &&
+      answersPressured(pr, r, { teamHealWall: true }),
+  );
 }
 
 /**
@@ -430,15 +461,18 @@ function controlTargetClause(
   return ` on ${parts.join(" and ")}`;
 }
 
-function isCreditable(p: BurstWindowDecisionPoint): boolean {
+/** The door of a credit line apart from who is credited. */
+function isCreditableWindow(p: BurstWindowDecisionPoint): boolean {
   return (
     p.feasible &&
     p.responded &&
-    creditedAnswer(p) !== undefined &&
     p.pressured !== null &&
     p.pressured.minHpPct !== null &&
     p.pressured.minHpPct <= BURST_ANSWERED_MAX_HP_PCT
   );
+}
+function isCreditable(p: BurstWindowDecisionPoint): boolean {
+  return isCreditableWindow(p) && creditedAnswer(p) !== undefined;
 }
 
 /** How a context-fact line names a player: the timeline's roster label
@@ -468,12 +502,20 @@ export function formatBurstAnsweredLines(
   // `anyFriendlyDeath` is the engine's own field (the same predicate the
   // candidate's cap ordering and the corpus reference's death outcome use),
   // not a second death derivation.
-  const ranked = [...eligible].sort(
-    (a, b) =>
-      Number(b.anyFriendlyDeath) - Number(a.anyFriendlyDeath) ||
-      (a.pressured!.minHpPct ?? 101) - (b.pressured!.minHpPct ?? 101),
-  );
-  return ranked
+  const byDanger = (
+    a: BurstWindowDecisionPoint,
+    b: BurstWindowDecisionPoint,
+  ): number =>
+    Number(b.anyFriendlyDeath) - Number(a.anyFriendlyDeath) ||
+    (a.pressured!.minHpPct ?? 101) - (b.pressured!.minHpPct ?? 101);
+  const ranked = [...eligible].sort(byDanger);
+  // R110: the windows only a teammate's team-heal wall answers come after
+  // every other window, so they take the cap slots left over and push no
+  // line out
+  const teamWallOnly = points
+    .filter((p) => isCreditableWindow(p) && teamHealWallCredit(p) !== undefined)
+    .sort(byDanger);
+  return [...ranked, ...teamWallOnly]
     .slice(0, cap)
     .map((p) => {
       // Only the CDs inside the response horizon this line talks about, each
@@ -483,7 +525,7 @@ export function formatBurstAnsweredLines(
         labels ? (c) => labels.enemy(c.casterName) : undefined,
       );
       const extrasPart = extras ? ` (+${extras})` : "";
-      const first = creditedAnswer(p)!;
+      const first = (creditedAnswer(p) ?? teamHealWallCredit(p))!;
       // Latency is an INTERVAL between two instants, not a grid-anchored
       // instant, so one decimal is legitimate here where a rendered timestamp
       // would have to be floored (the engine already rounds it to 0.1s).

@@ -20,7 +20,8 @@
  *    reading — the classes the user left as they are (another unit's own
  *    wall, a control off before the opener, an effect over before the
  *    trough, a press after the unit's death). Kind = the first response's
- *    refusal.
+ *    refusal. A window the credit line names a teammate's team-heal wall
+ *    for (`teamHealWallCredit`, ruling R110) is not one of them.
  *  - `ignoredHealCdById` (inventory, every owner): every healing-CD
  *    response by a unit other than the pressured one whose official verdict
  *    is self-only (`HEALING_VERDICTS.official.healsOthers === false`) — the
@@ -42,7 +43,10 @@ import {
   pressWentElsewhere,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
-import { answersPressured } from "@gladlog/analysis/src/context/burstAnswered";
+import {
+  answersPressured,
+  teamHealWallCredit,
+} from "@gladlog/analysis/src/context/burstAnswered";
 import { HEALING_VERDICTS } from "@gladlog/analysis/src/data/healingVerdicts";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
@@ -197,7 +201,13 @@ export function run(ctx: IRoundCtx): void {
         );
       continue;
     }
-    if (p.responseCasts.every((r) => !answersPressured(pr, r))) {
+    // …unless the credit line names a teammate's team-heal wall for it
+    // (`teamHealWallCredit`, ruling R110): that window is answered by a
+    // press the line credits
+    if (
+      p.responseCasts.every((r) => !answersPressured(pr, r)) &&
+      teamHealWallCredit(p) === undefined
+    ) {
       const r = p.responseCasts.find((x) => !pressDidNotReachPressured(pr, x))!;
       ctx.violate("respondedOnRefusedPress", refusal(pr, r), at, fact, detail);
     }

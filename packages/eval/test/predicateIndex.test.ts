@@ -4982,6 +4982,13 @@ const INDEX: PredicateRow[] = [
     symbol: "formatBurstAnsweredLines",
     mod: burstAnswered,
   },
+  // T257 (ruling R110): the fallback credit of a window only a teammate's
+  // team-heal wall answers
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "teamHealWallCredit",
+    mod: burstAnswered,
+  },
   {
     file: `${A}/context/burstAnswered.ts`,
     symbol: "BURST_ANSWERED_CAP",

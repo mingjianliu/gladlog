@@ -21,6 +21,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   aimedControlUpAt,
+  type BurstResponseCast,
   type BurstWindowDecisionPoint,
   burstWindowDecisionPoints,
 } from "../analysis/burstWindowDecisionPoints";
@@ -33,8 +34,10 @@ import {
   BURST_ANSWERED_READ_TO_LEGEND,
   BURST_ANSWERED_TAG,
   ccSpanLookup,
+  creditedAnswer,
   formatBurstAnsweredLines,
   parseBurstAnsweredLine,
+  teamHealWallCredit,
 } from "./burstAnswered";
 import { buildMatchTimeline } from "./matchTimeline";
 
@@ -215,6 +218,67 @@ describe("formatBurstAnsweredLines — cap and selection order", () => {
   it("EMITS in time order even though it SELECTS by danger", () => {
     const out = formatBurstAnsweredLines([mk(10, 50), mk(20, 12)]);
     expect(out.map((e) => e.atSeconds)).toEqual([10, 20]);
+  });
+});
+
+describe("R110 (T257) — another teammate's team-heal wall is named only where nothing else is", () => {
+  const tree = (over: Partial<BurstResponseCast> = {}): BurstResponseCast =>
+    ({
+      category: "wall",
+      spellId: "33891",
+      spellName: "Incarnation: Tree of Life",
+      casterName: "Me-R",
+      casterId: "f1",
+      tSec: 43,
+      latencySec: 3.1,
+      ...over,
+    }) as BurstResponseCast;
+  it("a window answered only by a teammate's Tree of Life prints, naming it", () => {
+    const p = point({ responseCasts: [tree()] });
+    expect(creditedAnswer(p)).toBeUndefined();
+    expect(teamHealWallCredit(p)?.spellId).toBe("33891");
+    expect(formatBurstAnsweredLines([p])[0]!.line).toContain(
+      "Me-R answered with Incarnation: Tree of Life in 3.1s; Mate-R bottomed at 31% at 0:45",
+    );
+  });
+  it("a window with another credited answer keeps naming that one, whichever came first", () => {
+    const p = point({
+      responseCasts: [
+        tree({ latencySec: 1.0, tSec: 41 }),
+        ...point().responseCasts,
+      ],
+    });
+    expect(teamHealWallCredit(p)).toBeUndefined();
+    expect(formatBurstAnsweredLines([p])[0]!.line).toContain(
+      "answered with Pain Suppression in 2.4s",
+    );
+  });
+  it("another teammate's ordinary wall, a Mass Invisibility and the pressured unit's death before the press stay unnamed", () => {
+    for (const r of [
+      tree({ spellId: "22812", spellName: "Barkskin" }),
+      tree({ spellId: "414664", spellName: "Mass Invisibility" }),
+      tree({ afterPressuredDeath: true }),
+    ]) {
+      const p = point({ responseCasts: [r] });
+      expect(teamHealWallCredit(p)).toBeUndefined();
+      expect(formatBurstAnsweredLines([p])).toEqual([]);
+    }
+  });
+  it("takes only the cap slots the other windows leave: no line is pushed out", () => {
+    const wallWindow = point({
+      tSec: 10,
+      anyFriendlyDeath: true,
+      responseCasts: [tree()],
+    });
+    const others = [point({ tSec: 40 }), point({ tSec: 80 })];
+    expect(
+      formatBurstAnsweredLines([wallWindow, ...others]).map((e) => e.atSeconds),
+    ).toEqual([40, 80]);
+    expect(
+      formatBurstAnsweredLines([wallWindow, others[0]!]).map(
+        (e) => e.atSeconds,
+      ),
+    ).toEqual([10, 40]);
   });
 });
 
