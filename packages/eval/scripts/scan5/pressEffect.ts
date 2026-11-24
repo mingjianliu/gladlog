@@ -33,6 +33,29 @@ const LINE = new RegExp(
 );
 const spellOf = (rest: string): string =>
   /^(.+?)(?: \(| \[|$)/.exec(rest)?.[1] ?? rest;
+/** A REFRESH inside the line's second that no press of the name explains (no
+ * press within 50 ms of it, none in `PRESS_AFTER_MS` after it) is an
+ * activation of its own, and a `[no press logged]` line in that second may be
+ * about it, not about a pressed APPLIED beside it. 11346ea9 r1 1:53 (T259 /
+ * B192): Frenzied Regeneration APPLIED .197 with the druid's press at .198
+ * (its own line), then at .937 a REFRESH carrying the Well-Honed Instincts
+ * marker 382912, the proc the second line prints. */
+export function unpressedRefreshInSecond(
+  auras: readonly { event: string; ts: number }[],
+  pressTs: readonly number[],
+  lo: number,
+): boolean {
+  return auras.some(
+    (a) =>
+      a.event === REFRESH &&
+      a.ts >= lo &&
+      a.ts < lo + 1000 &&
+      !pressTs.some(
+        (p) =>
+          Math.abs(p - a.ts) <= 50 || (p >= a.ts && p <= a.ts + PRESS_AFTER_MS),
+      ),
+  );
+}
 
 export function run(ctx: IRoundCtx): void {
   for (const line of ctx.lines) {
@@ -56,6 +79,14 @@ export function run(ctx: IRoundCtx): void {
       );
       if (!up) continue;
       ctx.bump("noPressButPressed");
+      if (
+        unpressedRefreshInSecond(
+          auras.map((a) => ({ event: ev(a), ts: tsOf(a) })),
+          presses.map(tsOf),
+          lo,
+        )
+      )
+        continue;
       const press = presses.find(
         (c) => tsOf(c) >= tsOf(up) && tsOf(c) <= tsOf(up) + PRESS_AFTER_MS,
       );
