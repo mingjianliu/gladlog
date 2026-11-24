@@ -6,7 +6,7 @@
  * chars: the v0.1.44 wide check lost a finished walk to it, T263). The bytes
  * written here are the ones that call would have produced.
  */
-import { closeSync, openSync, writeSync } from "node:fs";
+import { closeSync, openSync, writeFileSync } from "node:fs";
 
 const FLUSH_CHARS = 1 << 22;
 
@@ -29,7 +29,8 @@ export function writeJsonIndent1(
   const put = (s: string): void => {
     buf += s;
     if (buf.length > FLUSH_CHARS) {
-      writeSync(fd, buf);
+      // writeFileSync, not writeSync: it writes until every byte is out
+      writeFileSync(fd, buf);
       buf = "";
     }
   };
@@ -43,17 +44,17 @@ export function writeJsonIndent1(
       put(`${i ? "," : ""}\n ${JSON.stringify(k)}: `);
       if (Array.isArray(v) && v.length > 0) {
         put("[");
-        v.forEach((e: unknown, j) =>
-          // an element stringify drops (undefined, a function) prints as null
+        // by index, so a hole counts; an element stringify drops (undefined,
+        // a function, a hole) prints as null
+        for (let j = 0; j < v.length; j++)
           put(
-            `${j ? "," : ""}\n  ${nest(JSON.stringify(e, null, 1) ?? "null", "  ")}`,
-          ),
-        );
+            `${j ? "," : ""}\n  ${nest(JSON.stringify(v[j], null, 1) ?? "null", "  ")}`,
+          );
         put("\n ]");
       } else put(nest(JSON.stringify(v, null, 1) ?? "null", " "));
     });
     put(keys.length ? "\n}" : "}");
-    writeSync(fd, buf);
+    writeFileSync(fd, buf);
   } finally {
     closeSync(fd);
   }

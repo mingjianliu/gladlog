@@ -373,60 +373,71 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
     expect(keptDirs(cap)).toEqual([]);
   }, 120_000);
 
-  it("keeps a finished walk whose join threw, and joins it without walking", () => {
-    const cap = capture();
-    const whole = join(cap, "whole");
-    expect(runner(cap, whole, "--workers", "1").status).toBe(0);
-    const out = join(cap, "out");
-    mkdirSync(out);
-    // the join's last step cannot write: the reports are made, not published
-    chmodSync(out, 0o555);
-    const failed = runner(cap, out, "--workers", "2", "--chunks", "3");
-    chmodSync(out, 0o755);
-    expect(failed.status).not.toBe(0);
-    expect(readdirSync(out)).toEqual([]);
-    const [kept] = keptDirs(cap);
-    expect(kept).toBeDefined();
-    expect(failed.stderr).toContain(`--join-from ${join(cap, kept!)}`);
+  // root writes through a read-only directory: nothing here would fail
+  it.skipIf(process.getuid?.() === 0)(
+    "keeps a finished walk whose join threw, and joins it without walking",
+    () => {
+      const cap = capture();
+      const whole = join(cap, "whole");
+      expect(runner(cap, whole, "--workers", "1").status).toBe(0);
+      const out = join(cap, "out");
+      mkdirSync(out);
+      // the join's last step cannot write: the reports are made, not published
+      chmodSync(out, 0o555);
+      const failed = runner(cap, out, "--workers", "2", "--chunks", "3");
+      chmodSync(out, 0o755);
+      expect(failed.status).not.toBe(0);
+      expect(readdirSync(out)).toEqual([]);
+      const [kept] = keptDirs(cap);
+      expect(kept).toBeDefined();
+      expect(failed.stderr).toContain(`--join-from ${join(cap, kept!)}`);
 
-    // another split's states are not this run's
-    const other = runner(
-      cap,
-      out,
-      "--chunks",
-      "2",
-      "--join-from",
-      join(cap, kept!),
-    );
-    expect(other.status).toBe(1);
-    expect(other.stderr).toContain("does not hold a finished walk");
-    expect(keptDirs(cap)).toEqual([kept]);
-
-    // no worker runs: a walk could not read these
-    for (let i = 1; i <= 5; i++)
-      chmodSync(join(cap, "s0", "context", `${i}-1-1.txt`), 0o000);
-    const joined = runner(
-      cap,
-      out,
-      "--chunks",
-      "3",
-      "--join-from",
-      join(cap, kept!),
-    );
-    expect(joined.stdout).toContain("5/5 contexts");
-    expect(joined.status).toBe(0);
-    for (const f of ["gates.txt", "gates.json"])
-      expect(readFileSync(join(out, f), "utf8")).toBe(
-        readFileSync(join(whole, f), "utf8"),
+      // another split's states are not this run's
+      const other = runner(
+        cap,
+        out,
+        "--chunks",
+        "2",
+        "--join-from",
+        join(cap, kept!),
       );
-    expect(keptDirs(cap)).toEqual([]);
-  }, 180_000);
+      expect(other.status).toBe(1);
+      expect(other.stderr).toContain("does not hold a finished walk");
+      expect(keptDirs(cap)).toEqual([kept]);
 
-  it("refuses a directory with no finished walk", () => {
+      // no worker runs: a walk could not read these
+      for (let i = 1; i <= 5; i++)
+        chmodSync(join(cap, "s0", "context", `${i}-1-1.txt`), 0o000);
+      const joined = runner(
+        cap,
+        out,
+        "--chunks",
+        "3",
+        "--join-from",
+        join(cap, kept!),
+      );
+      expect(joined.stdout).toContain("5/5 contexts");
+      expect(joined.status).toBe(0);
+      for (const f of ["gates.txt", "gates.json"])
+        expect(readFileSync(join(out, f), "utf8")).toBe(
+          readFileSync(join(whole, f), "utf8"),
+        );
+      expect(keptDirs(cap)).toEqual([]);
+    },
+    180_000,
+  );
+
+  it("refuses a directory with no finished walk, and a split of none", () => {
     const cap = capture();
     const r = runner(cap, join(cap, "out"), "--join-from", cap);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("does not hold a finished walk");
+    for (const n of ["0", "x"]) {
+      const bad = runner(cap, join(cap, "out"), "--chunks", n);
+      expect(bad.status).toBe(2);
+      expect(bad.stderr).toContain("--chunks takes a whole number");
+    }
+    expect(keptDirs(cap)).toEqual([]);
     expect(existsSync(join(cap, "s0", "context", "1-1-1.txt"))).toBe(true);
   }, 60_000);
 });
@@ -468,6 +479,8 @@ describe("writeJsonIndent1 (T263)", () => {
         e: "",
         when: new Date(0),
       },
+      // eslint-disable-next-line no-sparse-arrays -- a hole prints as null
+      { violations: [, 7, , 8] },
       {},
     ];
     for (const c of cases) expect(written(c)).toBe(JSON.stringify(c, null, 1));
@@ -484,7 +497,11 @@ describe("writeJsonIndent1 (T263)", () => {
     const spy = vi
       .spyOn(JSON, "stringify")
       .mockImplementation((v: unknown, ...rest: unknown[]) => {
-        if (Array.isArray(v) && v.length > 1000)
+        const long = (a: unknown) => Array.isArray(a) && a.length > 1000;
+        if (
+          long(v) ||
+          (v && typeof v === "object" && Object.values(v).some(long))
+        )
           throw new Error("a whole array stringified");
         return (real as (...a: unknown[]) => string)(v, ...rest);
       });

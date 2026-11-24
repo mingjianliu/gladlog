@@ -19,8 +19,9 @@
  * worker, `--workers` of them at a time (the wide corpus: a chunk that dies of
  * SIGILL is walked again alone, and no process holds a third of the corpus).
  * A walk that finished keeps its accumulators when the join after it throws,
- * and `--join-from <that directory>` joins them without walking again; the
- * reports do not depend on any of the three. `--files N` keeps the first N
+ * and `--join-from <that directory>` joins them without walking again (same
+ * capture, split and scan list — the code may differ: a fixed report writer is
+ * what a join is rerun for); the reports do not depend on any of the three. `--files N` keeps the first N
  * contexts (a quick pass); `--freeze` deep-freezes the rows, which proves no
  * check writes to what the owners and scans share; `--coverage` writes
  * `coverage.json` for `verify/coverSet.ts`.
@@ -38,7 +39,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { deserialize, serialize } from "node:v8";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -128,6 +129,14 @@ if (!DIR || !OUT) {
   console.error("usage: verify/run.ts <captureDir> --out <dir> [--scans a,b]");
   process.exit(2);
 }
+for (const [flag, n] of [
+  ["--workers", WORKERS],
+  ["--chunks", CHUNKS],
+] as const)
+  if (!Number.isInteger(n) || n < 1) {
+    console.error(`verify: ${flag} takes a whole number, 1 or more`);
+    process.exit(2);
+  }
 
 const contextFiles = () => {
   const all = listContextFiles(DIR);
@@ -225,7 +234,10 @@ function freeMemoryPct(): number | undefined {
 
 /** stop the whole run below `FREE_STOP_PCT` free: three machine freezes came
  * from corpus jobs, and a rerun with fewer workers costs minutes */
-function watchMemory(children: ChildProcess[]): () => number {
+function watchMemory(
+  children: ChildProcess[],
+  onLow: () => void,
+): () => number {
   let lowest = 100;
   const timer = setInterval(() => {
     const free = freeMemoryPct();
@@ -233,6 +245,7 @@ function watchMemory(children: ChildProcess[]): () => number {
     lowest = Math.min(lowest, free);
     if (free >= FREE_STOP_PCT) return;
     console.error(`low memory: ${free}% free, stopping the workers`);
+    onLow();
     for (const c of children) c.kill();
   }, 10_000);
   return () => {
@@ -361,9 +374,18 @@ async function main(): Promise<void> {
     console.error(`verify: no contexts under ${DIR}`);
     process.exit(1);
   }
+  /** the capture's own hash, when it has one: the same path can hold another
+   * capture by the time a kept walk is joined */
+  let captureHash: string | null = null;
+  try {
+    captureHash = readFileSync(join(DIR!, "capture.sha256"), "utf8").trim();
+  } catch {
+    // a capture that did not pass, or a hand-made one
+  }
   const walk = JSON.stringify({
     capture: resolve(DIR!),
-    archiveDir: ARCHIVE_DIR,
+    captureHash,
+    archiveDir: ARCHIVE_DIR && resolve(ARCHIVE_DIR),
     contexts: expected,
     files: FILES ?? null,
     chunks: CHUNKS,
@@ -391,6 +413,11 @@ async function main(): Promise<void> {
   const tmp = JOIN_FROM
     ? resolve(JOIN_FROM)
     : mkdtempSync(join(dirname(resolve(OUT!)), ".verify-"));
+  // the verdict removes the kept directory, and the reports with it
+  if (!relative(tmp, resolve(OUT!)).startsWith("..")) {
+    console.error(`verify: --out is inside --join-from ${tmp}`);
+    process.exit(2);
+  }
   /** the walk is on disk, whole: from here only a verdict removes it */
   let walked = Boolean(JOIN_FROM);
   /** the run reached its verdict, published or refused */
@@ -407,10 +434,14 @@ async function main(): Promise<void> {
   };
   const children: ChildProcess[] = [];
   let stopped: Promise<void> | undefined;
+  /** a signal or the memory watch ended the walk: no lane takes another
+   * chunk, and a walk that ends this way did not finish */
+  let stopping = false;
   /** every worker gone, by SIGKILL after 5 s: the one shutdown, whichever of
    * a dead worker or a signal started it */
   const stopWorkers = (): Promise<void> =>
     (stopped ??= (async () => {
+      stopping = true;
       const live = children.filter(
         (c) => c.exitCode === null && c.signalCode === null,
       );
@@ -433,21 +464,24 @@ async function main(): Promise<void> {
       });
     });
   try {
-    reportDir = join(tmp, "out");
-    // a join that threw left half a report in the kept directory
+    // this process's own: a join that threw left half a report in the kept
+    // directory, and a second join of it must not share a staging directory
+    reportDir = join(tmp, `out-${process.pid}`);
     rmSync(reportDir, { recursive: true, force: true });
     mkdirSync(reportDir);
     const paths = Array.from({ length: CHUNKS }, (_, k) =>
       join(tmp, `w${k}.bin`),
     );
-    const stopWatch = watchMemory(children);
+    const stopWatch = watchMemory(children, () => {
+      stopping = true;
+    });
     try {
       let next = 0;
       let dead = false;
       /** one of `WORKERS` lanes: the next chunk not yet taken, until none is
        * left or a chunk died */
       const lane = async (): Promise<void> => {
-        while (next < CHUNKS && !dead) {
+        while (next < CHUNKS && !dead && !stopping) {
           const k = next++;
           for (let attempt = 1; ; attempt++)
             try {
@@ -459,6 +493,7 @@ async function main(): Promise<void> {
               // writes every state file again; any other death ends the run.
               if (
                 dead ||
+                stopping ||
                 attempt >= SIGILL_ATTEMPTS ||
                 !(e instanceof WorkerDeath && e.signal === "SIGILL")
               ) {
@@ -473,6 +508,8 @@ async function main(): Promise<void> {
         await Promise.all(
           Array.from({ length: Math.min(WORKERS, CHUNKS) }, lane),
         );
+        // a worker that exited 0 as the stop began fails no lane
+        if (stopping) throw new Error("verify: the walk was stopped");
         writeFileSync(join(tmp, WALK_FILE), walk);
         walked = true;
       }
