@@ -1899,5 +1899,13 @@
  *  led by Champion's Spear that had passed only on the bracket-wide
  *  fallback. The cd-hoarded reference count reads 16,063.
  *  See docs/prompt-version-history.md.
+ *
+ * v664 (2026-11-24; pipeline batch B193, T261): A control debuff that a
+ *  Greater Invisibility holder's own press put on its target, logged in the
+ *  same millisecond just below the invisibility's APPLIED, is no longer
+ *  read as the mage's next action ending the invisibility: the kill
+ *  window's stealth split applies again (wide: one round, 0c2f3878 r2; the
+ *  605: no change).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 663;
+export const PROMPT_VERSION = 664;

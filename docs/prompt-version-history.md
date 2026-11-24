@@ -8579,3 +8579,11 @@ longer pass, and the 3v3 row (`3v3|*`, 7 % vs 13 %) passes on its own cell
 `3v3|376079` (5 % vs 8 %). captureFamilyDiff flags 3 families, all slow-
 defensive-response menu rows (Summon Darkglare 10 -> 2, The Hunt 6 -> 1, Havoc
 6 -> 1). Not in these tables: the commits after 42e5c4d6.
+
+v664 (pipeline batch B193, T261): a press's own control debuff logged below
+Greater Invisibility's APPLIED in the same millisecond is the press landing,
+not the mage's next action. 605 capture identical to the parent (0 contexts
+changed); on the wide manifest the only moved line is 0c2f3878 r2's [KILL
+WINDOW] 1:04-1:18 -> 1:08-1:18 (the 3.3 s before invisibility is under the 5 s
+window minimum). scan5 effectEnd unseenEndOpener now calls the producer's
+holderOpenerDebuffAfter.
