@@ -35,7 +35,7 @@ describe("meterValue", () => {
 });
 
 describe("meterRows", () => {
-  it("sorts desc, scales width to the max, formats the label with thousands separators", () => {
+  it("sorts desc, scales width to the max, abbreviates the label (≥1e3 → x.xk)", () => {
     const rows = [
       u({ unitId: "a", name: "A", classId: 2, damageDone: 500 }),
       u({ unitId: "b", name: "B", classId: 3, damageDone: 2000 }),
@@ -44,7 +44,8 @@ describe("meterRows", () => {
     expect(out.map((r) => r.unitId)).toEqual(["b", "a"]);
     expect(out[0].widthPct).toBe(100);
     expect(out[1].widthPct).toBe(25);
-    expect(out[0].label).toBe("2,000");
+    expect(out[0].label).toBe("2.0k");
+    expect(out[1].label).toBe("500");
     expect(out[1].value).toBe(500);
   });
 

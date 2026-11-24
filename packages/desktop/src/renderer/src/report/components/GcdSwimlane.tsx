@@ -171,7 +171,7 @@ const LaneBody = memo(function LaneBody({
               >
                 <Dot track={tr} />
                 <span className="rpt-gcd-col-name">
-                  <UnitName name={tr.name} full />
+                  <UnitName name={tr.name} />
                 </span>
               </div>
               <div className="rpt-gcd-col-body" style={{ height: contentH }}>
@@ -605,7 +605,7 @@ export function GcdSwimlane({
                   onClick={() => onToggle(tr.unitId)}
                 >
                   <Dot track={tr} />
-                  <UnitName name={tr.name} full />
+                  <UnitName name={tr.name} />
                 </button>
               ))}
             </div>

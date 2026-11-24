@@ -81,4 +81,47 @@ export const enStats = {
   "stats.curve.notEnough":
     "Not enough rating data (needs at least 2 rated matches).",
   "stats.close": "Close",
+  // Per-character record page (CharacterStats.tsx).
+  "stats.row.rounds": (p: MessageParams) =>
+    ` · ${plural(p.n, "round", "rounds")}`,
+  "stats.cs.allBrackets": "All brackets",
+  "stats.cs.bracketAria": "Bracket",
+  "stats.cs.characters": "Characters",
+  "stats.cs.matches": "Matches",
+  "stats.cs.winRate": "Win rate (Shuffle by round)",
+  "stats.cs.peakRating": "Peak rating",
+  "stats.cs.emptyPeriod": "No matches in this period.",
+  "stats.cs.emptyCharacter": "This character has no matches in this period.",
+  "stats.cs.showAll": "Show all time",
+  "stats.cs.openCharacter": "Open {name}'s record",
+  "stats.cs.cardMeta": (p: MessageParams) =>
+    `${plural(p.n, "match", "matches")} · last ${p.day}`,
+  "stats.cs.minor": (p: MessageParams) =>
+    `${plural(p.n, "more character", "more characters")} with fewer than ${p.min} matches:`,
+  "stats.cs.unnamed": (p: MessageParams) =>
+    `· ${plural(p.n, "older match", "older matches")} without a recorded character, not on the cards`,
+  "stats.cs.noDelta": "Not enough ratings for a change",
+  "stats.cs.deltaFrom": " from {from}",
+  "stats.cs.unitRounds": "rounds",
+  "stats.cs.unitMatches": "matches",
+  "stats.cs.lobbies": (p: MessageParams) => plural(p.n, "lobby", "lobbies"),
+  "stats.cs.smallSample": "small sample",
+  "stats.cs.switch": "/ Switch:",
+  "stats.cs.periodGames": (p: MessageParams) =>
+    `${plural(p.n, "match", "matches")} in this period`,
+  "stats.cs.kpi.current": "Current rating",
+  "stats.cs.kpi.change": "Change this period",
+  "stats.cs.kpi.peak": "Peak",
+  "stats.cs.record": "Record ({unit})",
+  "stats.cs.chartTitle": "Rating",
+  "stats.cs.chartLegend":
+    "One dot per match · green = win · red = loss · grey = 3-3 · line = new session",
+  "stats.cs.chartNote":
+    "Ratings are taken at the start of each match, so the last match's change shows up only after the next one (rows marked *).",
+  "stats.cs.sessions": "Sessions",
+  "stats.cs.session.start": "Start",
+  "stats.cs.session.games": "Matches",
+  "stats.cs.session.rating": "Rating",
+  "stats.cs.session.change": "Change",
+  "stats.cs.unsettled": "The last match's change shows up after the next match",
 };

@@ -73,7 +73,7 @@ export function CCChainPanel({
                       }}
                     />
                   )}
-                  <UnitName name={r.targetName} full />
+                  <UnitName name={r.targetName} />
                   <span className="rpt-stats-caret">
                     {expanded ? " ▾" : " ▸"}
                   </span>

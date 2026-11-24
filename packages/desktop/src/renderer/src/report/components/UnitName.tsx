@@ -37,7 +37,10 @@ export function UnitName({
   const sides = useContext(TeamSideContext);
   const short = shortUnitName(name);
   return (
-    <span className={className ? `rpt-unitname ${className}` : "rpt-unitname"}>
+    <span
+      className={className ? `rpt-unitname ${className}` : "rpt-unitname"}
+      title={!full && short !== name ? name : undefined}
+    >
       <TeamDot side={sides.get(short) ?? "unknown"} />
       {full ? name : short}
     </span>

@@ -4,9 +4,13 @@ import { vi } from "vitest";
 
 import type { StoredMatchMeta } from "../src/main/matchStore";
 import {
+  deriveBracketLines,
+  deriveCharacterBracket,
+  deriveCharacterCards,
   deriveCurrentRating,
   deriveDashboard,
   deriveRatingDeltas,
+  matchOutcome,
   periodStart,
   RATE_MIN_N_ROW,
   RATE_MIN_N_TOTAL,
@@ -409,5 +413,98 @@ describe("rateDisplay (small-N honesty, UI review #8)", () => {
     expect(RATE_MIN_N_ROW).toBeLessThan(RATE_MIN_N_TOTAL);
     expect(rateDisplay(3, 4, RATE_MIN_N_ROW).belowFloor).toBe(true);
     expect(rateDisplay(3, 5, RATE_MIN_N_ROW).belowFloor).toBe(false);
+  });
+});
+
+describe("战绩页改版:按角色 × 赛制", () => {
+  const t0 = new Date("2026-10-20T20:00:00Z").getTime();
+  const at = (min: number) => t0 + min * 60_000;
+  const lib: StoredMatchMeta[] = [
+    // Dr: two 3v3 sessions (gap > 60 min) + one shuffle lobby
+    meta({ id: "a1", playerName: "Dr-Tich", startTime: at(0), endTime: at(5), playerRating: 2000, result: "win" }),
+    meta({ id: "a2", playerName: "Dr-Tich", startTime: at(6), endTime: at(11), playerRating: 2015, result: "loss" }),
+    meta({ id: "a3", playerName: "Dr-Tich", startTime: at(200), endTime: at(205), playerRating: 2004, result: "win" }),
+    meta({ id: "a4", playerName: "Dr-Tich", startTime: at(206), endTime: at(211), playerRating: 2020, result: "win" }),
+    meta({
+      id: "s1",
+      kind: "shuffle",
+      bracket: "Rated Solo Shuffle",
+      playerName: "Dr-Tich",
+      startTime: at(300),
+      endTime: at(330),
+      playerRating: 2400,
+      result: "Lose",
+      roundStats: [true, true, true, false, false, false].map((win) => ({ win, enemySpecIds: [] })),
+    }),
+    // Pal: one match, team MMR only on another
+    meta({ id: "b1", playerName: "Pal-Illi", startTime: at(10), playerRating: 1800 }),
+    // legacy row without a name
+    meta({ id: "c1", startTime: at(20) }),
+  ];
+
+  it("一张卡一个角色,一行一个赛制;少于 3 场进 minor;无名旧行单独计数", () => {
+    const { cards, minor, unnamed } = deriveCharacterCards(lib, "all", at(400));
+    expect(cards.map((c) => c.name)).toEqual(["Dr-Tich"]);
+    expect(minor.map((c) => c.name)).toEqual(["Pal-Illi"]);
+    expect(unnamed).toBe(1);
+    const [threes, shuffle] = cards[0]!.lines;
+    expect(threes!.bracket).toBe("3v3");
+    expect(threes!.games).toBe(4);
+    expect([threes!.rateWins, threes!.rateGames]).toEqual([3, 4]);
+    expect([threes!.baseline, threes!.rating, threes!.delta, threes!.peak]).toEqual([2000, 2020, 20, 2020]);
+    // shuffle counts rounds; one reading → no delta
+    expect(shuffle!.perRound).toBe(true);
+    expect([shuffle!.rateWins, shuffle!.rateGames]).toEqual([3, 6]);
+    expect(shuffle!.delta).toBeNull();
+  });
+
+  it("涨跌的基线是期前最后一次评分", () => {
+    // a "week" that starts at at(100): a1/a2 fall before it
+    const now = at(100) + 7 * 24 * 60 * 60_000;
+    const lines = deriveBracketLines(lib, "week", now, "Dr-Tich");
+    const threes = lines.find((l) => l.bracket === "3v3")!;
+    expect(threes.games).toBe(2);
+    expect([threes.baseline, threes.rating, threes.delta]).toEqual([2015, 2020, 5]);
+  });
+
+  it("按 60 分钟间隔切上线;一次上线的终点取下一场的开局分", () => {
+    const { matches, sessions } = deriveCharacterBracket(lib, "all", at(400), "Dr-Tich", "3v3");
+    expect(matches.map((m) => m.session)).toEqual([0, 0, 1, 1]);
+    // newest first
+    expect(sessions.map((s) => [s.from, s.to, s.settled])).toEqual([
+      [2004, 2020, false],
+      [2000, 2004, true],
+    ]);
+    expect(sessions[1]!.rateWins).toBe(1);
+  });
+
+  it("matchOutcome:3-3 的 shuffle 是平,不看大厅的 Lose", () => {
+    expect(matchOutcome(lib[4]!)).toBe(0);
+    expect(matchOutcome(lib[0]!)).toBe(1);
+    expect(matchOutcome(lib[1]!)).toBe(-1);
+  });
+
+  it("UI:总览卡片 → 点进单角色页 → 切赛制标签 → 返回", async () => {
+    const now = Date.now();
+    const shift = now - at(400);
+    (window as unknown as { __gladlogFixture: unknown }).__gladlogFixture = {
+      matches: {
+        list: async () =>
+          lib.map((m) => ({ ...m, startTime: m.startTime + shift, endTime: m.endTime + shift })),
+      },
+    };
+    render(<StatsDashboard />);
+    const card = await screen.findByTestId("cs-card");
+    expect(card.textContent).toContain("Dr");
+    expect(card.querySelectorAll("[data-testid='cs-line']").length).toBe(2);
+    expect(screen.getByText(/另有 1 个角色少于 3 场/)).toBeTruthy();
+    fireEvent.click(card);
+    expect(await screen.findByTestId("cs-detail")).toBeTruthy();
+    expect(screen.getByTestId("cs-chart")).toBeTruthy();
+    expect(screen.getByTestId("cs-sessions").querySelectorAll("tbody tr").length).toBe(2);
+    fireEvent.click(screen.getByRole("tab", { name: /Solo Shuffle/ }));
+    expect(screen.getByRole("tab", { name: /Solo Shuffle/ }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByText("‹ 全部角色"));
+    expect(await screen.findByTestId("cs-overview")).toBeTruthy();
   });
 });

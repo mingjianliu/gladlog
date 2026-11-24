@@ -6,7 +6,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { BurstLedgerCard } from "../src/renderer/src/report/components/BurstLedgerCard";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import {
+  burstSpellsLabel,
   deriveBurstLedger,
+  groupAllyOverlaps,
   type LedgerPlayer,
 } from "../src/renderer/src/report/derive/burstLedger";
 import { CAST_BAR_MAX_MS } from "../src/renderer/src/report/derive/castBars";
@@ -260,5 +262,39 @@ describe("爆发账本(DPS D1)", () => {
     const noMatch = [minimalTargetEval(30, 40, {})];
     rerender(<BurstLedgerCard players={[player]} targetSelection={noMatch} />);
     expect(screen.queryByText(/该打/)).toBeNull();
+  });
+});
+
+describe("爆发账本的显示合并(同名 CD / 同一队友)", () => {
+  it("同一爆发里同一技能按了两次 → `名 ×2`,不重复写名字", () => {
+    expect(
+      burstSpellsLabel([
+        { spellName: "Incarnation: Chosen of Elune" },
+        { spellName: "Incarnation: Chosen of Elune" },
+      ]),
+    ).toBe("Incarnation: Chosen of Elune ×2");
+    expect(
+      burstSpellsLabel([
+        { spellName: "Summon Darkglare" },
+        { spellName: "Dark Harvest" },
+      ]),
+    ).toBe("Summon Darkglare + Dark Harvest");
+  });
+
+  it("一个队友交了三个 CD → 协同里只出现一次名字,带上三个技能", () => {
+    expect(
+      groupAllyOverlaps([
+        { playerName: "Thompsonx-Frostmourne-US", spellName: "Shadow Blades" },
+        { playerName: "Thompsonx-Frostmourne-US", spellName: "Deathmark" },
+        { playerName: "Bummbing-Tichondrius-US", spellName: "Avenging Wrath" },
+        { playerName: "Thompsonx-Frostmourne-US", spellName: "Kingsbane" },
+      ]),
+    ).toEqual([
+      {
+        playerName: "Thompsonx-Frostmourne-US",
+        spellNames: ["Shadow Blades", "Deathmark", "Kingsbane"],
+      },
+      { playerName: "Bummbing-Tichondrius-US", spellNames: ["Avenging Wrath"] },
+    ]);
   });
 });

@@ -83,7 +83,7 @@ export function KickDashboard({
                       borderColor: classColor(r.classId),
                     }}
                   />
-                  <UnitName name={r.name} full />
+                  <UnitName name={r.name} />
                   <span className="rpt-stats-caret">
                     {expanded ? " ▾" : " ▸"}
                   </span>
@@ -186,7 +186,7 @@ function CastControlStrip({
   return (
     <div className="rpt-stats-detail-group" data-testid="cast-control">
       <span className="rpt-stats-detail-item">
-        <UnitName name={c.name} full />
+        <UnitName name={c.name} />
         {t("report.castControl.line", {
           hardcasts: c.hardcasts,
           cancels: c.cancels.length,

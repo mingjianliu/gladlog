@@ -2272,6 +2272,8 @@ pre {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* rows are click targets: a double click must not select the map name */
+  user-select: none;
 }
 /* T80: a library of 1,100 matches is 1,100 rows (23k nodes) laid out and
    painted on every return to this page, filter change and backfill page —
@@ -2488,16 +2490,25 @@ pre {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
 }
+/* The title gives way, never the buttons: in the side column the buttons
+   used to shrink to one character per line (显/示/全/部). */
 .rpt-recap-title {
   font-weight: bold;
   font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rpt-recap-actions {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .rpt-recap-close {
   font-size: 12px;
@@ -3479,12 +3490,21 @@ pre {
 .dash-title {
   font-size: 14px;
   font-weight: 500;
+  /* with a long row of chips beside it the title was squeezed to one
+     character per line (战/绩) */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .dash-head .dash-chars {
   margin: 0 auto 0 14px;
 }
 .dash-period {
   margin-left: auto;
+  flex-shrink: 0;
+}
+.dash-period button,
+.cs-seg button {
+  white-space: nowrap;
 }
 /* 总览数字带(1h):全页唯一饱和色块 */
 .dash-band {
@@ -6148,5 +6168,351 @@ button.rpt-kpi:hover {
     transform: none;
     width: 100%;
     background: var(--accent-line);
+  }
+}
+
+/* ---- 战绩页改版(2026-11):角色卡总览 + 单角色页 (CharacterStats.tsx) ---- */
+.cs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.cs-dim {
+  color: #a3a7ba;
+}
+.cs-small {
+  font-size: 12px;
+}
+.cs-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.cs-seg button {
+  font-size: 12px;
+  padding: 5px 12px;
+}
+.cs-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--hairline-soft);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cs-summary > div,
+.cs-kpis > div {
+  background: var(--surface);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.cs-k {
+  font-size: 12px;
+  color: #a3a7ba;
+}
+.cs-v {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cs-v-lg {
+  font-size: 26px;
+}
+.cs-sub {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.cs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+}
+.cs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 12px;
+  padding: 16px 16px 10px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.cs-card:hover {
+  border-color: var(--accent-line);
+}
+.cs-card-head,
+.cs-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cs-avatar {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-line);
+}
+.cs-avatar-lg {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+}
+.cs-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.cs-card-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.cs-hero-name {
+  font-size: 22px;
+  font-weight: 700;
+}
+.cs-chev {
+  color: var(--mute);
+  font-size: 18px;
+}
+.cs-lines {
+  display: flex;
+  flex-direction: column;
+}
+.cs-line {
+  display: grid;
+  grid-template-columns: 84px 112px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--hairline-soft);
+  font-variant-numeric: tabular-nums;
+}
+.cs-line-bracket {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cs-line-rating {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cs-line-num {
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.cs-line-rec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  min-width: 0;
+}
+.cs-delta {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cs-v .cs-delta {
+  font-size: inherit;
+}
+.cs-delta-up {
+  color: var(--win);
+}
+.cs-delta-down {
+  color: var(--loss);
+}
+.cs-delta-flat,
+.cs-delta-none,
+.cs-delta-from {
+  color: #a3a7ba;
+  font-weight: 400;
+}
+.cs-bar {
+  position: relative;
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cs-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+}
+.cs-bar-win {
+  background: var(--win);
+}
+.cs-bar-loss {
+  background: var(--loss);
+}
+.cs-bar-thin {
+  background: #9397ab;
+}
+.cs-bar-mid {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--mute);
+}
+.cs-spark {
+  width: 96px;
+  height: 32px;
+  overflow: visible;
+}
+.cs-minor,
+.cs-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.cs-chip {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.cs-chip-on {
+  background: var(--accent-fill);
+  color: var(--accent-text);
+  border-color: var(--accent-line);
+  font-weight: 600;
+}
+.cs-back {
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent-text);
+  background: transparent;
+  border: none;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+.cs-empty {
+  margin: 0;
+  padding: 28px;
+  text-align: center;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px dashed var(--hairline);
+  border-radius: 12px;
+}
+.cs-empty button {
+  margin-left: 8px;
+}
+.cs-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--hairline-soft);
+  flex-wrap: wrap;
+}
+.cs-tab {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-2);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cs-tab-on {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.cs-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.cs-kpis > div {
+  border: 1px solid var(--hairline-soft);
+  border-radius: 10px;
+}
+.cs-chart {
+  display: block;
+  max-width: 100%;
+}
+.cs-chart-break {
+  stroke: var(--accent-line);
+  stroke-dasharray: 3 3;
+}
+.cs-pt-win,
+.cs-pt-loss,
+.cs-pt-even {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.cs-pt-win {
+  fill: var(--win);
+}
+.cs-pt-loss {
+  fill: var(--loss);
+}
+.cs-pt-even {
+  fill: var(--ink-2);
+}
+.cs-note {
+  margin: 6px 0 0;
+}
+.cs-table-wrap {
+  overflow-x: auto;
+}
+.cs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+}
+.cs-table th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+  color: #a3a7ba;
+  padding: 6px 8px 6px 0;
+}
+.cs-table td {
+  padding: 8px 8px 8px 0;
+  border-top: 1px solid var(--hairline-soft);
+}
+.cs-table .cs-num {
+  text-align: right;
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .cs-summary,
+  .cs-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

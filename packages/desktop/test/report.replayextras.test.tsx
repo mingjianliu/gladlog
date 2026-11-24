@@ -8,6 +8,7 @@ import {
   deriveDampeningSeries,
 } from "../src/renderer/src/report/derive/dampeningSeries";
 import { deriveReplay } from "../src/renderer/src/report/derive/replay";
+import { shortUnitName } from "../src/renderer/src/report/derive/teamSide";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
 const m = loadRealMatchFixture();
@@ -150,7 +151,9 @@ describe("GCD 泳道两队分组", () => {
       (el) => el.textContent,
     );
     const friendlyNames = new Set(
-      data.tracks.filter((t) => t.side === "friendly").map((t) => t.name),
+      data.tracks
+        .filter((t) => t.side === "friendly")
+        .map((t) => shortUnitName(t.name)),
     );
     for (let i = 0; i < nFriendly; i++) {
       expect(friendlyNames.has(heads[i] ?? "")).toBe(true);

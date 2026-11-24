@@ -12,6 +12,7 @@ import {
   type DeathRecap,
   type DeathRecapEvent,
 } from "../derive/deathRecap";
+import { shortUnitName } from "../derive/teamSide";
 import { ChipIcon } from "./SpellInline";
 import { UnitName } from "./UnitName";
 
@@ -377,7 +378,8 @@ export function DeathRecapCard({
       <div className="rpt-recap-head">
         <span className="rpt-recap-title">
           {t(enemy ? "report.deathCard.titleEnemy" : "report.deathCard.title")}{" "}
-          — {recap.unitName} @ {fmtTime(recap.deathS)}
+          — <span title={recap.unitName}>{shortUnitName(recap.unitName)}</span>{" "}
+          @ {fmtTime(recap.deathS)}
         </span>
         <span className="rpt-recap-actions">
           <button

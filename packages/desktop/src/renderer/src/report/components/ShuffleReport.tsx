@@ -131,10 +131,17 @@ export function ShuffleHead({
   onMove?: (delta: number) => void;
 }) {
   const { t } = useT();
+  // The lobby-level `result` reads "Lose" on a 3-3 lobby whose rating went
+  // up; the rounds are the record, so once every round is known they are
+  // what the title prints.
+  const won = wins.filter((w) => w === true).length;
+  const lost = wins.filter((w) => w === false).length;
+  const record =
+    wins.length > 0 && won + lost === wins.length ? `${won}-${lost}` : result;
   return (
     <div className="rpt-shuffle-head">
       <span className="rpt-shuffle-title">
-        {t("report.shuffle.title", { n: roundCount, result })}
+        {t("report.shuffle.title", { n: roundCount, result: record })}
       </span>
       <span className="rpt-shuffle-seq" role="tablist">
         {wins.map((win, i) => {

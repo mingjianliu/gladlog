@@ -25,10 +25,12 @@ export interface MeterRow {
 }
 
 /** Tiered abbreviation for meter values (P2-2): ≥1e6 → x.xxM, ≥1e5 → xxxk,
- *  everything else in full. */
+ *  ≥1e3 → xx.xk, everything else in full — so one column never mixes
+ *  `9.38M` with `51,504`. The exact figure stays in the cell's title. */
 export function abbrevAmount(v: number, lang: Language = "zh"): string {
   if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
   if (v >= 1e5) return `${Math.round(v / 1e3)}k`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`;
   return formatNumber(Math.round(v), lang);
 }
 

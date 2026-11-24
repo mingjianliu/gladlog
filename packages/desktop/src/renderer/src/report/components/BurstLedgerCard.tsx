@@ -8,7 +8,11 @@ import { useContext, useMemo, useState } from "react";
 
 import { useT } from "../../i18n/LangProvider";
 import { classColor } from "../data/gameConstants";
-import type { LedgerPlayer } from "../derive/burstLedger";
+import {
+  burstSpellsLabel,
+  groupAllyOverlaps,
+  type LedgerPlayer,
+} from "../derive/burstLedger";
 import { missedKickLabel } from "../derive/kickText";
 import { shortUnitName, type TeamSide } from "../derive/teamSide";
 import { TeamSideContext, UnitName } from "./UnitName";
@@ -133,7 +137,7 @@ export function BurstLedgerCard({
                   borderColor: teamRing(sides.get(shortUnitName(pl.name))),
                 }}
               />
-              {pl.name}
+              <span title={pl.name}>{shortUnitName(pl.name)}</span>
             </button>
           ))}
         </div>
@@ -155,11 +159,11 @@ export function BurstLedgerCard({
                   {fmtTime(b.fromSeconds)}–{fmtTime(b.toSeconds)}
                 </span>
                 <span className="rpt-ledger-spells">
-                  {b.spells.map((s) => s.spellName).join(" + ")}
+                  {burstSpellsLabel(b.spells)}
                 </span>
                 {t ? (
                   <span>
-                    → <UnitName name={t.unitName} full />
+                    → <UnitName name={t.unitName} />
                     {t.hpStartPct !== null && t.hpEndPct !== null
                       ? `(${Math.round(t.hpStartPct)}%→${Math.round(t.hpEndPct)}%)`
                       : ""}{" "}
@@ -187,8 +191,11 @@ export function BurstLedgerCard({
                 {b.allyCDsOverlapping.length > 0 ? (
                   <Chip kind="good">
                     {tr("report.burstLedger.synced", {
-                      names: b.allyCDsOverlapping
-                        .map((a) => a.playerName)
+                      names: groupAllyOverlaps(b.allyCDsOverlapping)
+                        .map(
+                          (a) =>
+                            `${shortUnitName(a.playerName)}(${a.spellNames.join(tr("report.common.listSep"))})`,
+                        )
                         .join(tr("report.common.listSep")),
                     })}
                   </Chip>

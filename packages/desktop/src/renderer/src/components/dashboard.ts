@@ -100,9 +100,16 @@ export function deriveDashboard(
   now = Date.now(),
   /** Character-name filter (undefined = all characters). */
   character?: string,
+  /** Bracket filter (undefined = every bracket) — the character page shows
+   * one bracket at a time. */
+  bracket?: string,
 ): Dashboard {
   const from = periodStart(period, now);
-  const byChar = metas.filter((m) => !character || m.playerName === character);
+  const byChar = metas.filter(
+    (m) =>
+      (!character || m.playerName === character) &&
+      (!bracket || m.bracket === bracket),
+  );
   const rows = byChar
     .filter((m) => m.startTime >= from)
     .sort((a, b) => a.startTime - b.startTime);
@@ -198,8 +205,11 @@ export function deriveDashboard(
       games: 0,
       wins: 0,
     };
-    row.games++;
-    if (isWin(m)) row.wins++;
+    // Shuffle per round, like the comp rows and the win-rate tile: the
+    // lobby-level result says "Lose" on a 3-3 lobby.
+    const r = rateOf(m);
+    row.games += r.n;
+    row.wins += r.w;
     zoneMap.set(m.zoneId, row);
   }
   const zones = [...zoneMap.values()].sort((a, b) => b.games - a.games);
@@ -310,4 +320,252 @@ export function deriveCurrentRating(
     rating,
     delta: baseline ? rating - ratingOf(baseline)! : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-character record (战绩页改版 2026-11): every character is a card, every
+// bracket a line on it — rating, change over the period, record. Only the
+// recorder's own rating (playerRating) is used: the team-average MMR jumps
+// between characters and premades and is not "my rating".
+// ---------------------------------------------------------------------------
+
+/** Characters with fewer matches than this in the period are listed as chips
+ * under the cards instead of getting a card of their own. */
+export const CHAR_CARD_MIN_GAMES = 3;
+/** A gap longer than this between two matches starts a new session. */
+export const SESSION_GAP_MS = 60 * 60_000;
+
+/** Display name of a bracket ("Rated Solo Shuffle" → "Solo Shuffle"). */
+export function bracketLabel(bracket: string): string {
+  return /solo shuffle/i.test(bracket) ? "Solo Shuffle" : bracket;
+}
+
+const personalRating = (m: StoredMatchMeta): number | null =>
+  typeof m.playerRating === "number" && m.playerRating > 0
+    ? m.playerRating
+    : null;
+
+/** Rounds for a shuffle lobby that has roundStats, the match otherwise — the
+ * same unit as Dashboard.rateGames. */
+function rateOf(m: StoredMatchMeta): { w: number; n: number; perRound: boolean } {
+  if (m.kind === "shuffle" && m.roundStats && m.roundStats.length > 0) {
+    return {
+      w: m.roundStats.filter((r) => r.win).length,
+      n: m.roundStats.length,
+      perRound: true,
+    };
+  }
+  return { w: isWin(m) ? 1 : 0, n: 1, perRound: false };
+}
+
+/** 1 / 0 / -1: won, even (a 3-3 lobby), lost. A shuffle lobby is judged by
+ * its rounds, never by the lobby-level `result`. */
+export function matchOutcome(m: StoredMatchMeta): 1 | 0 | -1 {
+  const r = rateOf(m);
+  if (!r.perRound) return r.w ? 1 : -1;
+  const l = r.n - r.w;
+  return r.w > l ? 1 : r.w < l ? -1 : 0;
+}
+
+export interface BracketLine {
+  bracket: string;
+  /** Matches (lobbies for shuffle) in the period. */
+  games: number;
+  rateWins: number;
+  rateGames: number;
+  /** rateGames counts rounds (shuffle) rather than matches. */
+  perRound: boolean;
+  /** Latest personal rating in the period; null when no match carried one. */
+  rating: number | null;
+  /** What `delta` is measured from: the latest rating before the period, else
+   * the first one inside it. */
+  baseline: number | null;
+  /** rating − baseline; null with fewer than two readings. */
+  delta: number | null;
+  peak: number | null;
+  /** Personal ratings in the period, oldest first. */
+  points: RatingPoint[];
+  lastPlayed: number;
+}
+
+export interface CharacterCard {
+  name: string;
+  games: number;
+  lastPlayed: number;
+  /** Most played bracket first. */
+  lines: BracketLine[];
+}
+
+/** Bracket lines of one character in the period. */
+export function deriveBracketLines(
+  metas: StoredMatchMeta[],
+  period: DashPeriod,
+  now: number,
+  character: string,
+): BracketLine[] {
+  const from = periodStart(period, now);
+  const mine = metas
+    .filter((m) => m.playerName === character)
+    .sort((a, b) => a.startTime - b.startTime);
+  const brackets = new Map<string, StoredMatchMeta[]>();
+  for (const m of mine) {
+    const list = brackets.get(m.bracket) ?? [];
+    list.push(m);
+    brackets.set(m.bracket, list);
+  }
+  const lines: BracketLine[] = [];
+  for (const [bracket, all] of brackets) {
+    const rows = all.filter((m) => m.startTime >= from);
+    if (rows.length === 0) continue;
+    let rateWins = 0;
+    let rateGames = 0;
+    let perRound = false;
+    for (const m of rows) {
+      const r = rateOf(m);
+      rateWins += r.w;
+      rateGames += r.n;
+      perRound ||= r.perRound;
+    }
+    const points: RatingPoint[] = [];
+    for (const m of rows) {
+      const r = personalRating(m);
+      if (r != null) points.push({ t: m.startTime, rating: r });
+    }
+    const before = all.filter(
+      (m) => m.startTime < from && personalRating(m) != null,
+    );
+    const prior = before.length ? personalRating(before[before.length - 1]!) : null;
+    const rating = points.length ? points[points.length - 1]!.rating : null;
+    const baseline = prior ?? (points.length ? points[0]!.rating : null);
+    const hasTwo = prior != null ? points.length >= 1 : points.length >= 2;
+    lines.push({
+      bracket,
+      games: rows.length,
+      rateWins,
+      rateGames,
+      perRound,
+      rating,
+      baseline,
+      delta: hasTwo && rating != null && baseline != null ? rating - baseline : null,
+      peak: points.length ? minMaxRating(points)[1] : null,
+      points,
+      lastPlayed: rows[rows.length - 1]!.startTime,
+    });
+  }
+  return lines.sort((a, b) => b.games - a.games || b.lastPlayed - a.lastPlayed);
+}
+
+function minMaxRating(points: RatingPoint[]): [number, number] {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of points) {
+    if (p.rating < lo) lo = p.rating;
+    if (p.rating > hi) hi = p.rating;
+  }
+  return [lo, hi];
+}
+
+/** The overview: one card per character that played in the period, most
+ * recently played first; characters under CHAR_CARD_MIN_GAMES go to `minor`.
+ * `unnamed` counts legacy rows recorded before playerName existed. */
+export function deriveCharacterCards(
+  metas: StoredMatchMeta[],
+  period: DashPeriod,
+  now: number,
+  bracket?: string,
+): { cards: CharacterCard[]; minor: CharacterCard[]; unnamed: number } {
+  const from = periodStart(period, now);
+  const names = new Set<string>();
+  let unnamed = 0;
+  for (const m of metas) {
+    if (m.startTime < from) continue;
+    if (bracket && m.bracket !== bracket) continue;
+    if (m.playerName) names.add(m.playerName);
+    else unnamed++;
+  }
+  const all: CharacterCard[] = [];
+  for (const name of names) {
+    const lines = deriveBracketLines(metas, period, now, name).filter(
+      (l) => !bracket || l.bracket === bracket,
+    );
+    if (lines.length === 0) continue;
+    all.push({
+      name,
+      games: lines.reduce((a, l) => a + l.games, 0),
+      lastPlayed: Math.max(...lines.map((l) => l.lastPlayed)),
+      lines,
+    });
+  }
+  all.sort((a, b) => b.lastPlayed - a.lastPlayed);
+  return {
+    cards: all.filter((c) => c.games >= CHAR_CARD_MIN_GAMES),
+    minor: all.filter((c) => c.games < CHAR_CARD_MIN_GAMES),
+    unnamed,
+  };
+}
+
+export interface RatedSession {
+  start: number;
+  games: number;
+  rateWins: number;
+  rateGames: number;
+  /** Personal rating going into the session's first rated match. */
+  from: number | null;
+  /** Rating going into the next match after the session (its result is
+   * known), else the last reading inside it (`settled` false: the session's
+   * last match has not been followed by another yet). */
+  to: number | null;
+  settled: boolean;
+}
+
+/** One character's matches in one bracket, as rated points and sessions.
+ * Ratings are recorded at the start of each match, so a match's own change
+ * is only known once the next match is in. */
+export function deriveCharacterBracket(
+  metas: StoredMatchMeta[],
+  period: DashPeriod,
+  now: number,
+  character: string,
+  bracket: string,
+): {
+  matches: Array<{ id: string; t: number; rating: number | null; outcome: 1 | 0 | -1; session: number }>;
+  sessions: RatedSession[];
+} {
+  const from = periodStart(period, now);
+  const all = metas
+    .filter((m) => m.playerName === character && m.bracket === bracket)
+    .sort((a, b) => a.startTime - b.startTime);
+  const rows = all.filter((m) => m.startTime >= from);
+  const matches: Array<{ id: string; t: number; rating: number | null; outcome: 1 | 0 | -1; session: number }> = [];
+  const sessions: RatedSession[] = [];
+  let prevEnd = -Infinity;
+  for (const m of rows) {
+    if (m.startTime - prevEnd > SESSION_GAP_MS || sessions.length === 0) {
+      sessions.push({ start: m.startTime, games: 0, rateWins: 0, rateGames: 0, from: null, to: null, settled: false });
+    }
+    prevEnd = Math.max(m.endTime || m.startTime, m.startTime);
+    const s = sessions[sessions.length - 1]!;
+    const r = rateOf(m);
+    s.games++;
+    s.rateWins += r.w;
+    s.rateGames += r.n;
+    const pr = personalRating(m);
+    if (pr != null) {
+      if (s.from == null) s.from = pr;
+      s.to = pr;
+    }
+    matches.push({ id: m.id, t: m.startTime, rating: pr, outcome: matchOutcome(m), session: sessions.length - 1 });
+  }
+  // Close each session on the rating the following match started at.
+  for (let i = 0; i < sessions.length; i++) {
+    const nextStart = sessions[i + 1]?.start ?? Infinity;
+    const after = all.find(
+      (m) => m.startTime >= nextStart && personalRating(m) != null,
+    );
+    if (after) {
+      sessions[i]!.to = personalRating(after);
+      sessions[i]!.settled = true;
+    }
+  }
+  return { matches, sessions: sessions.reverse() };
 }

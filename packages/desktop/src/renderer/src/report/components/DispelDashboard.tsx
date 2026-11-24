@@ -107,7 +107,7 @@ export function DispelDashboard({
                         borderColor: classColor(r.classId),
                       }}
                     />
-                    <UnitName name={r.name} full />
+                    <UnitName name={r.name} />
                     <span className="rpt-stats-caret">
                       {expanded ? " ▾" : " ▸"}
                     </span>
@@ -155,7 +155,7 @@ export function DispelDashboard({
           {ccEfficiency.map((s, i) => (
             <div key={i} className="rpt-ledger-row">
               <span>
-                <UnitName name={s.targetName} full />
+                <UnitName name={s.targetName} />
               </span>
               <span className="rpt-stats-dim">
                 {t("report.dispelCard.counts", {

@@ -24,8 +24,11 @@ import { ContentLangBadge } from "../report/components/ContentLangBadge";
 import { specName } from "../report/data/gameConstants";
 import { categoryLabel, severityLabel } from "../report/derive/findingDisplay";
 import { shortUnitName } from "../report/derive/teamSide";
+import { CharacterDetail, CharacterOverview } from "./CharacterStats";
 import {
   type DashPeriod,
+  deriveBracketLines,
+  deriveCharacterCards,
   deriveCurrentRating,
   deriveDashboard,
   deriveRatingDeltas,
@@ -291,6 +294,14 @@ export function StatsDashboard({
   // Character filter (separates records for multi-character players;
   // undefined = all)
   const [character, setCharacter] = useState<string | undefined>(undefined);
+  // 战绩页改版: the overview's bracket filter, and the bracket tab picked on
+  // a character page (undefined = that character's most played bracket).
+  const [overviewBracket, setOverviewBracket] = useState<string | undefined>(
+    undefined,
+  );
+  const [detailBracket, setDetailBracket] = useState<string | undefined>(
+    undefined,
+  );
   const [notebook, setNotebook] = useState<NotebookGroup[]>([]);
   const [openCats, setOpenCats] = useState<Record<string, boolean>>({});
   const [rulesDoc, setRulesDoc] = useState<RulesDoc | null>(null);
@@ -486,14 +497,554 @@ export function StatsDashboard({
   // Rating deltas on the recent-matches card: the same algorithm as the App's
   // match list (single-sourced in dashboard.ts)
   const ratingDeltas = useMemo(() => deriveRatingDeltas(metas), [metas]);
+  // On a character page the tables below follow the selected bracket tab.
+  const effBracket = useMemo(() => {
+    if (!character) return undefined;
+    const lines = deriveBracketLines(metas, period, Date.now(), character);
+    return (
+      lines.find((l) => l.bracket === detailBracket)?.bracket ??
+      lines[0]?.bracket
+    );
+  }, [metas, period, character, detailBracket]);
   const dash = useMemo(
-    () => deriveDashboard(metas, period, Date.now(), character),
-    [metas, period, character],
+    () => deriveDashboard(metas, period, Date.now(), character, effBracket),
+    [metas, period, character, effBracket],
   );
+  const overview = useMemo(
+    () => deriveCharacterCards(metas, period, Date.now(), overviewBracket),
+    [metas, period, overviewBracket],
+  );
+  const overviewTotals = useMemo(() => {
+    const d = deriveDashboard(metas, period, Date.now(), undefined, overviewBracket);
+    return { games: d.games, rateWins: d.rateWins, rateGames: d.rateGames };
+  }, [metas, period, overviewBracket]);
+  const bracketsInPeriod = useMemo(() => {
+    const from = periodStart(period, Date.now());
+    const seen = new Map<string, number>();
+    for (const m of metas)
+      if (m.startTime >= from && m.playerName)
+        seen.set(m.bracket, (seen.get(m.bracket) ?? 0) + 1);
+    return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([b]) => b);
+  }, [metas, period]);
+  // Characters exist once any row carries playerName: then the page is the
+  // per-character one; a library of only legacy rows keeps the old layout.
+  const perCharacter = characters.length > 0;
   const cur = useMemo(
     () =>
       deriveCurrentRating(metas, periodStart(period, Date.now()), character),
     [metas, period, character],
+  );
+
+  // Comp and map rows count shuffle per round.
+  const rowKey =
+    effBracket && /shuffle/i.test(effBracket)
+      ? ("stats.row.rounds" as const)
+      : ("stats.row.games" as const);
+  // Shared between the legacy layout and the per-character pages.
+  const practiceCard = (
+    <>
+        {(notebook.length > 0 || rulesDoc || learnState) && (
+          <div className="dash-card" data-testid="dash-practice">
+            <span className="dash-card-head">
+              <span className="rpt-card-label">
+                {t("stats.practice.title")}
+              </span>
+              {(rulesDoc || learnState) && (
+                <>
+                  <button
+                    className="dash-learning-run"
+                    disabled={learnState?.consolidating}
+                    onClick={() => {
+                      try {
+                        void (
+                          bridge() as unknown as {
+                            learning?: { consolidate(): Promise<void> };
+                          }
+                        ).learning?.consolidate();
+                      } catch {
+                        /* noop */
+                      }
+                    }}
+                  >
+                    {learnState?.consolidating
+                      ? t("stats.learning.consolidating")
+                      : t("stats.learning.consolidate")}
+                  </button>
+                </>
+              )}
+            </span>
+            {/* "Sorted by impact": the two sources share no common unit
+            (notebook = frequency, patterns = trend state), so the ordering is
+            structural — cross-match stable patterns first (high impact),
+            notebook entries by frequency behind them; no synthetic score is
+            invented. */}
+            {(rulesDoc || learnState) && (
+              <div data-testid="dash-learning">
+                <p className="dash-learning-meta">
+                  {learnState?.backfill?.running
+                    ? t("stats.learning.backfill", {
+                        scanned: learnState.backfill.scanned,
+                        total: learnState.backfill.total,
+                      })
+                    : t("stats.learning.ledger", {
+                        n: learnState?.ledgerMatches ?? 0,
+                      }) +
+                      (learnState?.lastConsolidatedAt
+                        ? t("stats.learning.lastConsolidated", {
+                            when: formatDateTime(
+                              learnState.lastConsolidatedAt,
+                              lang,
+                            ),
+                          })
+                        : t("stats.learning.notConsolidated"))}
+                  {learnState && learnState.badLines > 0
+                    ? t("stats.learning.badLines", { n: learnState.badLines })
+                    : ""}
+                  {distillError
+                    ? t("stats.learning.distillFailed", {
+                        error: distillError,
+                      })
+                    : ""}
+                  {learnError
+                    ? t("stats.learning.consolidateFailed", {
+                        error: learnError,
+                      })
+                    : ""}
+                </p>
+                {(rulesDoc?.rules ?? []).map((r: LearnedRule) => {
+                  const facts = distillFacts(r.stats);
+                  // Model-written text. Each language falls back to the
+                  // other one, labelled with the content's language (spec
+                  // §6.13); the next consolidation fills in the current
+                  // language lazily (see LearnedRule.description). The
+                  // placeholder only shows when neither language exists.
+                  // Blank text counts as missing (codex B3fix#1: the
+                  // distillation audit accepts ""), and each badge follows
+                  // the language actually picked.
+                  const otherLang = lang === "en" ? "zh" : "en";
+                  const pick = (field: Partial<Record<Language, string>>) => {
+                    const has = (l: Language) => !!field[l]?.trim();
+                    const l = has(lang)
+                      ? lang
+                      : has(otherLang)
+                        ? otherLang
+                        : null;
+                    return l ? { text: field[l]!, lang: l } : null;
+                  };
+                  const descPick = pick(r.description);
+                  const advPick = pick(r.advice);
+                  const desc = descPick?.text;
+                  const adv = advPick?.text;
+                  const descFallback = descPick?.lang === otherLang;
+                  const advFallback = advPick?.lang === otherLang;
+                  const max = Math.max(1, ...r.stats.trend);
+                  return (
+                    <div key={r.ruleId} className="dash-learning-rule">
+                      <span
+                        className={`dash-learning-status ${r.status}`}
+                        title={
+                          r.status === "improved"
+                            ? t("stats.rule.improvedTitle")
+                            : t("stats.rule.activeTitle")
+                        }
+                      >
+                        {r.status === "improved"
+                          ? t("stats.rule.improved")
+                          : t("stats.rule.active")}
+                      </span>
+                      <span className="dash-learning-cat">
+                        {categoryLabel(r.category, lang)}
+                        {r.eventTypes.length > 0
+                          ? ` · ${r.eventTypes.join("+")}`
+                          : ""}
+                        {r.condition?.enemySpec
+                          ? t("stats.rule.vsSpec", {
+                              spec: r.condition.enemySpec,
+                            })
+                          : r.condition?.zoneId
+                            ? t("stats.rule.onMap", {
+                                zone: r.condition.zoneId,
+                              })
+                            : ""}
+                      </span>
+                      <span className="dash-learning-count">
+                        {habitBadgeText(r, lang)}
+                      </span>
+                      <span
+                        className="dash-learning-trend"
+                        title={t("stats.rule.trendTitle", {
+                          n: TREND_BUCKET_MATCHES,
+                        })}
+                      >
+                        {r.stats.trend.map((h, i) => (
+                          <i
+                            key={i}
+                            style={{ height: `${4 + (h / max) * 12}px` }}
+                            className={h > 0 ? "hit" : ""}
+                          />
+                        ))}
+                      </span>
+                      <p
+                        className="dash-learning-desc"
+                        data-content-lang={
+                          descFallback ? otherLang : undefined
+                        }
+                      >
+                        {desc
+                          ? interpolate(desc, facts)
+                          : t("stats.rule.noDescription")}
+                        {descFallback && (
+                          <ContentLangBadge contentLang={otherLang} />
+                        )}
+                      </p>
+                      {adv && (
+                        <p
+                          className="dash-learning-advice"
+                          data-content-lang={
+                            advFallback ? otherLang : undefined
+                          }
+                        >
+                          💡 {interpolate(adv, facts)}
+                          {advFallback && (
+                            <ContentLangBadge contentLang={otherLang} />
+                          )}
+                        </p>
+                      )}
+                      <span className="dash-learning-evidence">
+                        {r.evidence.map((id) => (
+                          <button key={id} onClick={() => onOpenMatch?.(id)}>
+                            {t("stats.rule.viewExample")}
+                          </button>
+                        ))}
+                      </span>
+                    </div>
+                  );
+                })}
+                {(rulesDoc?.rules ?? []).length === 0 &&
+                  !learnState?.backfill?.running && (
+                    <p className="dash-learning-empty">
+                      {t("stats.rule.empty", {
+                        window: PATTERN_WINDOW_MATCHES,
+                        hits: PATTERN_MIN_HITS,
+                      })}
+                    </p>
+                  )}
+              </div>
+            )}
+            {notebook.length > 0 && (
+              <div data-testid="dash-notebook">
+                {notebook.map((g) => {
+                  const open = !!openCats[g.category];
+                  return (
+                    <div key={g.category} className="dash-nb-group">
+                      <button
+                        className="dash-nb-head"
+                        onClick={() =>
+                          setOpenCats((o) => ({
+                            ...o,
+                            [g.category]: !o[g.category],
+                          }))
+                        }
+                      >
+                        <span className="dash-nb-caret">
+                          {open ? "▼" : "▸"}
+                        </span>
+                        {/* Display goes through the Chinese vocabulary
+                            (enum slugs and legacy free-form words are both
+                            normalized); the aggregation key is untouched */}
+                        <span className="dash-nb-cat">
+                          {categoryLabel(g.category, lang)}
+                        </span>
+                        <span className="dash-nb-count">×{g.count}</span>
+                        {g.recurring > 0 && (
+                          <span className="dash-issue-rec">
+                            ↻ {g.recurring}
+                          </span>
+                        )}
+                        {g.done > 0 && (
+                          <span className="dash-issue-done">✓ {g.done}</span>
+                        )}
+                      </button>
+                      {open &&
+                        g.entries.map((e, i) => (
+                          <div
+                            key={`${e.matchId}:${e.flagKey}:${i}`}
+                            className="dash-nb-entry"
+                          >
+                            <span className="dash-nb-when">
+                              {new Date(e.startTime).getMonth() + 1}/
+                              {new Date(e.startTime).getDate()}
+                            </span>
+                            <span className="dash-nb-meta">
+                              {e.zoneId
+                                ? (zoneMetadata[e.zoneId]?.name ??
+                                  e.bracket ??
+                                  "")
+                                : (e.bracket ?? "")}
+                              {e.result
+                                ? ` · ${e.result.toLowerCase() === "win" ? t("stats.result.win") : t("stats.result.loss")}`
+                                : ""}
+                            </span>
+                            <span
+                              className={`dash-nb-sev rpt-finding-${e.severity}`}
+                            >
+                              <span className="rpt-finding-sev">
+                                {severityLabel(
+                                  e.severity as Finding["severity"],
+                                  lang,
+                                )}
+                              </span>
+                            </span>
+                            <span
+                              className="dash-nb-title"
+                              title={e.explanation}
+                              data-content-lang={
+                                e.contentLang && e.contentLang !== lang
+                                  ? e.contentLang
+                                  : undefined
+                              }
+                            >
+                              {e.title}
+                            </span>
+                            <ContentLangBadge
+                              contentLang={e.contentLang ?? lang}
+                            />
+                            <span className="dash-nb-actions">
+                              <button
+                                className={e.flag === "done" ? "active" : ""}
+                                title={t("stats.notebook.markFixed")}
+                                onClick={() => flagEntry(e, "done")}
+                              >
+                                ✓
+                              </button>
+                              <button
+                                className={
+                                  e.flag === "recurring" ? "active rec" : ""
+                                }
+                                title={t("stats.notebook.markRecurring")}
+                                onClick={() => flagEntry(e, "recurring")}
+                              >
+                                ↻
+                              </button>
+                              {onOpenMatch && (
+                                <button
+                                  className="dash-issue-recent"
+                                  onClick={() => onOpenMatch(e.matchId)}
+                                >
+                                  {t("stats.notebook.openMatch")}
+                                </button>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+    </>
+  );
+  const detailTables = (
+    <>
+        <div className="dash-tables">
+          <div className="dash-card">
+            <span className="rpt-card-label">{t("stats.comps.title")}</span>
+            <div className="dash-comps">
+              {dash.comps.slice(0, 12).map((c) => {
+                const pct = c.games > 0 ? (100 * c.wins) / c.games : 0;
+                const r = rateDisplay(c.wins, c.games, RATE_MIN_N_ROW);
+                // Below the row floor the bar stays neutral — a 1-0 row
+                // must not read as a green 100%.
+                const barColor = r.belowFloor ? "#9397ab" : rateBarColor(pct);
+                return (
+                  <div
+                    key={c.specIds.join("+")}
+                    className={
+                      onCompClick ? "dash-comp dash-comp-click" : "dash-comp"
+                    }
+                    onClick={
+                      onCompClick && c.specIds.length > 0
+                        ? () => onCompClick(c.specIds[0]!)
+                        : undefined
+                    }
+                    title={c.specIds.map((id) => specName(id)).join(" + ")}
+                  >
+                    <span className="dash-comp-specs">
+                      {c.specIds.map((id, i) => (
+                        <SpecDot key={i} specId={id} classId={0} />
+                      ))}
+                    </span>
+                    <span className="dash-comp-track">
+                      <span
+                        className="dash-comp-bar"
+                        style={{ width: `${pct}%`, background: barColor }}
+                      />
+                    </span>
+                    <span
+                      className="dash-comp-num"
+                      style={{ color: barColor }}
+                    >
+                      {r.primary}
+                      <span className="dash-comp-games">
+                        {t(rowKey, { n: c.games })}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+              {dash.comps.length === 0 && (
+                <div className="dash-empty">
+                  {dash.games > 0 ? (
+                    <>
+                      {t("stats.comps.noIndex")}
+                      <button
+                        className="rpt-btn dash-rebuild"
+                        data-testid="dash-rebuild"
+                        disabled={rebuild.running}
+                        onClick={runRebuild}
+                      >
+                        {rebuild.running
+                          ? t("stats.rebuild.runningLong")
+                          : t("stats.rebuild.button")}
+                      </button>
+                    </>
+                  ) : (
+                    t("stats.comps.empty")
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="dash-comp-foot">
+              {dash.comps.length > 0 && t("stats.comps.clickHint")}
+              {dash.legacyRows > 0 && dash.comps.length > 0 && (
+                <>
+                  {t("stats.comps.legacy", { n: dash.legacyRows })}
+                  <button
+                    className="dash-rebuild-inline"
+                    data-testid="dash-rebuild"
+                    disabled={rebuild.running}
+                    onClick={runRebuild}
+                  >
+                    {rebuild.running
+                      ? t("stats.rebuild.running")
+                      : t("stats.rebuild.button")}
+                  </button>
+                </>
+              )}
+              {rebuild.done && (
+                <span className="dash-rebuild-msg">
+                  {rebuild.done === "error"
+                    ? t("stats.rebuild.failed")
+                    : t("stats.rebuild.done", {
+                        updated: rebuild.done.updated,
+                        failedPart:
+                          rebuild.done.failed > 0
+                            ? t("stats.rebuild.doneFailed", {
+                                failed: rebuild.done.failed,
+                              })
+                            : "",
+                      })}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="dash-card">
+            <span className="rpt-card-label">{t("stats.zones.title")}</span>
+            {/* Row layout (spec 2-3, decided by the user): name + win-rate
+                bar + n%·x matches; clicking returns to the list with the zone
+                filter — same row structure and color bands as the comp card */}
+            <div className="dash-comps" data-testid="dash-zones">
+              {dash.zones.slice(0, 12).map((z) => {
+                const pct = z.games > 0 ? (100 * z.wins) / z.games : 0;
+                const r = rateDisplay(z.wins, z.games, RATE_MIN_N_ROW);
+                const barColor = r.belowFloor ? "#9397ab" : rateBarColor(pct);
+                const name =
+                  zoneMetadata[z.zoneId]?.name ?? `zone ${z.zoneId}`;
+                return (
+                  <div
+                    key={z.zoneId}
+                    className={
+                      onZoneClick ? "dash-comp dash-comp-click" : "dash-comp"
+                    }
+                    onClick={
+                      onZoneClick ? () => onZoneClick(z.zoneId) : undefined
+                    }
+                    title={name}
+                  >
+                    <span className="dash-zone-name">{name}</span>
+                    <span className="dash-comp-track">
+                      <span
+                        className="dash-comp-bar"
+                        style={{ width: `${pct}%`, background: barColor }}
+                      />
+                    </span>
+                    <span
+                      className="dash-comp-num"
+                      style={{ color: barColor }}
+                    >
+                      {r.primary}
+                      <span className="dash-comp-games">
+                        {t(rowKey, { n: z.games })}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+              {dash.zones.length === 0 && (
+                <div className="dash-empty">{t("stats.zones.empty")}</div>
+              )}
+            </div>
+            {dash.zones.length > 0 && onZoneClick && (
+              <div className="dash-comp-foot">
+                {t("stats.zones.clickHint")}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent matches (round 2, P0): the main filler for the big empty
+            right column at 4K. Reuses the match list's rich MatchListRow;
+            clicking goes straight to the report. */}
+        {dash.recent.length > 0 && (
+          <div className="dash-card" data-testid="dash-recent">
+            <span className="rpt-card-label">{t("stats.recent.title")}</span>
+            <div className="dash-recent-list">
+              {/* div role=button rather than <button>: MatchListRow is a
+                  block-level div and a button may only contain phrasing
+                  content, so neither axe nor HTML validation would pass
+                  (agy review #3) */}
+              {dash.recent.map((m) => (
+                <div
+                  key={m.id}
+                  role="button"
+                  tabIndex={0}
+                  className="dash-recent-row"
+                  title={t("stats.recent.open")}
+                  onClick={onOpenMatch ? () => onOpenMatch(m.id) : undefined}
+                  onKeyDown={
+                    onOpenMatch
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onOpenMatch(m.id);
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <MatchListRow
+                    meta={m}
+                    ratingDelta={ratingDeltas.get(m.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+    </>
   );
 
   return (
@@ -501,27 +1052,6 @@ export function StatsDashboard({
       {/* Title row (1h): record + character chips + period control on the right */}
       <div className="dash-head">
         <span className="dash-title">{t("stats.title")}</span>
-        {characters.length >= 2 && (
-          <div className="dash-chars" data-testid="dash-chars">
-            <button
-              className={character === undefined ? "active" : ""}
-              onClick={() => setCharacter(undefined)}
-            >
-              {t("stats.allCharacters")}
-            </button>
-            {characters.map((c) => (
-              <button
-                key={c.name}
-                className={c.name === character ? "active" : ""}
-                onClick={() => setCharacter(c.name)}
-                title={t("common.matchCountPlural", { n: c.games })}
-              >
-                {shortUnitName(c.name)}
-                <span className="dash-chars-n">{c.games}</span>
-              </button>
-            ))}
-          </div>
-        )}
         <div className="rpt-mode-seg dash-period">
           {(Object.keys(PERIOD_KEY) as DashPeriod[]).map((p) => (
             <button
@@ -535,8 +1065,43 @@ export function StatsDashboard({
         </div>
       </div>
 
-      {/* 1e two columns: KPI tower (270px) on the left + coaching card column
-          on the right; the full-width curve card is gone */}
+      {perCharacter && character ? (
+        <CharacterDetail
+          metas={metas}
+          period={period}
+          character={character}
+          characters={[...overview.cards, ...overview.minor].map((c) => c.name)}
+          bracket={effBracket}
+          onBracket={setDetailBracket}
+          onBack={() => setCharacter(undefined)}
+          onPick={(n) => {
+            setCharacter(n);
+            setDetailBracket(undefined);
+          }}
+        >
+          {detailTables}
+        </CharacterDetail>
+      ) : perCharacter ? (
+        <>
+          <CharacterOverview
+            cards={overview.cards}
+            minor={overview.minor}
+            unnamed={overview.unnamed}
+            totals={overviewTotals}
+            brackets={bracketsInPeriod}
+            bracket={overviewBracket}
+            onBracket={setOverviewBracket}
+            onShowAll={period !== "all" ? () => setPeriod("all") : undefined}
+            onPick={(n) => {
+              setCharacter(n);
+              setDetailBracket(overviewBracket);
+            }}
+          />
+          {practiceCard}
+        </>
+      ) : (
+      /* 1e two columns: KPI tower (270px) on the left + coaching card column
+          on the right; the full-width curve card is gone */
       <div className="dash-grid">
         <div className="dash-kpi-col" data-testid="dash-band">
           <div className="dash-kpi-card">
@@ -630,506 +1195,12 @@ export function StatsDashboard({
           </div>
         </div>
         <div className="dash-main-col">
-          {(notebook.length > 0 || rulesDoc || learnState) && (
-            <div className="dash-card" data-testid="dash-practice">
-              <span className="dash-card-head">
-                <span className="rpt-card-label">
-                  {t("stats.practice.title")}
-                </span>
-                {(rulesDoc || learnState) && (
-                  <>
-                    <button
-                      className="dash-learning-run"
-                      disabled={learnState?.consolidating}
-                      onClick={() => {
-                        try {
-                          void (
-                            bridge() as unknown as {
-                              learning?: { consolidate(): Promise<void> };
-                            }
-                          ).learning?.consolidate();
-                        } catch {
-                          /* noop */
-                        }
-                      }}
-                    >
-                      {learnState?.consolidating
-                        ? t("stats.learning.consolidating")
-                        : t("stats.learning.consolidate")}
-                    </button>
-                  </>
-                )}
-              </span>
-              {/* "Sorted by impact": the two sources share no common unit
-              (notebook = frequency, patterns = trend state), so the ordering is
-              structural — cross-match stable patterns first (high impact),
-              notebook entries by frequency behind them; no synthetic score is
-              invented. */}
-              {(rulesDoc || learnState) && (
-                <div data-testid="dash-learning">
-                  <p className="dash-learning-meta">
-                    {learnState?.backfill?.running
-                      ? t("stats.learning.backfill", {
-                          scanned: learnState.backfill.scanned,
-                          total: learnState.backfill.total,
-                        })
-                      : t("stats.learning.ledger", {
-                          n: learnState?.ledgerMatches ?? 0,
-                        }) +
-                        (learnState?.lastConsolidatedAt
-                          ? t("stats.learning.lastConsolidated", {
-                              when: formatDateTime(
-                                learnState.lastConsolidatedAt,
-                                lang,
-                              ),
-                            })
-                          : t("stats.learning.notConsolidated"))}
-                    {learnState && learnState.badLines > 0
-                      ? t("stats.learning.badLines", { n: learnState.badLines })
-                      : ""}
-                    {distillError
-                      ? t("stats.learning.distillFailed", {
-                          error: distillError,
-                        })
-                      : ""}
-                    {learnError
-                      ? t("stats.learning.consolidateFailed", {
-                          error: learnError,
-                        })
-                      : ""}
-                  </p>
-                  {(rulesDoc?.rules ?? []).map((r: LearnedRule) => {
-                    const facts = distillFacts(r.stats);
-                    // Model-written text. Each language falls back to the
-                    // other one, labelled with the content's language (spec
-                    // §6.13); the next consolidation fills in the current
-                    // language lazily (see LearnedRule.description). The
-                    // placeholder only shows when neither language exists.
-                    // Blank text counts as missing (codex B3fix#1: the
-                    // distillation audit accepts ""), and each badge follows
-                    // the language actually picked.
-                    const otherLang = lang === "en" ? "zh" : "en";
-                    const pick = (field: Partial<Record<Language, string>>) => {
-                      const has = (l: Language) => !!field[l]?.trim();
-                      const l = has(lang)
-                        ? lang
-                        : has(otherLang)
-                          ? otherLang
-                          : null;
-                      return l ? { text: field[l]!, lang: l } : null;
-                    };
-                    const descPick = pick(r.description);
-                    const advPick = pick(r.advice);
-                    const desc = descPick?.text;
-                    const adv = advPick?.text;
-                    const descFallback = descPick?.lang === otherLang;
-                    const advFallback = advPick?.lang === otherLang;
-                    const max = Math.max(1, ...r.stats.trend);
-                    return (
-                      <div key={r.ruleId} className="dash-learning-rule">
-                        <span
-                          className={`dash-learning-status ${r.status}`}
-                          title={
-                            r.status === "improved"
-                              ? t("stats.rule.improvedTitle")
-                              : t("stats.rule.activeTitle")
-                          }
-                        >
-                          {r.status === "improved"
-                            ? t("stats.rule.improved")
-                            : t("stats.rule.active")}
-                        </span>
-                        <span className="dash-learning-cat">
-                          {categoryLabel(r.category, lang)}
-                          {r.eventTypes.length > 0
-                            ? ` · ${r.eventTypes.join("+")}`
-                            : ""}
-                          {r.condition?.enemySpec
-                            ? t("stats.rule.vsSpec", {
-                                spec: r.condition.enemySpec,
-                              })
-                            : r.condition?.zoneId
-                              ? t("stats.rule.onMap", {
-                                  zone: r.condition.zoneId,
-                                })
-                              : ""}
-                        </span>
-                        <span className="dash-learning-count">
-                          {habitBadgeText(r, lang)}
-                        </span>
-                        <span
-                          className="dash-learning-trend"
-                          title={t("stats.rule.trendTitle", {
-                            n: TREND_BUCKET_MATCHES,
-                          })}
-                        >
-                          {r.stats.trend.map((h, i) => (
-                            <i
-                              key={i}
-                              style={{ height: `${4 + (h / max) * 12}px` }}
-                              className={h > 0 ? "hit" : ""}
-                            />
-                          ))}
-                        </span>
-                        <p
-                          className="dash-learning-desc"
-                          data-content-lang={
-                            descFallback ? otherLang : undefined
-                          }
-                        >
-                          {desc
-                            ? interpolate(desc, facts)
-                            : t("stats.rule.noDescription")}
-                          {descFallback && (
-                            <ContentLangBadge contentLang={otherLang} />
-                          )}
-                        </p>
-                        {adv && (
-                          <p
-                            className="dash-learning-advice"
-                            data-content-lang={
-                              advFallback ? otherLang : undefined
-                            }
-                          >
-                            💡 {interpolate(adv, facts)}
-                            {advFallback && (
-                              <ContentLangBadge contentLang={otherLang} />
-                            )}
-                          </p>
-                        )}
-                        <span className="dash-learning-evidence">
-                          {r.evidence.map((id) => (
-                            <button key={id} onClick={() => onOpenMatch?.(id)}>
-                              {t("stats.rule.viewExample")}
-                            </button>
-                          ))}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {(rulesDoc?.rules ?? []).length === 0 &&
-                    !learnState?.backfill?.running && (
-                      <p className="dash-learning-empty">
-                        {t("stats.rule.empty", {
-                          window: PATTERN_WINDOW_MATCHES,
-                          hits: PATTERN_MIN_HITS,
-                        })}
-                      </p>
-                    )}
-                </div>
-              )}
-              {notebook.length > 0 && (
-                <div data-testid="dash-notebook">
-                  {notebook.map((g) => {
-                    const open = !!openCats[g.category];
-                    return (
-                      <div key={g.category} className="dash-nb-group">
-                        <button
-                          className="dash-nb-head"
-                          onClick={() =>
-                            setOpenCats((o) => ({
-                              ...o,
-                              [g.category]: !o[g.category],
-                            }))
-                          }
-                        >
-                          <span className="dash-nb-caret">
-                            {open ? "▼" : "▸"}
-                          </span>
-                          {/* Display goes through the Chinese vocabulary
-                              (enum slugs and legacy free-form words are both
-                              normalized); the aggregation key is untouched */}
-                          <span className="dash-nb-cat">
-                            {categoryLabel(g.category, lang)}
-                          </span>
-                          <span className="dash-nb-count">×{g.count}</span>
-                          {g.recurring > 0 && (
-                            <span className="dash-issue-rec">
-                              ↻ {g.recurring}
-                            </span>
-                          )}
-                          {g.done > 0 && (
-                            <span className="dash-issue-done">✓ {g.done}</span>
-                          )}
-                        </button>
-                        {open &&
-                          g.entries.map((e, i) => (
-                            <div
-                              key={`${e.matchId}:${e.flagKey}:${i}`}
-                              className="dash-nb-entry"
-                            >
-                              <span className="dash-nb-when">
-                                {new Date(e.startTime).getMonth() + 1}/
-                                {new Date(e.startTime).getDate()}
-                              </span>
-                              <span className="dash-nb-meta">
-                                {e.zoneId
-                                  ? (zoneMetadata[e.zoneId]?.name ??
-                                    e.bracket ??
-                                    "")
-                                  : (e.bracket ?? "")}
-                                {e.result
-                                  ? ` · ${e.result.toLowerCase() === "win" ? t("stats.result.win") : t("stats.result.loss")}`
-                                  : ""}
-                              </span>
-                              <span
-                                className={`dash-nb-sev rpt-finding-${e.severity}`}
-                              >
-                                <span className="rpt-finding-sev">
-                                  {severityLabel(
-                                    e.severity as Finding["severity"],
-                                    lang,
-                                  )}
-                                </span>
-                              </span>
-                              <span
-                                className="dash-nb-title"
-                                title={e.explanation}
-                                data-content-lang={
-                                  e.contentLang && e.contentLang !== lang
-                                    ? e.contentLang
-                                    : undefined
-                                }
-                              >
-                                {e.title}
-                              </span>
-                              <ContentLangBadge
-                                contentLang={e.contentLang ?? lang}
-                              />
-                              <span className="dash-nb-actions">
-                                <button
-                                  className={e.flag === "done" ? "active" : ""}
-                                  title={t("stats.notebook.markFixed")}
-                                  onClick={() => flagEntry(e, "done")}
-                                >
-                                  ✓
-                                </button>
-                                <button
-                                  className={
-                                    e.flag === "recurring" ? "active rec" : ""
-                                  }
-                                  title={t("stats.notebook.markRecurring")}
-                                  onClick={() => flagEntry(e, "recurring")}
-                                >
-                                  ↻
-                                </button>
-                                {onOpenMatch && (
-                                  <button
-                                    className="dash-issue-recent"
-                                    onClick={() => onOpenMatch(e.matchId)}
-                                  >
-                                    {t("stats.notebook.openMatch")}
-                                  </button>
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          {practiceCard}
 
-          <div className="dash-tables">
-            <div className="dash-card">
-              <span className="rpt-card-label">{t("stats.comps.title")}</span>
-              <div className="dash-comps">
-                {dash.comps.slice(0, 12).map((c) => {
-                  const pct = c.games > 0 ? (100 * c.wins) / c.games : 0;
-                  const r = rateDisplay(c.wins, c.games, RATE_MIN_N_ROW);
-                  // Below the row floor the bar stays neutral — a 1-0 row
-                  // must not read as a green 100%.
-                  const barColor = r.belowFloor ? "#9397ab" : rateBarColor(pct);
-                  return (
-                    <div
-                      key={c.specIds.join("+")}
-                      className={
-                        onCompClick ? "dash-comp dash-comp-click" : "dash-comp"
-                      }
-                      onClick={
-                        onCompClick && c.specIds.length > 0
-                          ? () => onCompClick(c.specIds[0]!)
-                          : undefined
-                      }
-                      title={c.specIds.map((id) => specName(id)).join(" + ")}
-                    >
-                      <span className="dash-comp-specs">
-                        {c.specIds.map((id, i) => (
-                          <SpecDot key={i} specId={id} classId={0} />
-                        ))}
-                      </span>
-                      <span className="dash-comp-track">
-                        <span
-                          className="dash-comp-bar"
-                          style={{ width: `${pct}%`, background: barColor }}
-                        />
-                      </span>
-                      <span
-                        className="dash-comp-num"
-                        style={{ color: barColor }}
-                      >
-                        {r.primary}
-                        <span className="dash-comp-games">
-                          {t("stats.row.games", { n: c.games })}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-                {dash.comps.length === 0 && (
-                  <div className="dash-empty">
-                    {dash.games > 0 ? (
-                      <>
-                        {t("stats.comps.noIndex")}
-                        <button
-                          className="rpt-btn dash-rebuild"
-                          data-testid="dash-rebuild"
-                          disabled={rebuild.running}
-                          onClick={runRebuild}
-                        >
-                          {rebuild.running
-                            ? t("stats.rebuild.runningLong")
-                            : t("stats.rebuild.button")}
-                        </button>
-                      </>
-                    ) : (
-                      t("stats.comps.empty")
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="dash-comp-foot">
-                {dash.comps.length > 0 && t("stats.comps.clickHint")}
-                {dash.legacyRows > 0 && dash.comps.length > 0 && (
-                  <>
-                    {t("stats.comps.legacy", { n: dash.legacyRows })}
-                    <button
-                      className="dash-rebuild-inline"
-                      data-testid="dash-rebuild"
-                      disabled={rebuild.running}
-                      onClick={runRebuild}
-                    >
-                      {rebuild.running
-                        ? t("stats.rebuild.running")
-                        : t("stats.rebuild.button")}
-                    </button>
-                  </>
-                )}
-                {rebuild.done && (
-                  <span className="dash-rebuild-msg">
-                    {rebuild.done === "error"
-                      ? t("stats.rebuild.failed")
-                      : t("stats.rebuild.done", {
-                          updated: rebuild.done.updated,
-                          failedPart:
-                            rebuild.done.failed > 0
-                              ? t("stats.rebuild.doneFailed", {
-                                  failed: rebuild.done.failed,
-                                })
-                              : "",
-                        })}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="dash-card">
-              <span className="rpt-card-label">{t("stats.zones.title")}</span>
-              {/* Row layout (spec 2-3, decided by the user): name + win-rate
-                  bar + n%·x matches; clicking returns to the list with the zone
-                  filter — same row structure and color bands as the comp card */}
-              <div className="dash-comps" data-testid="dash-zones">
-                {dash.zones.slice(0, 12).map((z) => {
-                  const pct = z.games > 0 ? (100 * z.wins) / z.games : 0;
-                  const r = rateDisplay(z.wins, z.games, RATE_MIN_N_ROW);
-                  const barColor = r.belowFloor ? "#9397ab" : rateBarColor(pct);
-                  const name =
-                    zoneMetadata[z.zoneId]?.name ?? `zone ${z.zoneId}`;
-                  return (
-                    <div
-                      key={z.zoneId}
-                      className={
-                        onZoneClick ? "dash-comp dash-comp-click" : "dash-comp"
-                      }
-                      onClick={
-                        onZoneClick ? () => onZoneClick(z.zoneId) : undefined
-                      }
-                      title={name}
-                    >
-                      <span className="dash-zone-name">{name}</span>
-                      <span className="dash-comp-track">
-                        <span
-                          className="dash-comp-bar"
-                          style={{ width: `${pct}%`, background: barColor }}
-                        />
-                      </span>
-                      <span
-                        className="dash-comp-num"
-                        style={{ color: barColor }}
-                      >
-                        {r.primary}
-                        <span className="dash-comp-games">
-                          {t("stats.row.games", { n: z.games })}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-                {dash.zones.length === 0 && (
-                  <div className="dash-empty">{t("stats.zones.empty")}</div>
-                )}
-              </div>
-              {dash.zones.length > 0 && onZoneClick && (
-                <div className="dash-comp-foot">
-                  {t("stats.zones.clickHint")}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent matches (round 2, P0): the main filler for the big empty
-              right column at 4K. Reuses the match list's rich MatchListRow;
-              clicking goes straight to the report. */}
-          {dash.recent.length > 0 && (
-            <div className="dash-card" data-testid="dash-recent">
-              <span className="rpt-card-label">{t("stats.recent.title")}</span>
-              <div className="dash-recent-list">
-                {/* div role=button rather than <button>: MatchListRow is a
-                    block-level div and a button may only contain phrasing
-                    content, so neither axe nor HTML validation would pass
-                    (agy review #3) */}
-                {dash.recent.map((m) => (
-                  <div
-                    key={m.id}
-                    role="button"
-                    tabIndex={0}
-                    className="dash-recent-row"
-                    title={t("stats.recent.open")}
-                    onClick={onOpenMatch ? () => onOpenMatch(m.id) : undefined}
-                    onKeyDown={
-                      onOpenMatch
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              onOpenMatch(m.id);
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    <MatchListRow
-                      meta={m}
-                      ratingDelta={ratingDeltas.get(m.id)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {detailTables}
         </div>
       </div>
+      )}
 
       {/* Full rating-curve modal (1e): opened from the sparkline; closed by
           clicking the backdrop or the ✕ */}

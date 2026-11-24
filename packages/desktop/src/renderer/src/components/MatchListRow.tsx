@@ -11,6 +11,7 @@ import {
   specIconName,
   specName,
 } from "../report/data/gameConstants";
+import { matchOutcome } from "./dashboard";
 
 const fmtWhen = (t: number, lang: Language): string => formatDateTime(t, lang);
 
@@ -104,12 +105,24 @@ export function MatchListRow({
   const zone = zoneMetadata[meta.zoneId]?.name;
   const rich = !!meta.teams && meta.teams.length === 2;
   const res = meta.result.toLowerCase();
+  // A shuffle lobby is coloured by its rounds (matchOutcome): a 3-3 lobby is
+  // neither, whatever the lobby-level result says.
+  const outcome =
+    meta.kind === "shuffle" && meta.roundStats && meta.roundStats.length > 0
+      ? matchOutcome(meta)
+      : null;
   const resCls =
-    res === "win"
-      ? "mlr-win"
-      : res === "loss" || res === "lose"
-        ? "mlr-loss"
-        : "";
+    outcome != null
+      ? outcome > 0
+        ? "mlr-win"
+        : outcome < 0
+          ? "mlr-loss"
+          : ""
+      : res === "win"
+        ? "mlr-win"
+        : res === "loss" || res === "lose"
+          ? "mlr-loss"
+          : "";
 
   if (!rich) {
     return (
