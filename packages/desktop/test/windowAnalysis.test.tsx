@@ -3,9 +3,11 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { LangProvider, useT } from "../src/renderer/src/i18n/LangProvider";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import { WindowAnalysisCard } from "../src/renderer/src/report/components/WindowAnalysisCard";
 import { buildWindowAnalysisRequest } from "../src/renderer/src/report/derive/analysisInput";
+import type { Language } from "../src/shared/i18n/index";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
 const m = loadRealMatchFixture();
@@ -307,6 +309,77 @@ describe("MatchReport【AI 分析此段】按钮", () => {
     fireEvent.click(getByRole("button", { name: "重试" }));
     await waitFor(() => expect(analyzeWindow).toHaveBeenCalledTimes(2));
     expect(analyzeWindow.mock.calls[1]?.[0]?.force).toBeFalsy();
+  });
+});
+
+describe("选段结果跟着请求语言走(codex B2#5)", () => {
+  let switchLang: ((l: Language) => Promise<boolean>) | null = null;
+  function LangHandle() {
+    switchLang = useT().setLang;
+    return null;
+  }
+  const renderInProvider = (matchId: string) =>
+    render(
+      <LangProvider firstRunPicker={false}>
+        <LangHandle />
+        <MatchReport
+          source={m}
+          matchId={matchId}
+          initialTimeRange={SIGNAL_RANGE}
+        />
+      </LangProvider>,
+    );
+
+  it("zh 请求在飞时切到 en:到达的 zh 结果被丢弃,不出现在英文界面", async () => {
+    let resolveAnalyze!: (r: unknown) => void;
+    const analyzeWindow = installFixtureBridge(
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveAnalyze = resolve;
+          }),
+      ),
+    );
+    const { findByTestId, queryByTestId, container } =
+      renderInProvider("m-lang1");
+    fireEvent.click(await findByTestId("window-ai-btn"));
+    await waitFor(() => expect(analyzeWindow).toHaveBeenCalledTimes(1));
+    expect(analyzeWindow.mock.calls[0]![0].contentLang).toBe("zh");
+    await act(async () => {
+      await switchLang!("en");
+    });
+    await act(async () => {
+      resolveAnalyze({
+        status: "ok",
+        entries: [{ title: null, text: "中文选段结论", chips: [] }],
+        fromCache: false,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).not.toContain("中文选段结论");
+    expect(queryByTestId("window-ai-card")).toBeNull();
+  });
+
+  it("已出的 zh 结果在切到 en 后收起", async () => {
+    installFixtureBridge(
+      vi.fn().mockResolvedValue({
+        status: "ok",
+        entries: [{ title: null, text: "中文选段结论", chips: [] }],
+        fromCache: false,
+      }),
+    );
+    const { findByTestId, queryByTestId, container } =
+      renderInProvider("m-lang2");
+    fireEvent.click(await findByTestId("window-ai-btn"));
+    expect((await findByTestId("window-ai-card")).textContent).toContain(
+      "中文选段结论",
+    );
+    await act(async () => {
+      await switchLang!("en");
+    });
+    await waitFor(() => expect(queryByTestId("window-ai-card")).toBeNull());
+    expect(container.textContent).not.toContain("中文选段结论");
   });
 });
 

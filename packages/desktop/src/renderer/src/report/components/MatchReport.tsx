@@ -1,7 +1,7 @@
 import { ensureAnalysisData, type RawStreams } from "@gladlog/analysis";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type { MessageKey } from "../../../../shared/i18n";
+import type { Language, MessageKey } from "../../../../shared/i18n";
 import { bridge } from "../../bridge";
 import { useT } from "../../i18n/LangProvider";
 import {
@@ -738,8 +738,20 @@ export function MatchReport({
   // window; the terminal-state card sits below the toolbar.
   const [winAi, setWinAi] = useState<{
     range: TimeRange;
+    /** The UI language the request was made in (its pack's chips and the
+     * model's answer are in it). A card of another language is dropped. */
+    lang: Language;
     state: WindowCardState;
   } | null>(null);
+  // A language switch collapses a card made in the other language (codex
+  // B2#5): its entries would sit unlabelled under the new language's copy.
+  // The user presses the button again for the current language.
+  useEffect(() => {
+    setWinAi((prev) => (prev && prev.lang !== lang ? null : prev));
+  }, [lang]);
+  /** The current language for runWindowAi's after-await guard. */
+  const langRef = useRef(lang);
+  langRef.current = lang;
   // Any timeRange change (including being cleared) retracts the card: the same
   // window (equal by value) keeps its in-flight/terminal state; switching or
   // clearing the window always collapses it (no automatic re-query — the user
@@ -852,12 +864,16 @@ export function MatchReport({
     // be; ShuffleReport's key prevents it, this is defense in depth), identical
     // fromS/toS must still not let the previous match's result land on the new
     // one.
+    // The request language: a response landing after a language switch is
+    // dropped, like one landing after a window or match switch (codex B2#5).
+    const requestLang = lang;
     const isCurrent = () =>
       !!timeRangeRef.current &&
       timeRangeRef.current.fromS === range.fromS &&
       timeRangeRef.current.toS === range.toS &&
-      matchIdRef.current === requestMatchId;
-    setWinAi({ range, state: { phase: "loading" } });
+      matchIdRef.current === requestMatchId &&
+      langRef.current === requestLang;
+    setWinAi({ range, lang: requestLang, state: { phase: "loading" } });
     // Pack-building precondition: prompt spell names must never degrade
     await ensureAnalysisData();
     // Window changed/cleared: drop it, don't resurrect the collapsed card
@@ -866,10 +882,10 @@ export function MatchReport({
       source,
       range.fromS,
       range.toS,
-      lang,
+      requestLang,
     );
     if (!req) {
-      setWinAi({ range, state: { phase: "none" } }); // gate failed, no IPC sent
+      setWinAi({ range, lang: requestLang, state: { phase: "none" } }); // gate failed, no IPC sent
       return;
     }
     // Clamped window (req.fromS/toS): both the payload sent to main and the
@@ -890,7 +906,7 @@ export function MatchReport({
         ownerName: req.ownerName,
         // the language the pack's chips were built in: main refuses a request
         // whose language is no longer the one it pins
-        contentLang: lang,
+        contentLang: requestLang,
         // #21 item11 review-round fix: an explicit retry after audit-empty must
         // bypass the cache and hit the model again (the cache only protects
         // "re-selecting the same window"; it must not swallow a user's retry).
@@ -901,16 +917,26 @@ export function MatchReport({
       if (r.status === "ok")
         setWinAi({
           range: evidenceRange,
+          lang: requestLang,
           state: {
             phase: "result",
             entries: r.entries,
             fromCache: r.fromCache,
           },
         });
-      else setWinAi({ range: evidenceRange, state: { phase: r.status } }); // busy/audit-empty/no-client/error are all retryable terminal states
+      else
+        setWinAi({
+          range: evidenceRange,
+          lang: requestLang,
+          state: { phase: r.status },
+        }); // busy/audit-empty/no-client/error are all retryable terminal states
     } catch {
       if (isCurrent())
-        setWinAi({ range: evidenceRange, state: { phase: "error" } }); // no bridge / exception: same retryable treatment
+        setWinAi({
+          range: evidenceRange,
+          lang: requestLang,
+          state: { phase: "error" },
+        }); // no bridge / exception: same retryable treatment
     }
   };
 
