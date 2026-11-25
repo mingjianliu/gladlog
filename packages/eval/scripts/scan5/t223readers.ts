@@ -39,7 +39,7 @@
 import {
   boundBurstWindow,
   boundedBurstSegments,
-  rateRoundEndingSecond,
+  markRoundEndingDeathSecond,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
   CRISIS_MIN_DMG2S,
@@ -310,8 +310,8 @@ export function run(ctx: IRoundCtx): void {
           out.set(sec, (out.get(sec) ?? 0) + (s.pre[i + 1]! - s.pre[i]!) / max);
         }
       }
-      // …and the round's last second as the rate the product reads it at
-      rateRoundEndingSecond(out, ctx.start, dmgEnd);
+      // …and the round-ending death's own second, as the product marks it
+      markRoundEndingDeathSecond(out, friends, ctx.start, dmgEnd);
       return out;
     };
     const { facts, segments } = boundedBurstSegments(combat, {

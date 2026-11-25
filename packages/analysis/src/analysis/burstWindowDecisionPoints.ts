@@ -1827,27 +1827,29 @@ function damagePctPerSecond(
 }
 
 /**
- * The round's last second is cut short (pipeline T237, ruling R111): the
- * per-second damage stops at the round's end, so that second holds only the
- * part of it the round lasted (87.0 – 87.199 s in 605 s2 22-4, where the
- * round ends on a death), and the floor it is held against is a rate per
- * second. Rescales that second's sum in `dmgPctPerSec` to the rate over the
- * part the round lasted; no row after the round's end is read. Exported for
- * scan5 `t223readers`, which bounds the same windows on its own per-second
- * maps.
+ * The death that ends the round is pressure of its own second (pipeline
+ * T237, rulings R111 and R117): the per-second damage stops at the round's end, so that
+ * second is cut short at the death (87.0 – 87.199 s in 605 s2 22-4), and the
+ * window the friendly died in runs up to its death whatever that fraction of
+ * a second sums to. Marks the second in `dmgPctPerSec` when a friendly's
+ * death is the round's end. Exported for scan5 `t223readers`, which bounds
+ * the same windows on its own per-second maps.
  */
-export function rateRoundEndingSecond(
+export function markRoundEndingDeathSecond(
   dmgPctPerSec: Map<number, number>,
+  friendlies: ReadonlyArray<{
+    deathRecords?: ReadonlyArray<{ timestamp?: number }>;
+  }>,
   startMs: number,
   roundEndAtMs: number | undefined,
 ): void {
   if (roundEndAtMs === undefined) return;
-  const s = Math.floor((roundEndAtMs - startMs) / 1000);
-  const sum = dmgPctPerSec.get(s);
-  if (sum === undefined) return;
-  // the round's end is the last millisecond that counts
-  const lastedMs = roundEndAtMs - startMs - s * 1000 + 1;
-  if (lastedMs < 1000) dmgPctPerSec.set(s, (sum * 1000) / lastedMs);
+  if (
+    friendlies.some((f) =>
+      (f.deathRecords ?? []).some((d) => d.timestamp === roundEndAtMs),
+    )
+  )
+    dmgPctPerSec.set(Math.floor((roundEndAtMs - startMs) / 1000), Infinity);
 }
 
 /**
@@ -1892,7 +1894,7 @@ export function boundedBurstSegments(
     buildRosterSides(Object.values(combat?.units ?? {}) as ICombatUnit[]),
     roundEndAtMs,
   );
-  rateRoundEndingSecond(dmgPctPerSec, start, roundEndAtMs);
+  markRoundEndingDeathSecond(dmgPctPerSec, friendlies, start, roundEndAtMs);
   const segments: BoundedSegment[] = [];
   for (const w of timeline.alignedBurstWindows)
     for (const seg of boundBurstWindow(w, facts, dmgPctPerSec, opts))
