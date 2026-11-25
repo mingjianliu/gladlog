@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { wearsSetBonus } from "../src/data/classSetBonuses";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { isWeaponClassAttackRow } from "../src/data/spellDamageClass";
 import {
   castTargetTickTriggers,
   EVENT_COOLDOWN_REDUCTIONS,
@@ -271,6 +272,78 @@ describe("Causality — a shared millisecond goes by log order (codex review rou
       missesOut: [],
     };
     expect(castTargetTickTriggers(unit, r, "1467")).toHaveLength(2);
+  });
+});
+
+describe("Impish Instincts — weapon-class hits of any school (pipeline T266)", () => {
+  const r = EVENT_COOLDOWN_REDUCTIONS["409835"]!;
+  const hit = (
+    event: LogEvent,
+    ms: number,
+    spellId: string,
+    school: string,
+  ): any => ({
+    spellId,
+    srcUnitId: "enemy-1",
+    spellSchoolId: school,
+    logLine: { event, timestamp: T0 + ms },
+  });
+  it("DB2 classes: Final Verdict is melee, Arcane Shot ranged, Flurry Strikes and Death Coil neither", () => {
+    expect(isWeaponClassAttackRow("SPELL_DAMAGE", "383328")).toBe(true);
+    expect(isWeaponClassAttackRow("SPELL_DAMAGE", "185358")).toBe(true);
+    expect(isWeaponClassAttackRow("SPELL_DAMAGE", "450617")).toBe(false);
+    expect(isWeaponClassAttackRow("SPELL_DAMAGE", "47632")).toBe(false);
+    expect(isWeaponClassAttackRow("SWING_MISSED", undefined)).toBe(true);
+    expect(isWeaponClassAttackRow("SPELL_DAMAGE", undefined)).toBe(false);
+  });
+  it("a Holy melee-class hit and a Physical magic-class one both count; a Shadow magic-class one does not", () => {
+    const unit: any = {
+      id: PID,
+      damageIn: [
+        hit(LogEvent.SPELL_DAMAGE, 1_000, "47632", "0x20"), // Death Coil
+        hit(LogEvent.SPELL_DAMAGE, 2_000, "383328", "0x2"), // Final Verdict
+        hit(LogEvent.SPELL_DAMAGE, 9_000, "450617", "0x1"), // Flurry Strikes
+      ],
+      missesIn: [
+        {
+          ...hit(LogEvent.SPELL_MISSED, 15_000, "383328", "0x2"),
+          missType: "ABSORB",
+        },
+        {
+          ...hit(LogEvent.SPELL_MISSED, 21_000, "383328", "0x2"),
+          missType: "PARRY",
+        },
+      ],
+      auraEvents: [],
+    };
+    expect(hostileTakenTriggers(unit, r).map((g) => g.atMs - T0)).toEqual([
+      2_000, 9_000, 15_000,
+    ]);
+  });
+  it("the class alone (no school mask) drops the Physical magic-class hit", () => {
+    const unit: any = {
+      id: PID,
+      damageIn: [
+        hit(LogEvent.SPELL_DAMAGE, 2_000, "450617", "0x1"),
+        hit(LogEvent.SPELL_DAMAGE, 9_000, "383328", "0x2"),
+      ],
+      missesIn: [],
+      auraEvents: [
+        {
+          ...hit(LogEvent.SPELL_AURA_APPLIED, 20_000, "1", "0x1"),
+          auraType: "DEBUFF",
+        },
+      ],
+    };
+    expect(
+      hostileTakenTriggers(unit, {
+        seconds: 3,
+        triggerHostileTaken: {
+          internalCooldownMs: 5000,
+          weaponClassAttacks: true,
+        },
+      }).map((g) => g.atMs - T0),
+    ).toEqual([9_000]);
   });
 });
 

@@ -181,6 +181,10 @@ export async function main(): Promise<void> {
       "spellParryGenerated.ts": {
         entries: countQuotedIds("spellParryGenerated.ts"),
       },
+      // pipeline T266: DB2 damage class (melee / ranged) of observed spells
+      "spellDamageClassGenerated.ts": {
+        entries: countQuotedIds("spellDamageClassGenerated.ts"),
+      },
       // GH #167: the forward check of SELF_CAST_NOOP_EXTERNAL_IDS
       "excludeCasterGenerated.ts": {
         entries: countQuotedIds("excludeCasterGenerated.ts"),

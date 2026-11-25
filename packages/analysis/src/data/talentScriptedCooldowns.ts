@@ -43,6 +43,7 @@ import {
   setBonusHeld,
   wearsSetBonus,
 } from "./classSetBonuses";
+import { isWeaponClassAttackRow } from "./spellDamageClass";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 import { ccSpellIds } from "./spellTags";
@@ -173,6 +174,13 @@ export interface IEventCooldownReduction {
      * whole — a dodge or an immunity is no damage taken), and no debuff
      * applications */
     damageSchoolMask?: number;
+    /** "Taking a melee or ranged attack" (a proc mask of taken melee /
+     * ranged auto attack and melee- / ranged-class spell, no magic-class
+     * bit): only weapon-class hits (`isWeaponClassAttackRow`: a swing, or a
+     * spell row DB2 classes Melee or Ranged, whatever its school), only
+     * ABSORB misses, and no debuff applications. With `damageSchoolMask`
+     * too, a hit either one admits counts. */
+    weaponClassAttacks?: true;
   };
   /** Bonuses on every give-back of this entry, added up: `pct` while the
    * unit's own `whileSelfAuraId` buff is up (Apotheosis +200 %), `pctPerRank`
@@ -902,18 +910,33 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Impish Instincts (PvP, Warlock, 409835): "Taking direct Physical damage
   // reduces the cooldown of Demonic Circle by 3 sec. Can only occur once
   // every 5 sec." DB2: aura 42 bp −3000, ProcCategoryRecovery 5000, proc
-  // mask 680 (taken melee / ranged). Physical direct hits — swings, Physical
-  // spell rows, and the ones a shield ate whole. Holders 107 of 249 early
-  // (dev) / 91 of 207 (hold-out) under the base model, non-holders 1 of 8 /
-  // 0 of 14; replay 9 / 0. Any school / every miss type cut it further but
-  // thin the pile of presses landing right at the ready instant (13 / 9 →
-  // 1–5), so DB2's numbers.
+  // mask 680 = taken melee auto attack (0x8), melee-class spell (0x20),
+  // ranged auto attack (0x80), ranged-class spell (0x200). The mask reads
+  // the attack's damage CLASS (SpellCategories.DefenseType), not its school:
+  // Final Verdict, Judgment and Blade of Justice are Holy and class 2. So a
+  // trigger is a weapon-class hit (`isWeaponClassAttackRow`) or, the
+  // tooltip's reading, a Physical-school one — swings, spell rows, and the
+  // ones a shield ate whole. Holders 107 of 249 early (dev) / 91 of 207
+  // (hold-out) under the base model, non-holders 1 of 8 / 0 of 14; replay
+  // 9 / 0 with the Physical school alone. Any school / every miss type cut
+  // it further but thin the pile of presses landing right at the ready
+  // instant (13 / 9 → 1–5), so DB2's numbers.
+  // Pipeline T266 (2026-11-25), Teleport presses the model reads as
+  // impossible, 605 archives + the 285 12.1.5 files (`cooldownRecastScan
+  // --spells 48020`; 909 + 962 model presses): Physical school alone 5 + 6;
+  // weapon class alone 1 + 3, two of them presses the Physical school had
+  // explained; either one 1 + 2. The three left are open (gaps 20.0, 20.3
+  // and 18.7 s; the 5 s lockout's phase decides them) and stay counted.
   "409835": {
     targets: ["48020"],
     triggerCastIds: [],
-    triggerHostileTaken: { internalCooldownMs: 5000, damageSchoolMask: 1 },
+    triggerHostileTaken: {
+      internalCooldownMs: 5000,
+      weaponClassAttacks: true,
+      damageSchoolMask: 1,
+    },
     seconds: 3,
-    note: "Impish Instincts — Demonic Circle: Teleport −3 s per direct Physical hit taken (≤ 1 per 5 s)",
+    note: "Impish Instincts — Demonic Circle: Teleport −3 s per direct melee / ranged-class or Physical hit taken (≤ 1 per 5 s)",
   },
   // Causality (Devastation, 375777): "Disintegrate reduces the remaining
   // cooldown of your empower spells by 0.50 sec each time it deals damage.
@@ -2118,13 +2141,21 @@ export function hostileTakenTriggers(
   const times: number[] = [];
   const other = (src: string | undefined) => !!src && src !== unit.id;
   const mask = h.damageSchoolMask;
+  // a damage-taken trigger: hits and whole-absorbed hits only
+  const damageOnly = mask !== undefined || h.weaponClassAttacks === true;
   const inMask = (e: {
     spellId?: string;
     logLine: { event: string };
     spellSchoolId?: string;
     damageSchoolId?: string;
   }): boolean => {
-    if (mask === undefined) return true;
+    if (!damageOnly) return true;
+    if (
+      h.weaponClassAttacks &&
+      isWeaponClassAttackRow(e.logLine.event, e.spellId)
+    )
+      return true;
+    if (mask === undefined) return false;
     const school = e.logLine.event.startsWith("SWING_")
       ? 1
       : parseInt(e.damageSchoolId ?? e.spellSchoolId ?? "", 16) ||
@@ -2142,12 +2173,12 @@ export function hostileTakenTriggers(
     if (
       e.logLine.event !== LogEvent.SPELL_PERIODIC_MISSED &&
       other(e.srcUnitId) &&
-      (mask === undefined || (e.missType === "ABSORB" && inMask(e)))
+      (!damageOnly || (e.missType === "ABSORB" && inMask(e)))
     )
       times.push(e.logLine.timestamp);
   for (const e of unit.auraEvents ?? [])
     if (
-      mask === undefined &&
+      !damageOnly &&
       e.auraType === "DEBUFF" &&
       e.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
       other(e.srcUnitId)

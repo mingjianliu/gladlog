@@ -32,6 +32,12 @@
  * the model's number is too short. A charge entry's ratio (`modelCharge…`)
  * runs from the press that spent its last charge: the next press over the
  * model's time to a charge back.
+ * A press whose cooldown was started by an undated press (`timedAtLatest`: a
+ * press no cast row dates, placed at the latest it can have been) is counted
+ * as `modelUndatedAnchorAt`, not as impossible, and gives no model ratio: the
+ * real press is at or before that time, so the gap from it reads short — the
+ * rule scan5 `t16` already reads (T266: Demonic Circle placed in preparation
+ * and re-stated by the round's opening batch, then moved 3.3 s in).
  *
  * Every record carries the `era` of its round (`logEraOf`: pre-12.1 /
  * 12.1.0 / 12.1.5) and every summary row an `eras` split — counts and the
@@ -122,6 +128,20 @@ function freePressesBySource(
     }));
 }
 
+/** Is the press at `pt` judged against a cooldown an undated press started
+ * (`timedAtLatest`)? Among the presses before it that spent the cooldown,
+ * one of the last `charges` is undated. */
+function anchoredOnUndatedPress(
+  entry: NonNullable<ReturnType<typeof unitCooldownEntry>>,
+  pt: number,
+): boolean {
+  return entry.casts
+    .filter((c) => c.timeSeconds < pt && !c.freeRecast)
+    .sort((x, y) => x.timeSeconds - y.timeSeconds)
+    .slice(-Math.max(1, entry.charges ?? 1))
+    .some((c) => c.timedAtLatest);
+}
+
 /** the presses the model says were impossible (the loop below, without its
  * floor and ratio bookkeeping) */
 function modelImpossibleTimes(
@@ -144,6 +164,7 @@ function modelImpossibleTimes(
     };
     if (!before.casts.length && !before.sharedCasts.length) continue;
     if (cdAvailableAt(before, pt) || cdMaybeAvailableAt(before, pt)) continue;
+    if (anchoredOnUndatedPress(entry, pt)) continue;
     out.push(Math.round(pt * 10) / 10);
   }
   return out;
@@ -183,6 +204,8 @@ interface Agg {
   ratios: number[];
   modelImpossible: number;
   modelFloorExplained: number;
+  /** presses judged against a cooldown an undated press started */
+  modelUndatedAnchor: number;
   modelRatios: number[];
   modelChargeRatios: number[];
   /** the model's presses of this spell, and those it reads as free by
@@ -280,6 +303,7 @@ for (const f of files) {
           ratios: [],
           modelImpossible: 0,
           modelFloorExplained: 0,
+          modelUndatedAnchor: 0,
           modelRatios: [],
           modelChargeRatios: [],
           modelPresses: 0,
@@ -312,6 +336,12 @@ for (const f of files) {
             )
           : undefined;
         const modelImpossibleAt: number[] = [];
+        const modelUndatedAnchorAt: number[] = [];
+        const undated = new Set(
+          (entry?.casts ?? [])
+            .filter((c) => c.timedAtLatest)
+            .map((c) => c.timeSeconds),
+        );
         let modelFloorExplained = 0;
         const modelRatios: number[] = [];
         const modelChargeRatios: number[] = [];
@@ -335,10 +365,15 @@ for (const f of files) {
               modelFloorExplained++;
               continue;
             }
+            if (anchoredOnUndatedPress(entry, pt)) {
+              modelUndatedAnchorAt.push(Math.round(pt * 10) / 10);
+              continue;
+            }
             modelImpossibleAt.push(Math.round(pt * 10) / 10);
           }
           if ((entry.charges ?? 1) <= 1)
             for (let i = 1; i < presses.length; i++) {
+              if (undated.has(presses[i - 1]!)) continue;
               const back = pressReadyAgainAtSeconds(entry, presses[i - 1]!);
               const own = back === null ? null : back - presses[i - 1]!;
               if (own && own > 0)
@@ -375,6 +410,7 @@ for (const f of files) {
         }
         a.modelImpossible += modelImpossibleAt.length;
         a.modelFloorExplained += modelFloorExplained;
+        a.modelUndatedAnchor += modelUndatedAnchorAt.length;
         a.modelRatios.push(...modelRatios);
         a.modelChargeRatios.push(...modelChargeRatios);
         const freeAt = freePressesBySource(entry);
@@ -416,6 +452,7 @@ for (const f of files) {
             casts: t.map((x) => Math.round(x * 10) / 10),
             impossibleAt,
             modelImpossibleAt,
+            modelUndatedAnchorAt,
             freeAt,
             modelPresses: entry?.casts.length ?? 0,
             ...(noGearImpossibleAt ? { noGearImpossibleAt } : {}),
@@ -481,6 +518,10 @@ console.log(
       totalModelImpossible: rows.reduce((s, r) => s + r.modelImpossible, 0),
       totalModelFloorExplained: rows.reduce(
         (s, r) => s + r.modelFloorExplained,
+        0,
+      ),
+      totalModelUndatedAnchor: rows.reduce(
+        (s, r) => s + r.modelUndatedAnchor,
         0,
       ),
       totalFree: rows.reduce(
