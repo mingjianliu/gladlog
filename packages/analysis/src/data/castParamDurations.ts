@@ -86,3 +86,49 @@ export const CAST_PARAM_DURATIONS: Record<string, ICastParamDuration> = {
     note: "Fire Breath DoT — 30 − 6 × level: L1 24 s ×503/1,182, L2 18 ×41/81, L3 12 ×79/172, L4 6 ×7/7. The L1 second tier at 28 s ×81 (+4) is Deep Exhalation with Blast Furnace, a scripted +4 s on both tooltips (talent layer, `BUFF_DURATION_TALENT_MODIFIERS` 357209, GH #183).",
   },
 };
+
+/**
+ * Supercharger 470347 (Rogue class tree, 2 ranks) — live 12.1.5 tooltip:
+ * "[Shadow Dance / Adrenaline Rush / Kingsbane] supercharges $m1 combo
+ * point(s). Damaging finishing moves consume a supercharged combo point to
+ * function as if they spent $m2 additional combo points." DB2: effect 0 bp 1
+ * (per rank), effect 1 bp 2. Forced Induction 470668: "Increase the bonus
+ * granted when a damaging finishing move consumes a supercharged combo point
+ * by $s1" (bp 1). The log has no aura for a supercharged point, so it is
+ * read off the presses: the charging press leaves `rank` points, each
+ * damaging finisher after it takes one.
+ *
+ * Outlaw only — the spec the corpus shows it on (pipeline T273): Between the
+ * Eyes pressed at 7 points on a charged point runs 22.0 s = 2 + 2 × (7 + 3),
+ * not 16. Raw rows of the 605 and the 285-file 12.1.5 set, per press the
+ * aura instance that expires at 2 + 2 × points (presses a death or the
+ * round's end cut are left out): holders, charged — 129 of 142 at points +
+ * 3; holders, no point left — 417 of 446 at the points spent; non-holders
+ * 279 of 294 at the points spent. Every holder in both sets has both
+ * Supercharger ranks and Forced Induction, so one point per rank is seen at
+ * rank 2 only and the + 2 without Forced Induction rests on the tooltip.
+ * Open: 2d4d9d9d r2, a Dispatch between the charge and the press left the
+ * point unspent. Subtlety (Shadow Dance) and Assassination (Kingsbane) are
+ * the same tooltip with no corpus split yet: not listed.
+ */
+export const SUPERCHARGED_FINISHERS = {
+  talentSpellId: "470347",
+  /** combo points one consumed supercharged point stands for */
+  pointsPerCharge: 2,
+  /** Forced Induction: + 1 to it */
+  bonusTalentSpellId: "470668",
+  bonusPoints: 1,
+  bySpec: {
+    "260": {
+      /** Adrenaline Rush */
+      chargeCastIds: ["13750"],
+      /** Dispatch, Between the Eyes, Killing Spree, Coup de Grace */
+      finisherCastIds: ["2098", "315341", "51690", "441776"],
+    },
+  } as Readonly<
+    Record<
+      string,
+      { chargeCastIds: readonly string[]; finisherCastIds: readonly string[] }
+    >
+  >,
+} as const;

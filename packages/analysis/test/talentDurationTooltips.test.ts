@@ -72,6 +72,15 @@ describe("TOOLTIP_PER_EVENT_DURATIONS — Spiritwalker's Momentum", () => {
   it("is the tooltip's per-event row: +1 s per press, up to 4 s", () => {
     for (const [aura, p] of Object.entries(TOOLTIP_PER_EVENT_DURATIONS)) {
       if (p.event !== "press") continue;
+      // a talent that extends by being pressed (Keep It Rolling, pipeline
+      // T273): its tooltip states one amount, which the generator reads as
+      // a fixed row — each press inside the aura adds it
+      if (p.qualifyingSpellIds.has(p.talentSpellId)) {
+        expect(entriesOf(p.talentSpellId, aura)).toMatchObject([
+          { kind: "fixed", unit: "s", amount: p.addSecondsPerEvent },
+        ]);
+        continue;
+      }
       const [e] = entriesOf(p.talentSpellId, aura).filter(
         (x) => x.kind === "per-event",
       );

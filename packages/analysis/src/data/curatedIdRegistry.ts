@@ -258,7 +258,10 @@ import {
   TALENT_EFFECT_AURAS_OF_CAST,
 } from "./castEffectAuras";
 import { CASTER_WINDOW_DURATIONS } from "./casterWindowDurations";
-import { CAST_PARAM_DURATIONS } from "./castParamDurations";
+import {
+  CAST_PARAM_DURATIONS,
+  SUPERCHARGED_FINISHERS,
+} from "./castParamDurations";
 import {
   AURA_KEYED_BREAK_RACIALS,
   CLASS_CC_BREAK_ABILITIES,
@@ -1482,6 +1485,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("CAST_PARAM_DURATIONS.castIds", "data/castParamDurations.ts", "cast", () =>
     Object.values(CAST_PARAM_DURATIONS).flatMap((c) => c.castIds),
+  ),
+  // pipeline T273: the presses that charge and spend a supercharged combo
+  // point (Supercharger)
+  t("SUPERCHARGED_FINISHERS", "data/castParamDurations.ts", "cast", () =>
+    Object.values(SUPERCHARGED_FINISHERS.bySpec).flatMap((c) => [
+      ...c.chargeCastIds,
+      ...c.finisherCastIds,
+    ]),
   ),
   // BACKLOG #45 (2026-09-17) / GH #106 (2026-09-24): corpus-corrected arena
   // cooldowns (Pillar of Frost 45 s, Summon Demonic Tyrant 60 s).

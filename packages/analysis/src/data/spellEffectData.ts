@@ -1404,6 +1404,14 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Razor Wire — DB2 aura 107 +6000 ms, Rogue/Assassination[spec] (maxRanks 1), mask covers Garrote; corpus 38/41 holder cells at 24.0 s, 5/5 non-holders at 18.0 s; 18 + 6 = 24. (The 09-07 note's 'Razor Wire rejected by the mask check' was about Improved Garrote 392401, which it does not reach; 392401's 12 s stays a corpus patch.)",
     },
   ],
+  "198103": [
+    {
+      talentSpellId: "462867",
+      untalentedBaseSeconds: 30,
+      pct: 20,
+      note: "Everlasting Elements — live 12.1.5 tooltip 'Increases the duration of your Elementals by $s1%'; DB2 aura 108 SPELLMOD_DURATION +20 %, Shaman/Elemental[spec] (maxRanks 1), mask covers Earth Elemental 198103 / 188616; pipeline T273, raw rows of the 605 + the 285-file 12.1.5 set (talents read per round): holders 4 of 6 runs at 36.0 s (the other two cut at 10 / 24 s), all in one archive (2c8867a8); non-holders 158 of 178 at 30.0 s and none longer. A thin holder sample: the tooltip and the DB2 row carry it, upward. 30 × 1.2 = 36.",
+    },
+  ],
   "382024": [
     {
       talentSpellId: "445028",

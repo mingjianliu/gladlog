@@ -408,6 +408,29 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     specs: ["72", "73"],
     qualifyingSpellIds: new Set(["435222"]),
   },
+  // Keep It Rolling 381989 — live 12.1.5 tooltip: "Increase the remaining
+  // duration of your active Roll the Bones combat enhancement by ${$s1/1000}
+  // sec" (effect 0 dummy, bp 30000); a press of its own, so the talent is
+  // the cast. Pipeline T273, raw rows of the 605 and the 285-file 12.1.5
+  // set, Roll the Bones 1214909 from its APPLIED / REFRESH to a REMOVED no
+  // re-roll or death made: no press inside 129 of 192 at 30.0 s and none
+  // longer; one press inside 5 of 13 at 60.0 s and none longer (the short
+  // ones end with the round). A re-roll ends it early in 137 of 138.
+  // What the press always extends is the enhancement the roll gave (One
+  // of a Kind 1214933, Double Trouble 1214934, Triple Threat 1214935,
+  // Jackpot 1214937): on the 22 archives of the T273 repro, 7 of 7 such
+  // runs neither a re-roll nor the round's end cut ran 60.0 s. The 1214909
+  // row itself followed in 5 and was removed at 30.0 s in 3 (1ce02e10 r3:
+  // 1214909 gone at 30.0 s, One of a Kind at 60.0 s) — the length here is
+  // the enhancement's, which is what `lasts` on the press states.
+  "1214909": {
+    event: "press",
+    talentSpellId: "381989",
+    untalentedBaseSeconds: 30,
+    addSecondsPerEvent: 30,
+    specs: ["260"],
+    qualifyingSpellIds: new Set(["381989"]),
+  },
   // Burn to Ash 446663: 「真理觉醒爆击时，其持续时间延长$s1秒」 (effect 0
   // dummy, bp 2) on Truth's Wake 403695, Wake of Ashes' DoT (DB2 9 s). GH
   // #183, 2026-11-03, raw ticks of 605-file subsets: non-holders 54 of 54
