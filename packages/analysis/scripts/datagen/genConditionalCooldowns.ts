@@ -73,7 +73,17 @@ async function main() {
   const inv = JSON.parse(
     fs.readFileSync(`${dataDir}talentEffectInventoryGenerated.json`, "utf8"),
   ) as { _meta: { build: string }; rows: Row[] };
-  const build = await resolveBuild(process.argv[2] ?? inv._meta.build);
+  // The tables must be the inventory's build. An explicit argument or the
+  // batch pin (DATAGEN_BUILD) that names another build is a mixed-build run
+  // and is refused — the inventory's own build used to win silently over the
+  // pin (pipeline T250 review). With neither, the inventory's build is used.
+  const asked = process.argv[2] ?? process.env.DATAGEN_BUILD;
+  if (asked && asked !== inv._meta.build) {
+    throw new Error(
+      `genConditionalCooldowns: talentEffectInventoryGenerated.json is build ${inv._meta.build}, the run asks for ${asked} — regenerate the inventory at ${asked} first`,
+    );
+  }
+  const build = await resolveBuild(inv._meta.build);
   const cacheDir = process.env.DATAGEN_CACHE ?? undefined;
   const cats = parseCsv(await fetchTable("SpellCategories", build, cacheDir));
   assertColumns(
@@ -225,8 +235,7 @@ async function main() {
           .map((t) => t.id);
     }
     for (const t of new Set(targets))
-      if (hasCooldown(t))
-        add(t, { carrier: r.SpellID!, kind: "rate", mult });
+      if (hasCooldown(t)) add(t, { carrier: r.SpellID!, kind: "rate", mult });
   }
   // Third pass (fact10 D6): a SpellLabel cooldown SpellMod (aura 218 pct /
   // 219 flat, op 11 in misc0, the label in misc1) on an observed carrier no

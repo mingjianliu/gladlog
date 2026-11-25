@@ -20,7 +20,7 @@ GET `https://wago.tools/api/builds` and take the highest `version` **under the `
 
 Run from repo root. **`DATAGEN_BUILD` must first be pinned to `LATEST_BUILD` discovered in step 2**—
 all generators resolve builds through a single source in `lib/wagoCsv.ts`'s `resolveBuild()` (CLI argument >
-`DATAGEN_BUILD` > wago's latest live retail build). Without pinning, if wago releases a new build mid-batch, mixed-build
+`DATAGEN_BUILD` > wago's latest live retail build; three scripts read a checked-in build below the pin instead of asking wago — `genSpellIcons` / `genSpecIcons` the manifest's, `genConditionalCooldowns` the talent-effect inventory's, and that one refuses a pin that names another build). Without pinning, if wago releases a new build mid-batch, mixed-build
 artifacts will be produced; before 2026-08-11, `genSpellIcons` would also read an old build from the previous
 round's manifest (the actual record of an entire batch of icons extracted from the wrong build can be seen in
 09ae85b on that day). In addition, set `DATAGEN_CACHE` to reuse large table downloads:

@@ -1,5 +1,8 @@
 /** GH #155 (2026-10-21): reading duration extensions off talent tooltips —
- * every case is a real zhCN tooltip (build 12.1.5.70391). */
+ * the cases are zhCN tooltips of build 12.1.5.70391 (the same text on the
+ * PTR build 12.1.5.69594 they were first read from), some cut to the clause
+ * under test or with a cross-spell placeholder written as the spell's own
+ * (194912 prints `$211805s1` / `${$m1/10}.1`, the case `$s2` / `${$s1/10}.1`). */
 import { describe, expect, it } from "vitest";
 
 import {
