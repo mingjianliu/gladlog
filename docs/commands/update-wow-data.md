@@ -19,7 +19,7 @@ GET `https://wago.tools/api/builds` and take the highest `version` **under the `
 ### 4. Run Batch Datagen Generator by Generator (Sequential Execution, Stop on Failure)
 
 Run from repo root. **`DATAGEN_BUILD` must first be pinned to `LATEST_BUILD` discovered in step 2**—
-all generators resolve builds through a single source in `lib/wagoCsv.ts`'s `resolveBuild()` (CLI argument >
+all generators resolve builds through a single source in `lib/wagoCsv.ts`'s `resolveBuild()` (a CLI build argument, for the generators that take one, >
 `DATAGEN_BUILD` > wago's latest live retail build; three scripts read a checked-in build below the pin instead of asking wago — `genSpellIcons` / `genSpecIcons` the manifest's, `genConditionalCooldowns` the talent-effect inventory's, and that one refuses a pin that names another build). Without pinning, if wago releases a new build mid-batch, mixed-build
 artifacts will be produced; before 2026-08-11, `genSpellIcons` would also read an old build from the previous
 round's manifest (the actual record of an entire batch of icons extracted from the wrong build can be seen in
@@ -266,6 +266,11 @@ npx tsx packages/analysis/scripts/datagen/genTalentReplaces.ts   # TraitDefiniti
 npx tsx packages/analysis/scripts/datagen/genPvpTalentPool.ts
 # 6e. DR category table (SpellCategories.DiminishType; consumed by drAnalysis, aura ID key)
 npx tsx packages/analysis/scripts/datagen/genDrCategories.ts
+# 6e2. Cooldown modifiers that hold only while a buff is up (conditionalCooldownsGenerated.json; read off
+#   talentEffectInventoryGenerated.json plus SpellCategories / SpellEffect / SpellLabel, carriers kept by
+#   observedSpellIdsGenerated.json — so AFTER genTalentModifiers.ts and observedSpellIds). It refuses a
+#   DATAGEN_BUILD that is not the inventory's build: a refusal here means step 5 did not run at this build.
+npx tsx packages/analysis/scripts/datagen/genConditionalCooldowns.ts
 # Per-spell reach (cast range / area radius) — GH #34 ② for the ally-castable
 # defensives, GH #83 (2026-09-23) for every corpus-observed spell PLUS the
 # passive range / radius talents that change it (SpellModOp 5 / 6, read off

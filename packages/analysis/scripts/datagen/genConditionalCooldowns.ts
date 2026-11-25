@@ -77,7 +77,8 @@ async function main() {
   // batch pin (DATAGEN_BUILD) that names another build is a mixed-build run
   // and is refused — the inventory's own build used to win silently over the
   // pin (pipeline T250 review). With neither, the inventory's build is used.
-  const asked = process.argv[2] ?? process.env.DATAGEN_BUILD;
+  // `||`: an empty argument or variable is absent, as in `resolveBuild`
+  const asked = process.argv[2] || process.env.DATAGEN_BUILD;
   if (asked && asked !== inv._meta.build) {
     throw new Error(
       `genConditionalCooldowns: talentEffectInventoryGenerated.json is build ${inv._meta.build}, the run asks for ${asked} — regenerate the inventory at ${asked} first`,
