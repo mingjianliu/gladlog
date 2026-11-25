@@ -26,6 +26,7 @@ import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "../data/spellIdLists";
 import { spellSchoolMask } from "../data/spellSchools";
+import { ccSpellIds, disarmSpellIds, rootSpellIds } from "../data/spellTags";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals, pressSecondsOfAura } from "./auraIntervals";
 import { withoutImmunityBranchWalls } from "./auraMasteryBranch";
@@ -997,9 +998,11 @@ export function wallRefusedAttackOf(
         return false;
       const swing = (m.logLine.event as string).startsWith("SWING");
       const type = (m as { missType?: string }).missType;
-      // the dodge of a wall with a melee reading of its own (Evasion)
-      if (meleeWall && type === "DODGE") return true;
-      if (type !== "IMMUNE" && !(type === "MISS" && !swing)) return false;
+      // the dodge of a wall with a melee reading of its own (Evasion): a
+      // swing, or a spell that deals damage
+      const dodged = meleeWall && type === "DODGE";
+      if (!dodged && type !== "IMMUNE" && !(type === "MISS" && !swing))
+        return false;
       const school = swing
         ? 0x1
         : logSchoolMask(
@@ -1008,7 +1011,7 @@ export function wallRefusedAttackOf(
             ),
           ) ||
           (spellSchoolMask(String(m.spellId)) ?? 0);
-      if ((school & ALL_SCHOOLS_MASK) === 0) return false;
+      if (!dodged && (school & ALL_SCHOOLS_MASK) === 0) return false;
       if (
         !swing &&
         !(
@@ -1017,6 +1020,7 @@ export function wallRefusedAttackOf(
         )
       )
         return false;
+      if (dodged) return true;
       return immunities.some((c) =>
         immunityMaskStopsSchool(c.schoolMask, school),
       );
@@ -1106,31 +1110,36 @@ export function petsOf(
   );
 }
 
-/** What the round shows of a spell of `sources` — `wallRefusedAttackOf`'s
- * "the attack deals damage": true with a damage row of it somewhere in the
- * round; false when it landed as an aura on another unit and dealt nothing
- * (1627f7f8 r1: Entangling Roots landed 15 times, no damage row — its DB2
- * profile carries a damage effect); undefined when the round shows
- * neither. */
+/** What is known of a spell of `sources` before its DB2 profile is asked —
+ * `wallRefusedAttackOf`'s "the attack deals damage": true with a damage
+ * row of it somewhere in the round, a shield-eaten one read by the attack
+ * it ate (`attackSpellId`; 6849373d r1: a rune whose every hit was
+ * absorbed); false for a control with none (`ccSpellIds`, `rootSpellIds`,
+ * `disarmSpellIds` — 1627f7f8 r1: Entangling Roots, whose DB2 profile
+ * carries a damage effect, dealt nothing in 15 landings); undefined
+ * otherwise. */
 export function roundDamageEvidenceOf(
-  sources: ReadonlyArray<Pick<ICombatUnit, "id" | "damageOut">>,
-  units: ReadonlyArray<Pick<ICombatUnit, "id" | "auraEvents">>,
+  sources: ReadonlyArray<Pick<ICombatUnit, "damageOut">>,
 ): (spellId: string) => boolean | undefined {
   const damaging = new Set(
-    sources.flatMap((u) => (u.damageOut ?? []).map((d) => String(d.spellId))),
+    sources.flatMap((u) =>
+      (u.damageOut ?? []).map((d) =>
+        String(
+          (d.logLine.event as string) === LogEvent.SPELL_ABSORBED
+            ? ((d as { attackSpellId?: string }).attackSpellId ?? "")
+            : d.spellId,
+        ),
+      ),
+    ),
   );
-  const ids = new Set(sources.map((u) => u.id));
-  const landed = new Set<string>();
-  for (const u of units)
-    for (const a of u.auraEvents ?? [])
-      if (
-        (a.logLine.event as string) === LogEvent.SPELL_AURA_APPLIED &&
-        ids.has(a.srcUnitId) &&
-        a.srcUnitId !== u.id
-      )
-        landed.add(String(a.spellId));
   return (spellId) =>
-    damaging.has(spellId) ? true : landed.has(spellId) ? false : undefined;
+    damaging.has(spellId)
+      ? true
+      : ccSpellIds.has(spellId) ||
+          rootSpellIds.has(spellId) ||
+          disarmSpellIds.has(spellId)
+        ? false
+        : undefined;
 }
 
 export function analyzeBurstLedger(
@@ -1166,10 +1175,11 @@ export function analyzeBurstLedgerUncached(
   // what the round shows of a spell of the holder's side
   let damageEvidenceMemo: ReturnType<typeof roundDamageEvidenceOf> | undefined;
   const isDamagingSpell = (spellId: string): boolean | undefined =>
-    (damageEvidenceMemo ??= roundDamageEvidenceOf(
-      [player, ...allies, ...petsOfHolder()],
-      Object.values(combat.units ?? {}) as unknown as ICombatUnit[],
-    ))(spellId);
+    (damageEvidenceMemo ??= roundDamageEvidenceOf([
+      player,
+      ...allies,
+      ...petsOfHolder(),
+    ]))(spellId);
   let recordsAttackSpellMemo: boolean | undefined;
   const recordsAttackSpell = (): boolean =>
     (recordsAttackSpellMemo ??= documentRecordsAttackSpell(

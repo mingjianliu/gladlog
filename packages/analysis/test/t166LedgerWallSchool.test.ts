@@ -129,7 +129,8 @@ describe("wallRefusedAttackOf (R102)", () => {
   const refused = (
     id: string,
     m: ReturnType<typeof miss>,
-    damaging: boolean | undefined = true,
+    // what the round shows of the spell; "none" = nothing (undefined)
+    shows: boolean | "none" = true,
   ) =>
     wallRefusedAttackOf(
       res(id),
@@ -137,7 +138,7 @@ describe("wallRefusedAttackOf (R102)", () => {
       "e1",
       at(11),
       at(19),
-      () => damaging,
+      () => (shows === "none" ? undefined : shows),
     );
   it("a swing or a damaging spell the immunity covers, IMMUNE", () => {
     expect(refused(BOP, miss(LogEvent.SWING_MISSED, "IMMUNE", "0"))).toBe(true);
@@ -170,7 +171,7 @@ describe("wallRefusedAttackOf (R102)", () => {
       refused(
         BOP,
         miss(LogEvent.SPELL_MISSED, "IMMUNE", "394352", "0x1"),
-        undefined,
+        "none",
       ),
     ).toBe(true);
     // one the round shows landing and dealing nothing is a control,
@@ -190,28 +191,30 @@ describe("wallRefusedAttackOf (R102)", () => {
 });
 
 describe("what the round shows of a spell, and Evasion's dodge (codex 85-tk-L2-T166-1e)", () => {
-  it("a damage row, a landing with none, neither", () => {
+  it("a damage row (a shield-eaten one by its attack), a control with none, neither", () => {
+    const row = (event: LogEvent, spellId: string, attackSpellId?: string) => ({
+      logLine: { event, timestamp: at(5), parameters: [] },
+      spellId,
+      ...(attackSpellId ? { attackSpellId } : {}),
+    });
     const src = makeUnit("p1", {
       name: "Druid",
-      damageOut: [{ spellId: "8921" }] as never,
+      damageOut: [
+        row(LogEvent.SPELL_DAMAGE, "8921"),
+        // Power Word: Shield ate a hit of 1287663
+        row(LogEvent.SPELL_ABSORBED, "17", "1287663"),
+      ] as never,
     });
-    const tgt = makeUnit("e1", {
-      name: "Rogue",
-      auraEvents: [
-        makeAuraEvent(
-          LogEvent.SPELL_AURA_APPLIED,
-          "339",
-          at(5),
-          "p1",
-          "e1",
-          "DEBUFF",
-        ),
-      ],
-    });
-    const shows = roundDamageEvidenceOf([src], [src, tgt]);
+    const shows = roundDamageEvidenceOf([src]);
     expect(shows("8921")).toBe(true);
+    expect(shows("1287663")).toBe(true);
+    expect(shows("17")).toBeUndefined();
+    // Entangling Roots, Hammer of Justice: controls with no damage row
     expect(shows("339")).toBe(false);
+    expect(shows("853")).toBe(false);
+    // Shattering Throw, Execution Sentence: the profile's to say
     expect(shows("394352")).toBeUndefined();
+    expect(shows("343527")).toBeUndefined();
   });
   it("a swing Evasion made the target dodge is its refusal; another wall's is not", () => {
     const dodge = {
@@ -235,6 +238,27 @@ describe("what the round shows of a spell, and Evasion's dodge (codex 85-tk-L2-T
     expect(refusedBy("5277")).toBe(true);
     expect(refusedBy(BOP)).toBe(false);
     expect(refusedBy("1966")).toBe(false);
+    // a dodged control is no attack refused (codex 85-tk-L2-T166-1f #3)
+    const bash = {
+      logLine: {
+        event: LogEvent.SPELL_MISSED,
+        timestamp: at(14),
+        parameters: [],
+      },
+      destUnitId: "e1",
+      spellId: "5211",
+      missType: "DODGE",
+    };
+    expect(
+      wallRefusedAttackOf(
+        res("5277"),
+        [{ missesOut: [bash] } as never],
+        "e1",
+        at(11),
+        at(19),
+        roundDamageEvidenceOf([]),
+      ),
+    ).toBe(false);
   });
 });
 

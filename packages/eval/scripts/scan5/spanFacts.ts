@@ -358,10 +358,10 @@ function procOutsideBurst(
   const ivToMs = iv ? ctx.start + iv.toS * 1000 : offMs;
   const hi = Math.min(ivToMs, ctx.start + e.toSeconds * 1000);
   const pets = petsOf(owner, combat);
-  const damaging = roundDamageEvidenceOf(
-    [...players.filter((p) => p.reaction === owner.reaction), ...pets],
-    Object.values(combat.units ?? {}),
-  );
+  const damaging = roundDamageEvidenceOf([
+    ...players.filter((p) => p.reaction === owner.reaction),
+    ...pets,
+  ]);
   return wallIsOutsideBurst(
     wallForSchoolTest(String(on.spellId), {
       carrierIsCaster: on.srcUnitId === target.id,
