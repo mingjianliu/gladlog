@@ -2402,7 +2402,11 @@ function reconstructEnemyCDTimelineUncached(
     }
 
   // Find aligned burst windows: clusters of 2+ casts within BURST_CLUSTER_SECONDS
-  const burstGroupEndSeconds = (roundDamageEndMs(combat) - matchStartMs) / 1000;
+  // (a combat with no end stated has no round end to stop at)
+  const burstGroupEndMs = roundDamageEndMs(combat);
+  const burstGroupEndSeconds = Number.isFinite(burstGroupEndMs)
+    ? (burstGroupEndMs - matchStartMs) / 1000
+    : Infinity;
   const allCastsRaw = players
     .flatMap((p) =>
       // a refused press (T29) put no effect in any window

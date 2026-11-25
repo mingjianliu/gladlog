@@ -137,7 +137,9 @@ export function run(ctx: IRoundCtx): void {
     ...(ctx.legacy as any),
     endTime: ctx.end,
   });
-  const sliceEndS = (dmgEnd - ctx.start) / 1000;
+  // the under-fire loop walks every second of the slice, as its producer
+  // (`unitUnderFireAt`) reads them; only the burst maps stop at `dmgEnd`
+  const sliceEndS = (ctx.end - ctx.start) / 1000;
   if (!(sliceEndS > 0)) return;
 
   const raw = new Map<string, Series>();

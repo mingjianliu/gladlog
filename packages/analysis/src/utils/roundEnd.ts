@@ -143,8 +143,8 @@ export function roundEndMs(
 
 /**
  * Where the round's DAMAGE stops for the burst readers (pipeline T237, user
- * ruling R111): `roundEndMs`, and never past the combat's own end (7 rounds
- * of the 605 capture end their log before the deciding death's row). The
+ * ruling R111): `roundEndMs`, and never past the combat's own end (a guard: on
+ * the 605 capture every round's log ends after its deciding death). The
  * one bound of the aligned burst window's total / average / pick / observed
  * span (`enemyCDs.ts`) and of the bounded segments' per-second damage
  * (`burstWindowDecisionPoints.ts`), through `isRoundLandedDamageRow`; the
