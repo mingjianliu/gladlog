@@ -101,7 +101,6 @@
  */
 import { countsAsKillWindowDefensiveInHand } from "@gladlog/analysis/src/data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
-import { EXCLUDE_CASTER_SPELL_IDS } from "@gladlog/analysis/src/data/excludeCasterGenerated";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import spellMechanicsGenerated from "@gladlog/analysis/src/data/spellMechanicsGenerated.json";
 import { PRESS_ENDED_CC_LAG_MS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -133,7 +132,7 @@ import {
   successesOf,
   tsOf,
 } from "./ctx";
-import { db2Lines } from "./db2Cache";
+import { DB2_BUILD, db2Lines } from "./db2Cache";
 
 export const CHECKS = [
   "allyOnlySelfSave",
@@ -141,6 +140,12 @@ export const CHECKS = [
   "pressMultiBreak",
   "deathBreakableCc",
 ] as const;
+
+export const DB2_TABLES = {
+  allyOnlySelfSave: ["SpellMisc"],
+  pressMultiBreak: ["SpellEffect"],
+  deathBreakableCc: ["SpellEffect"],
+} as const;
 
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "allyOnlySelfSave|unknownTarget",
@@ -188,7 +193,7 @@ const BROKEN_EVENTS = new Set(["SPELL_AURA_BROKEN", "SPELL_AURA_BROKEN_SPELL"]);
 
 /** F20 residual: spells whose every applied aura (SpellEffect Effect 6) is a
  * dummy (EffectAura 4) — DB2 SpellEffect at the product data's build
- * (`db2Cache.ts`; a machine without the table fails the run). Binding Shot's tether 117405 carries the stun mechanic
+ * (`db2Cache.ts`). Binding Shot's tether 117405 carries the stun mechanic
  * (12) at spell level but applies only a dummy aura; the stun is 117526
  * (cap-int s2/4-2-58 2:45: the tether, removed 29 ms before the death, read
  * as a 3 s breakable stun). A mechanic-only control needs a real aura. */
@@ -294,11 +299,32 @@ function tallyArchive(ctx: IRoundCtx): void {
     }
   }
 }
-// DB2 `SpellMisc.Attributes_1` bit 19 ("Exclude Caster") is the product's
-// own generated table (`EXCLUDE_CASTER_SPELL_IDS`, the Shared-Predicate
-// Rule): the official leg on every machine, no cache read (T249 — the scan
-// read the newest SpellMisc of any build, and fell back to the log alone
-// without one)
+/** DB2 `SpellMisc.Attributes_1` bit 19 ("Exclude Caster") at the product
+ * data's build (`db2Cache.ts`) — the official leg, the raw table and not the
+ * product's generated `EXCLUDE_CASTER_SPELL_IDS`, which keeps the observed
+ * ids only (Intervene 122506 is outside it: codex 85-tk-L5-T249-1 #4). With
+ * no table (a unit test; a run is refused, `DB2_TABLES`) the log leg alone
+ * needs `LOG_ONLY_MIN_ALLY` casts. */
+let excludeCasterIds: Set<string> | null | undefined;
+function excludeCaster(): Set<string> | null {
+  if (excludeCasterIds === undefined) {
+    const rows = db2Lines("SpellMisc");
+    if (!rows) excludeCasterIds = null;
+    else {
+      const head = rows[0]!.trim().split(",");
+      const a1 = head.indexOf("Attributes_1");
+      const sid = head.indexOf("SpellID");
+      excludeCasterIds = new Set<string>();
+      for (const r of rows.slice(1)) {
+        const c = r.split(",");
+        if (c.length > sid && Number(c[a1]) & (1 << 19))
+          excludeCasterIds.add(c[sid]!);
+      }
+    }
+  }
+  return excludeCasterIds;
+}
+const LOG_ONLY_MIN_ALLY = 5;
 /** true / false / undefined (no logged cast to read it from) */
 function allyOnlyByName(name: string): boolean | undefined {
   const ids = [...(idsByName.get(name) ?? [])];
@@ -306,7 +332,11 @@ function allyOnlyByName(name: string): boolean | undefined {
   if (known.length === 0) return undefined;
   if (!known.every((t) => t.self === 0 && t.none === 0)) return false;
   if (known.every((t) => t.ally === 0)) return undefined;
-  return ids.some((id) => EXCLUDE_CASTER_SPELL_IDS.has(id));
+  const official = excludeCaster();
+  if (official) return ids.some((id) => official.has(id));
+  return known.reduce((n, t) => n + t.ally, 0) >= LOG_ONLY_MIN_ALLY
+    ? true
+    : undefined;
 }
 
 function allyOnlySelfSave(ctx: IRoundCtx): void {
@@ -1119,7 +1149,7 @@ export function report(): string[] {
     )
     .sort();
   return [
-    `singles1: ally-only = log targets ∧ DB2 Exclude Caster (${EXCLUDE_CASTER_SPELL_IDS.size} ids, the product's generated table)`,
+    `singles1: ally-only = log targets ∧ ${excludeCaster() ? `DB2 Exclude Caster (${excludeCaster()!.size} ids, SpellMisc ${DB2_BUILD})` : `no DB2 cache — log only, ≥ ${LOG_ONLY_MIN_ALLY} ally casts`}`,
     `singles1 inventory — spells the log shows cast only on another unit of the caster's side (≥ 3 casts, never self, never untargeted): ${names.length}`,
     `  ${names.slice(0, 60).join(", ")}`,
   ];

@@ -118,6 +118,9 @@ export function amountOf(s: string): { v: number; half: number } | undefined {
 
 export interface IScanModule {
   CHECKS: readonly string[];
+  /** the raw DB2 tables a check reads from the datagen cache (`db2Cache.ts`),
+   * by check: a selected check whose table is missing stops the run */
+  DB2_TABLES?: Readonly<Record<string, readonly string[]>>;
   /** kinds counted but kept out of a check's total, as `${check}|${kind}` */
   OUT_OF_TOTAL?: ReadonlySet<string>;
   run: (ctx: IRoundCtx) => void;

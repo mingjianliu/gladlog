@@ -14,7 +14,7 @@
  *    Read from the datagen DB2 cache (`$DATAGEN_CACHE`, default
  *    `~/.cache/gladlog-datagen`) at the product data's build
  *    (`db2Cache.ts`); without the tables the check says so in its report,
- *    checks nothing, and the run fails. Y is tracked for
+ *    checks nothing; a run that selects the check is refused (`DB2_TABLES`). Y is tracked for
  *    the unit when it is in `OFFENSIVE_CD_SPELL_IDS`, or its English name is
  *    in the unit's `<cooldowns>` loadout or on any of the unit's rendered
  *    cooldown lines. Kinds: `line:<X>` — no `[ENEMY CD]` / `[ENEMY DEF]` /
@@ -115,6 +115,13 @@ export const CHECKS = [
   "ccAvoidedLandedElsewhere",
   "purgeRemovalCount",
 ] as const;
+
+const VARIANT_TABLES = ["SpellCategories", "SpellEffect"] as const;
+export const DB2_TABLES = {
+  overrideVariantPressMissing: VARIANT_TABLES,
+  // a row's press may be named by a sibling of its override-variant group
+  resEnemySameSecondPressMissing: VARIANT_TABLES,
+} as const;
 
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "overrideVariantPressMissing|sameUse",
@@ -262,9 +269,9 @@ function readCsv(path: string): Array<Record<string, string>> {
 }
 function variants(): Map<string, string[]> | null {
   if (variantTable !== undefined) return variantTable;
-  const paths = db2TablePaths(["SpellCategories", "SpellEffect"]);
+  const paths = db2TablePaths(VARIANT_TABLES);
   if (!paths) {
-    // the run fails on the miss (`db2Cache.ts`)
+    // a unit test without a cache; a run is refused (`DB2_TABLES`)
     variantSource = `no DB2 ${DB2_BUILD} tables under ${db2CacheDir()} — overrideVariantPressMissing checked nothing`;
     return (variantTable = null);
   }

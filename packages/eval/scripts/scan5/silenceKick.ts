@@ -25,13 +25,14 @@ import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 import { db2Lines } from "./db2Cache";
 
 export const CHECKS = ["silenceFiledAsKick"] as const;
+export const DB2_TABLES = { silenceFiledAsKick: ["SpellEffect"] } as const;
 
 let silenceIds: Set<string> | undefined;
 function silenceOnlyIds(): Set<string> {
   if (silenceIds) return silenceIds;
   const out = new Set<string>();
   const lines = db2Lines("SpellEffect");
-  // no table: nothing is checked, and the run fails on the miss (db2Cache)
+  // (no table: a unit test without a cache; a run is refused, `DB2_TABLES`)
   if (lines) {
     const cols = lines[0]!.trim().split(",");
     const sp = cols.indexOf("SpellID");
