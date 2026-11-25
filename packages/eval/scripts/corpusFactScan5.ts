@@ -250,6 +250,7 @@ for (const m of MODULE_FILES) {
     loadFailures.push(`module ${m} failed to load: ${(e as Error).message}`);
   }
 }
+const ALL_CHECKS = new Set(modules.flatMap((m) => [...m.CHECKS]));
 const OUT_OF_TOTAL = new Set(
   modules.flatMap((m) => [...(m.OUT_OF_TOTAL ?? [])]),
 );
@@ -332,7 +333,13 @@ function runRound(base: IContext): void {
     ref,
     violate: (check, kind, atMs, factId, detail, line) =>
       record(ref, check, kind, atMs, factId, detail, line),
-    bump: (c, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n),
+    // `--only`: a module runs whole, and a sibling check that was not asked
+    // for counts nothing — its violations are dropped (`record`), and its
+    // DB2 tables were not asked of the cache (codex 85-tk-L5-T249-1b #2)
+    bump: (c, n = 1) => {
+      if (ONLY && ALL_CHECKS.has(c) && !ONLY.includes(c)) return;
+      checked.set(c, (checked.get(c) ?? 0) + n);
+    },
     firstOwnerOfRound,
   };
   // `--only`: a module none of whose checks was asked for is not run at all

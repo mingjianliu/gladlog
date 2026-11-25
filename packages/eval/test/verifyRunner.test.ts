@@ -1073,6 +1073,7 @@ const PER_PROCESS_CACHES = new Set([
   "variantTable",
   "castOfAura",
   "silenceIds",
+  "excludeCasterIds",
 ]);
 /** set by `configure` in every process */
 const OPTIONS = new Set(["dir", "EXAMPLES", "JSON_OUT", "ONLY"]);

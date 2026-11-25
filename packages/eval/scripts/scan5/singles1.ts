@@ -1149,7 +1149,7 @@ export function report(): string[] {
     )
     .sort();
   return [
-    `singles1: ally-only = log targets ∧ ${excludeCaster() ? `DB2 Exclude Caster (${excludeCaster()!.size} ids, SpellMisc ${DB2_BUILD})` : `no DB2 cache — log only, ≥ ${LOG_ONLY_MIN_ALLY} ally casts`}`,
+    `singles1: ally-only = log targets ∧ DB2 Exclude Caster (SpellMisc ${DB2_BUILD})`,
     `singles1 inventory — spells the log shows cast only on another unit of the caster's side (≥ 3 casts, never self, never untargeted): ${names.length}`,
     `  ${names.slice(0, 60).join(", ")}`,
   ];
