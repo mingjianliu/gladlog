@@ -6692,6 +6692,11 @@ function buildCooldownEntry(
     (id) => setPiecesWorn(unit, id),
   );
   const roundEndAtMs = matchStartMs + matchDurationSeconds * 1000;
+  // the round's other units, for a trigger that reads what its target was
+  // doing (`triggerCastIntoChannel`: Savage Momentum's Skull Bash into a
+  // Penance, pipeline T241)
+  const otherUnitById = (id: string) =>
+    (combat.units as Record<string, ICombatUnit> | undefined)?.[id];
   const resetAtSeconds = eventTriggersFor(
     unit,
     // a dated row (GH #193) resolves per trigger below
@@ -6948,12 +6953,17 @@ function buildCooldownEntry(
     applyEventReductions(
       casts.filter((c) => !spiralFree.has(c)),
       cooldownSeconds,
-      eventTriggersFor(unit, reductions, holds, rankOf, roundEndAtMs).map(
-        (g) => ({
-          atSeconds: (g.atMs - matchStartMs) / 1000,
-          seconds: g.seconds,
-        }),
-      ),
+      eventTriggersFor(
+        unit,
+        reductions,
+        holds,
+        rankOf,
+        roundEndAtMs,
+        otherUnitById,
+      ).map((g) => ({
+        atSeconds: (g.atMs - matchStartMs) / 1000,
+        seconds: g.seconds,
+      })),
       idleCap,
       rateWindows ? warpClock(rateWindows) : undefined,
     );
@@ -6968,6 +6978,7 @@ function buildCooldownEntry(
         holds,
         rankOf,
         roundEndAtMs,
+        otherUnitById,
       ).map((g) => ({
         atSeconds: (g.atMs - matchStartMs) / 1000,
         seconds: g.seconds,

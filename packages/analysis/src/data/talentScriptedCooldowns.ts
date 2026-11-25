@@ -271,6 +271,18 @@ export interface IEventCooldownReduction {
     withinMs: number;
     windowMs: number;
   };
+  /** "Interrupting a spell with X", for a channel the game counts and the
+   * log shows no interrupt row for: the unit's own cast of `castIds` on a
+   * unit whose last cast before it, at most `withinMs` earlier, is one of
+   * `channelIds`, with no SPELL_INTERRUPT row of the unit in that
+   * millisecond (that one is `triggerInterruptIds`'). Needs the round's
+   * other units (`eventTriggersFor`'s `unitById`); without them it gives
+   * nothing. */
+  triggerCastIntoChannel?: {
+    castIds: readonly string[];
+    channelIds: readonly string[];
+    withinMs: number;
+  };
   /** What one trigger gives back. Not always one number, so no reader takes
    * it from here: `eventTriggersFor` hands every trigger out with its own
    * seconds (`eventReductionSecondsAt`). `Infinity` is a RESET: the spell is
@@ -662,10 +674,25 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Dash by 10 sec" — dummy 10. The interrupt row is SPELL_INTERRUPT 93985
   // (not the cast id 106839). Survival Instincts: holders 4 of 6 recasts
   // under the model, non-holders 0 of 13; replay 1 → 0.
+  //
+  // Pipeline T241: a Skull Bash into a Discipline Penance counts as well,
+  // though the log has no SPELL_INTERRUPT row for it (and the priest is not
+  // locked: 2d4d9d9d r309, Penance 19:37:05.307, Skull Bash 06.311, Power
+  // Word: Radiance 06.520). The 285 files dated 12.1.5, holders' Tiger's
+  // Fury pairs under 29.5 s: 35 with an interrupt row between, 14 without —
+  // every one of the 14 a Skull Bash 0.5–1.4 s after its target's Penance
+  // 47540 (gaps 20.2–28.7 s), none on anything else. Penance channels 2 s
+  // (DB2), the window here; on the 605 (all 12.1.0) Tiger's Fury has no
+  // model-impossible re-press.
   "205673": {
     targets: ["61336", "5217", "1850"],
     triggerCastIds: [],
     triggerInterruptIds: ["93985"],
+    triggerCastIntoChannel: {
+      castIds: ["93985"],
+      channelIds: ["47540"],
+      withinMs: 2000,
+    },
     seconds: 10,
     note: "Savage Momentum — Skull Bash interrupt: Tiger's Fury / Survival Instincts / Dash −10 s",
   },
@@ -1160,6 +1187,20 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     triggerSelfAuraAppliedIds: ["1217607"],
     seconds: Number.POSITIVE_INFINITY,
     note: "Violent Transformation — entering Void Metamorphosis resets Voidblade",
+  },
+  // Voidrush (Devourer, 1272422; pipeline T241): "Collapsing Star reduces
+  // the cooldown of Voidblade by 10 sec" — DB2 12.1.5.70391 SpellEffect of
+  // 1272422 effect 0, a dummy, 10000, PvpMultiplier 1. The 285 files dated
+  // 12.1.5: 57 of 225 Voidblade model pairs came inside the 30 s, in 35
+  // rounds, every one of them a holder's (35 of 35; 11 rounds without an
+  // impossible re-press) — 78408483 r69: Voidblade 34.6 s, Collapsing Star
+  // 1221150 57.6 s, Voidblade 60.0 s (54.6 s with the 10 s); 117.7 s, star
+  // 129.5 s, 138.4 s (137.7 s).
+  "1272422": {
+    targets: ["1245412"],
+    triggerCastIds: ["1221150"],
+    seconds: 10,
+    note: "Voidrush — Collapsing Star: Voidblade −10 s",
   },
   // Soul Immolation from 12.1.5 only (codex 20-F26-07 #1): the 12.1.0
   // tooltip names The Hunt instead (the dated row below), so an August log
@@ -1827,6 +1868,9 @@ export function eventTriggersFor(
   /** the round's end (epoch ms): the ledger passes it so an own aura's end
    * the log left out is read (`ownAuraEndTimesMs`); absent → logged ends only */
   untilMs?: number,
+  /** the round's other units, for a trigger that reads what its target was
+   * doing (`triggerCastIntoChannel`); absent → no such trigger */
+  unitById?: (id: string) => Pick<ICombatUnit, "spellCastEvents"> | undefined,
 ): IEventTrigger[] {
   const holderSpec = unit.spec === undefined ? undefined : String(unit.spec);
   const bonused = (
@@ -1903,11 +1947,70 @@ export function eventTriggersFor(
             ...(r.triggerCastTargetTicks
               ? castTargetTickTriggers(unit, r, holderSpec)
               : []),
+            ...(r.triggerCastIntoChannel && unitById
+              ? castIntoChannelTimesMs(
+                  unit,
+                  r.triggerCastIntoChannel,
+                  unitById,
+                ).map((atMs) => ({
+                  atMs,
+                  seconds: eventReductionSecondsAt(
+                    r,
+                    holderSpec,
+                    logInstantOf(unit, atMs),
+                  ),
+                }))
+              : []),
           ]),
         ),
       ),
     )
     .sort((a, b) => a.atMs - b.atMs);
+}
+
+/**
+ * The instants of `triggerCastIntoChannel`: the unit's own SUCCESS rows of
+ * `castIds` whose target's last SUCCESS row at or before them is one of
+ * `channelIds`, at most `withinMs` earlier — and no SPELL_INTERRUPT row of
+ * the unit within 100 ms (an interrupt the log does show is
+ * `triggerInterruptIds`': never both).
+ */
+export function castIntoChannelTimesMs(
+  unit: Pick<ICombatUnit, "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "actionOut">>,
+  c: NonNullable<IEventCooldownReduction["triggerCastIntoChannel"]>,
+  unitById: (id: string) => Pick<ICombatUnit, "spellCastEvents"> | undefined,
+): number[] {
+  const interruptMs = (unit.actionOut ?? [])
+    .filter((e) => e.logLine.event === LogEvent.SPELL_INTERRUPT)
+    .map((e) => e.logLine.timestamp);
+  const out: number[] = [];
+  for (const e of unit.spellCastEvents) {
+    if (
+      e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+      !c.castIds.includes(String(e.spellId))
+    )
+      continue;
+    const atMs = e.logLine.timestamp;
+    if (interruptMs.some((t) => Math.abs(t - atMs) <= 100)) continue;
+    let last: { spellId?: string | null; ms: number } | undefined;
+    for (const t of unitById(e.destUnitId)?.spellCastEvents ?? []) {
+      const ms = t.logLine.timestamp;
+      if (
+        t.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        ms <= atMs &&
+        (!last || ms >= last.ms)
+      )
+        last = { spellId: t.spellId, ms };
+    }
+    if (
+      last &&
+      c.channelIds.includes(String(last.spellId)) &&
+      atMs - last.ms <= c.withinMs
+    )
+      out.push(atMs);
+  }
+  return out;
 }
 
 /** The triggers of a channel's ticks on its cast's target

@@ -1563,6 +1563,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...(r.triggerCastTargetTicks?.byCastIds ?? []),
         ...(r.triggerCastTargetTicks?.tickIds ?? []),
         ...(r.triggerInterruptIds ?? []),
+        // pipeline T241
+        ...(r.triggerCastIntoChannel?.castIds ?? []),
+        ...(r.triggerCastIntoChannel?.channelIds ?? []),
         ...(r.triggerOwnAuraEndIds ?? []),
         ...(r.triggerSelfAuraAppliedIds ?? []),
         ...(r.triggerEnergizeIds ?? []),
