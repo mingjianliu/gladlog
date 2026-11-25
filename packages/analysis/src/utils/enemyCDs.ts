@@ -622,8 +622,15 @@ function observedEffectEnd(
   combat: AtomicArenaCombat,
   onlyDestId?: string,
   /** T41: where the chain read as ending before the clamp guard looked at
-   * the chain's own aura and its own length — `windowEndSeconds` */
-  out?: { windowEndS?: number },
+   * the chain's own aura and its own length — `windowEndSeconds`.
+   * T161: `openHolder` — when no end is returned, the unit whose copy of
+   * the effect ran longest with no end the log shows, its aura and this
+   * press's application of it (what a returned end carries as `holderId` /
+   * `auraId` / `appliedS`). */
+  out?: {
+    windowEndS?: number;
+    openHolder?: { holderId: string; auraId: string; appliedS: number };
+  },
 ): {
   endS: number;
   holderId: string;
@@ -979,24 +986,36 @@ function observedEffectEnd(
       }
       const full = castFull;
       if (out && sideClosedInside) out.windowEndS = combatEndS;
-      return full !== undefined && castS + full < combatEndS
-        ? {
-            endS: combatEndS,
-            holderId: best.destId,
-            auraId: best.auraId,
-            appliedS,
-          }
-        : null;
+      if (full !== undefined && castS + full < combatEndS)
+        return {
+          endS: combatEndS,
+          holderId: best.destId,
+          auraId: best.auraId,
+          appliedS,
+        };
+      if (out)
+        out.openHolder = {
+          holderId: best.destId,
+          auraId: best.auraId,
+          appliedS,
+        };
+      return null;
     }
   }
-  return best?.observed
-    ? {
-        endS: lastPeriodicTriggerEndS(caster, best.auraId, best.end, combat),
-        holderId: best.destId,
-        auraId: best.auraId,
-        appliedS: pressAppliedS(best),
-      }
-    : null;
+  if (best?.observed)
+    return {
+      endS: lastPeriodicTriggerEndS(caster, best.auraId, best.end, combat),
+      holderId: best.destId,
+      auraId: best.auraId,
+      appliedS: pressAppliedS(best),
+    };
+  if (out && best !== null)
+    out.openHolder = {
+      holderId: best.destId,
+      auraId: best.auraId,
+      appliedS: pressAppliedS(best),
+    };
+  return null;
 }
 
 /** How long after a periodic-trigger aura's REMOVED its last trigger is
@@ -1747,6 +1766,28 @@ function reconstructEnemyCDTimelineUncached(
      * official end beside it (`deathCutOfficialEnd`) */
     /** T161: keep the end of the caster's OWN copy of the press when it ended
      * before the span's end (`casterCopyEndSeconds`). */
+    /** R83 is about copies of the SAME aura: the copy that runs longest
+     * sits on another unit that is a TEAMMATE of the caster, or on an
+     * opponent that STOLE it (the copy keeps its caster as its source;
+     * codex 85-tk-WIN-T161-1 #2). A copy on an opponent that was not stolen
+     * is the press's effect on its target (The Hunt's damage over time,
+     * Kingsbane) and stays the span's end for the ledger too. */
+    const isAnotherUnitsCopy = (
+      caster: ICombatUnit,
+      h: { holderId: string; auraId: string; appliedS: number },
+    ): boolean => {
+      const holder = combat.units?.[h.holderId] as ICombatUnit | undefined;
+      return (
+        h.holderId !== caster.id &&
+        holder !== undefined &&
+        (holder.reaction === caster.reaction ||
+          isStolenAuraAcquisition(
+            holder,
+            h.auraId,
+            matchStartMs + h.appliedS * 1000,
+          ))
+      );
+    };
     const setCasterCopyEnd = (
       cd: IEnemyCDCast,
       caster: ICombatUnit,
@@ -1797,7 +1838,7 @@ function reconstructEnemyCDTimelineUncached(
               logInstantOf(combat, combat.startTime),
             ) && c.castTimeSeconds > cd.castTimeSeconds,
       );
-      const endNote: { windowEndS?: number } = {};
+      const endNote: NonNullable<Parameters<typeof observedEffectEnd>[6]> = {};
       const end = observedEffectEnd(
         enemy,
         cd.spellId,
@@ -1987,8 +2028,19 @@ function reconstructEnemyCDTimelineUncached(
         }
         // T161: the latest copy has no end the log shows (the slice ends, a
         // REMOVED is missing) while the caster's own copy has one — the
-        // ledger still reads the caster's (codex 85-tk-WIN-T161-1 #1)
-        setCasterCopyEnd(cd, enemy, next?.castTimeSeconds ?? Infinity);
+        // ledger still reads the caster's (codex 85-tk-WIN-T161-1 #1). Only
+        // when that open copy is another unit's copy of the aura, as below
+        // (`isAnotherUnitsCopy`) — not the press's effect still running on
+        // its target (codex 80-WSL-B250-1 #1, 842247a0 r6: The Hunt pressed
+        // 18.314, its caster aura off at 18.423, its damage over time on
+        // the target ticking to 24.324 with no end logged in the round —
+        // the ledger ended The Hunt at 18.423 and split the 20.187
+        // Metamorphosis into a second burst).
+        if (
+          endNote.openHolder !== undefined &&
+          isAnotherUnitsCopy(enemy, endNote.openHolder)
+        )
+          setCasterCopyEnd(cd, enemy, next?.castTimeSeconds ?? Infinity);
         continue;
       }
       // the observed aura's own official length (this caster's talents —
@@ -2016,17 +2068,7 @@ function reconstructEnemyCDTimelineUncached(
       // dead), the own copy's end is kept beside it: what the burst ledger
       // reads (`casterCopyEndSeconds`). A copy on an opponent that was not
       // stolen is the effect on its target, and stays the span's end.
-      const holder = combat.units?.[end.holderId] as ICombatUnit | undefined;
-      if (
-        end.holderId !== enemy.id &&
-        holder !== undefined &&
-        (holder.reaction === enemy.reaction ||
-          isStolenAuraAcquisition(
-            holder,
-            end.auraId,
-            matchStartMs + end.appliedS * 1000,
-          ))
-      )
+      if (isAnotherUnitsCopy(enemy, end))
         setCasterCopyEnd(cd, enemy, next?.castTimeSeconds ?? Infinity);
     }
 

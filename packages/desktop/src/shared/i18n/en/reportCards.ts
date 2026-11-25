@@ -82,7 +82,7 @@ export const enReportCards = {
   "report.burstLedger.intoWall": "Into their defensive {spell} {s}s",
   "report.burstLedger.synced": "Synced with {names}",
   "report.burstLedger.noPress": " (auto-proc)",
-  "report.burstLedger.noAllyCdOnYou": "No ally CD on you",
+  "report.burstLedger.noAllyCdOnPlayer": "No ally offensive CD on this player",
   "report.burstLedger.noBursts": "No burst windows recorded in this match.",
   "report.burstLedger.noTargeting":
     "No window target discipline recorded in this match.",

@@ -146,6 +146,81 @@ describe("T161 — 一次按键在施法者和队友身上各有一份光环", (
     expect(ledgerCastSpan(stolen).to).toBeCloseTo(11, 3);
   });
 
+  it("效果还在敌方目标身上跑、日志里没有它的结束:那不是「另一份副本」,账本不在施法者光环处截断 (codex 80-WSL-B250-1 #1, 842247a0 r6)", () => {
+    // The Hunt pressed at 10 s: its 370965 buff on the demon hunter comes
+    // off 0.109 s later, its root 370970 and damage over time 370969 go up
+    // on the target; the round ends before the damage over time's REMOVED
+    const HUNT = "370965";
+    const row = (ev: LogEvent, id: string, s: number, dest: string) => ({
+      ...makeAuraEvent(
+        ev,
+        id,
+        at(s),
+        "dh",
+        dest,
+        dest === "dh" ? "BUFF" : "DEBUFF",
+      ),
+      srcUnitName: "Dh",
+    });
+    const build = (mateCopy: boolean) => {
+      const dh: ICombatUnit = makeUnit("dh", {
+        name: "Dh",
+        class: CombatUnitClass.DemonHunter,
+        spec: CombatUnitSpec.DemonHunter_Havoc,
+        reaction: CombatUnitReaction.Hostile,
+        info: { talents: [], pvpTalents: [] } as never,
+        spellCastEvents: [
+          makeSpellCastEvent(HUNT, at(10), "target", "Target", "dh", "Dh"),
+        ],
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, HUNT, 9.998, "dh"),
+          row(LogEvent.SPELL_AURA_REMOVED, HUNT, 10.109, "dh"),
+        ],
+      });
+      const target: ICombatUnit = makeUnit("target", {
+        name: "Target",
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        reaction: CombatUnitReaction.Friendly,
+        info: { talents: [], pvpTalents: [] } as never,
+        auraEvents: [
+          row(LogEvent.SPELL_AURA_APPLIED, "370970", 10.108, "target"),
+          row(LogEvent.SPELL_AURA_APPLIED, "370969", 10.109, "target"),
+          row(LogEvent.SPELL_AURA_REFRESH, "370969", 10.109, "target"),
+          row(LogEvent.SPELL_AURA_REMOVED, "370970", 11.619, "target"),
+        ],
+      });
+      // control: the same open aura on a TEAMMATE of the caster is another
+      // unit's copy, and the caster's own end is still kept (-T161-1 #1)
+      const mate: ICombatUnit = makeUnit("mate", {
+        name: "Mate",
+        class: CombatUnitClass.Hunter,
+        spec: CombatUnitSpec.Hunter_Marksmanship,
+        reaction: CombatUnitReaction.Hostile,
+        info: { talents: [], pvpTalents: [] } as never,
+        auraEvents: mateCopy
+          ? [row(LogEvent.SPELL_AURA_APPLIED, "370969", 10.109, "mate")]
+          : [],
+      });
+      const combat = {
+        startTime: T0,
+        endTime: at(16.5),
+        units: mateCopy ? { dh, mate } : { dh, target, mate },
+      } as never;
+      return reconstructEnemyCDTimeline([dh, mate], combat)
+        .players.find((p) => p.playerName === "Dh")!
+        .offensiveCDs.find((c) => c.spellId === HUNT)!;
+    };
+    const cd = build(false);
+    expect(cd.casterCopyEndSeconds).toBeUndefined();
+    expect(cd.buffEndSeconds).toBeGreaterThan(15);
+    expect(ledgerCastSpan(cd)).toEqual(burstCastSpan(cd));
+    expect(ledgerCastSpan(cd).to).toBeGreaterThan(15);
+    const onMate = build(true);
+    expect(onMate.buffEndSeconds).toBeGreaterThan(15);
+    expect(ledgerCastSpan(onMate).to).toBeCloseTo(10.109, 3);
+  });
+
   it("R89:队友重叠那句读账本持有者身上那份;持有者身上没有副本时读施法者自己的", () => {
     const cd = round(16, 21);
     // the hunter's ledger: the priest's press put a copy on the hunter
