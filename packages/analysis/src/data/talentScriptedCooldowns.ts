@@ -45,6 +45,7 @@ import {
 } from "./classSetBonuses";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
+import { ccSpellIds } from "./spellTags";
 
 export interface IFreeRecastWindow {
   /** the spell whose press opens the window */
@@ -275,13 +276,18 @@ export interface IEventCooldownReduction {
    * log shows no interrupt row for: the unit's own cast of `castIds` on a
    * unit whose last cast before it, at most `withinMs` earlier, is one of
    * `channelIds`, with no SPELL_INTERRUPT row of the unit in that
-   * millisecond (that one is `triggerInterruptIds`'). Needs the round's
-   * other units (`eventTriggersFor`'s `unitById`); without them it gives
-   * nothing. */
+   * millisecond (that one is `triggerInterruptIds`'), and no control put
+   * on that unit since the channel began (a control ends the channel before
+   * the kick does). Needs the round's other units (`eventTriggersFor`'s
+   * `unitById`); without them it gives nothing. */
   triggerCastIntoChannel?: {
     castIds: readonly string[];
     channelIds: readonly string[];
     withinMs: number;
+    /** how long after the cast its SPELL_INTERRUPT row may come: the kick
+     * audit's `LANDED_PAIR_MS` (utils/enemyInterrupts, which imports this
+     * module — the test pins the two equal) */
+    interruptRowWithinMs: number;
   };
   /** What one trigger gives back. Not always one number, so no reader takes
    * it from here: `eventTriggersFor` hands every trigger out with its own
@@ -692,6 +698,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       castIds: ["93985"],
       channelIds: ["47540"],
       withinMs: 2000,
+      interruptRowWithinMs: 1000,
     },
     seconds: 10,
     note: "Savage Momentum — Skull Bash interrupt: Tiger's Fury / Survival Instincts / Dash −10 s",
@@ -1197,7 +1204,11 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // 1221150 57.6 s, Voidblade 60.0 s (54.6 s with the 10 s); 117.7 s, star
   // 129.5 s, 138.4 s (137.7 s).
   "1272422": {
-    targets: ["1245412"],
+    // Pierce the Veil 1245483 is the same button in Void Metamorphosis and
+    // has an entry of its own with the same presses (codex 85-tk-L3-T241-1
+    // #2: 78408483, the 34.575 s press back at 57.586 s under 1245412 and at
+    // 64.575 s under 1245483, after the 60.023 s re-press)
+    targets: ["1245412", "1245483"],
     triggerCastIds: ["1221150"],
     seconds: 10,
     note: "Voidrush — Collapsing Star: Voidblade −10 s",
@@ -1870,7 +1881,9 @@ export function eventTriggersFor(
   untilMs?: number,
   /** the round's other units, for a trigger that reads what its target was
    * doing (`triggerCastIntoChannel`); absent → no such trigger */
-  unitById?: (id: string) => Pick<ICombatUnit, "spellCastEvents"> | undefined,
+  unitById?: (
+    id: string,
+  ) => Pick<ICombatUnit, "spellCastEvents" | "auraEvents"> | undefined,
 ): IEventTrigger[] {
   const holderSpec = unit.spec === undefined ? undefined : String(unit.spec);
   const bonused = (
@@ -1972,14 +1985,20 @@ export function eventTriggersFor(
  * The instants of `triggerCastIntoChannel`: the unit's own SUCCESS rows of
  * `castIds` whose target's last SUCCESS row at or before them is one of
  * `channelIds`, at most `withinMs` earlier — and no SPELL_INTERRUPT row of
- * the unit within 100 ms (an interrupt the log does show is
- * `triggerInterruptIds`': never both).
+ * the unit within `interruptRowWithinMs` after it (the kick audit's pairing
+ * of a press with its interrupt row, `LANDED_PAIR_MS`; an interrupt the log does show is
+ * `triggerInterruptIds`': never both), and no control (`ccSpellIds`) applied
+ * to the target from the channel's cast to the kick: that ended the channel
+ * first (codex 85-tk-L3-T241-1 #1: 2d4d9d9d r5, Penance 41.173, Sleep Walk
+ * on the priest 41.508, Skull Bash 41.991 — Dash read back 10 s early).
  */
 export function castIntoChannelTimesMs(
   unit: Pick<ICombatUnit, "spellCastEvents"> &
     Partial<Pick<ICombatUnit, "actionOut">>,
   c: NonNullable<IEventCooldownReduction["triggerCastIntoChannel"]>,
-  unitById: (id: string) => Pick<ICombatUnit, "spellCastEvents"> | undefined,
+  unitById: (
+    id: string,
+  ) => Pick<ICombatUnit, "spellCastEvents" | "auraEvents"> | undefined,
 ): number[] {
   const interruptMs = (unit.actionOut ?? [])
     .filter((e) => e.logLine.event === LogEvent.SPELL_INTERRUPT)
@@ -1992,9 +2011,15 @@ export function castIntoChannelTimesMs(
     )
       continue;
     const atMs = e.logLine.timestamp;
-    if (interruptMs.some((t) => Math.abs(t - atMs) <= 100)) continue;
+    if (
+      interruptMs.some(
+        (t) => t >= atMs - 1 && t - atMs <= c.interruptRowWithinMs,
+      )
+    )
+      continue;
+    const target = unitById(e.destUnitId);
     let last: { spellId?: string | null; ms: number } | undefined;
-    for (const t of unitById(e.destUnitId)?.spellCastEvents ?? []) {
+    for (const t of target?.spellCastEvents ?? []) {
       const ms = t.logLine.timestamp;
       if (
         t.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
@@ -2004,11 +2029,21 @@ export function castIntoChannelTimesMs(
         last = { spellId: t.spellId, ms };
     }
     if (
-      last &&
-      c.channelIds.includes(String(last.spellId)) &&
-      atMs - last.ms <= c.withinMs
+      !last ||
+      !c.channelIds.includes(String(last.spellId)) ||
+      atMs - last.ms > c.withinMs
     )
-      out.push(atMs);
+      continue;
+    const fromMs = last.ms;
+    const controlled = (target?.auraEvents ?? []).some(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.destUnitId === e.destUnitId &&
+        a.logLine.timestamp >= fromMs &&
+        a.logLine.timestamp <= atMs &&
+        ccSpellIds.has(String(a.spellId)),
+    );
+    if (!controlled) out.push(atMs);
   }
   return out;
 }

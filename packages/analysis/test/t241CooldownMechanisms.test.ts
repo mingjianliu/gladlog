@@ -13,6 +13,7 @@ import {
   eventReductionsFor,
   eventTriggersFor,
 } from "../src/data/talentScriptedCooldowns";
+import { LANDED_PAIR_MS } from "../src/utils/enemyInterrupts";
 
 const T0 = 1_000_000;
 const row = (
@@ -109,6 +110,34 @@ describe("T241 Savage Momentum — a Skull Bash into a Penance counts with no in
         lookup(p) as Parameters<typeof eventTriggersFor>[5],
       ),
     ).toHaveLength(1);
+  });
+  it("the interrupt row may come as late as the kick audit pairs it (LANDED_PAIR_MS)", () => {
+    expect(r.triggerCastIntoChannel!.interruptRowWithinMs).toBe(LANDED_PAIR_MS);
+    const u = feral(60.5);
+    (u as unknown as { actionOut: unknown[] }).actionOut = [
+      row("SPELL_INTERRUPT", "93985", 60.65),
+    ];
+    expect(times(u, priest([["47540", 59.5]]))).toEqual([]);
+  });
+  it("2d4d9d9d r5: a control on the priest between the Penance and the Skull Bash ended the channel first", () => {
+    const p = {
+      ...priest([["47540", 41.173]]),
+      auraEvents: [row("SPELL_AURA_APPLIED", "360806", 41.508, "e", "p")],
+    };
+    expect(times(feral(41.991), p as ReturnType<typeof priest>)).toEqual([]);
+    // the same control before the Penance stopped nothing of it
+    const q = {
+      ...priest([["47540", 41.173]]),
+      auraEvents: [row("SPELL_AURA_APPLIED", "360806", 39.0, "e", "p")],
+    };
+    expect(times(feral(41.991), q as ReturnType<typeof priest>)).toEqual([
+      41.991,
+    ]);
+  });
+  it("Pierce the Veil's entry reads Voidrush too", () => {
+    expect(
+      eventReductionsFor("1245483", (t) => t === "1272422").map((x) => x.note),
+    ).toEqual([EVENT_COOLDOWN_REDUCTIONS["1272422"]!.note]);
   });
   it("nothing when the target's last cast is not a Penance, when it is older than 2 s, or without the other units", () => {
     expect(
