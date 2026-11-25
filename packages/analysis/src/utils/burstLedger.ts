@@ -1177,14 +1177,27 @@ export function analyzeBurstLedgerUncached(
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
         // T166 (user ruling R102): a wall whose schools touch none of the
         // holder's damage in the stretch it covered is not this burst's
+        // …unless it REFUSED a hit of the holder there: a physical go
+        // into Blessing of Protection lands nothing physical — its swings
+        // come back IMMUNE, which is the wall working, not missing
+        const lo = Math.max(iv.startMs, fromMs);
+        const hi = Math.min(endMs, toMs);
+        const refusedUnder = (player.missesOut ?? []).some(
+          (m) =>
+            m.destUnitId === target.id &&
+            m.missType === "IMMUNE" &&
+            m.logLine.timestamp >= lo &&
+            m.logLine.timestamp <= hi,
+        );
         if (
+          !refusedUnder &&
           wallTouchesNoneOf(
             iv.spellId,
             burstDamageBySchoolOn(
               player,
               target.id,
-              Math.max(iv.startMs, fromMs),
-              Math.min(endMs, toMs),
+              lo,
+              hi,
               recordsAttackSpell(),
             ),
           )

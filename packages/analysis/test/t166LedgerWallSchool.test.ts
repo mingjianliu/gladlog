@@ -68,7 +68,7 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
     spellName: "TestSpell",
     spellSchoolId: school,
   });
-  const held = (schools: string[]) => {
+  const held = (schools: string[], immuneAtS?: number) => {
     const mage = makeUnit("p1", {
       name: "Mage",
       spec: CombatUnitSpec.Paladin_Retribution,
@@ -87,6 +87,23 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
       ],
       damageOut: schools.map((s, i) => dmg(12 + i * 3, s)),
     });
+    // `makeUnit` takes no misses: set on the built unit
+    (mage as unknown as { missesOut: unknown[] }).missesOut =
+      immuneAtS === undefined
+        ? []
+        : [
+            {
+              logLine: {
+                event: LogEvent.SWING_MISSED,
+                timestamp: at(immuneAtS),
+                parameters: [],
+              },
+              timestamp: at(immuneAtS),
+              srcUnitId: "p1",
+              destUnitId: "e1",
+              missType: "IMMUNE",
+            },
+          ];
     const bop = (event: LogEvent, s: number) => ({
       ...makeAuraEvent(event, BOP, at(s), "e3", "e1", "BUFF"),
       srcUnitName: "Holy",
@@ -120,6 +137,11 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
   };
   it("frost and arcane into Blessing of Protection: not held", () => {
     expect(held(["0x10", "0x40"])).toEqual([]);
+  });
+  it("a swing it refused (IMMUNE) under it: held, though only magic landed", () => {
+    expect(held(["0x10", "0x40"], 14)).toEqual([BOP]);
+    // refused after the wall fell: not this wall's
+    expect(held(["0x10", "0x40"], 25)).toEqual([]);
   });
   it("one physical hit under it: held", () => {
     expect(held(["0x10", "0x1"])).toEqual([BOP]);
