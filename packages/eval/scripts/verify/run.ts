@@ -42,7 +42,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { deserialize, serialize } from "node:v8";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -57,6 +57,7 @@ import {
 import { type MergeRule, mergeState } from "./merge";
 import { forEachContext, listContextFiles, splitContexts } from "./rounds";
 import { argOf, type IScan, type IScanOpts } from "./scan";
+import { isInsideDir, makeStageDir } from "./stage";
 import { timed, timing } from "./timing";
 
 interface ISpec {
@@ -131,6 +132,19 @@ const specs = SPECS.filter((s) => !only || only.includes(s.name));
 if (!DIR || !OUT) {
   console.error("usage: verify/run.ts <captureDir> --out <dir> [--scans a,b]");
   process.exit(2);
+}
+// a flag that is there with nothing after it is a mistake, not the default: an
+// empty `--join-from "$kept"` would clear the reports and walk the corpus again
+for (const flag of ["--join-from", "--chunks"]) {
+  const i = process.argv.indexOf(flag);
+  if (i < 0) continue;
+  const operand = process.argv[i + 1];
+  if (!operand || operand.startsWith("--")) {
+    console.error(
+      `usage: verify: ${flag} takes a value, got ${operand === undefined ? "nothing" : JSON.stringify(operand)}`,
+    );
+    process.exit(2);
+  }
 }
 for (const [flag, n] of [
   ["--workers", WORKERS],
@@ -434,17 +448,15 @@ async function main(): Promise<void> {
     : mkdtempSync(join(dirname(resolve(OUT!)), ".verify-"));
   // the verdict removes the kept directory, and reports inside it with it
   // (the directories themselves, whatever the two paths spell)
-  if (JOIN_FROM) {
-    const rel = relative(realpathSync(tmp), realpathSync(OUT!));
-    if (rel === "" || !(rel === ".." || rel.startsWith(`..${sep}`))) {
-      console.error(`verify: --out is inside --join-from ${tmp}`);
-      process.exit(2);
-    }
+  if (JOIN_FROM && isInsideDir(realpathSync(tmp), realpathSync(OUT!))) {
+    console.error(`verify: --out is inside --join-from ${tmp}`);
+    process.exit(2);
   }
-  /** this process's staging directory, beside `--out` (one file system, so
-   * publishing is a rename) and never inside a kept walk; gone when the
-   * process ends, however it ends */
-  const stage = mkdtempSync(join(dirname(resolve(OUT!)), ".verify-out-"));
+  /** this process's staging directory, made for the join inside the directory
+   * `--out` resolves to (one file system even through a symlink or a mount
+   * point, so publishing is a rename) and so never inside a kept walk; gone
+   * when the process ends, however it ends */
+  let stage: string | undefined;
   /** the walk is on disk, whole: from here only a verdict removes it */
   let walked = Boolean(JOIN_FROM);
   /** the run reached its verdict, published or refused */
@@ -453,7 +465,7 @@ async function main(): Promise<void> {
    * in the join (or a signal during it) leaves is the walk, for
    * `--join-from`. Everything else leaves nothing, as before. */
   const dropTmp = (): void => {
-    rmSync(stage, { recursive: true, force: true });
+    if (stage) rmSync(stage, { recursive: true, force: true });
     if (walked && !judged)
       console.error(
         `verify: the walk finished and the join did not; kept its states, join them with --join-from ${tmp}`,
@@ -492,7 +504,6 @@ async function main(): Promise<void> {
       });
     });
   try {
-    reportDir = stage;
     const paths = Array.from({ length: CHUNKS }, (_, k) =>
       join(tmp, `w${k}.bin`),
     );
@@ -542,6 +553,8 @@ async function main(): Promise<void> {
       await stopWorkers();
     }
     const walkEnd = Date.now();
+    stage = makeStageDir(OUT!);
+    reportDir = stage;
     const scans = await loadScans();
     const unmapped: string[] = [];
     const totals = new Map<string, number>();

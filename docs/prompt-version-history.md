@@ -8594,9 +8594,16 @@ verify/run.ts streams the five corpus scans' --json reports element by element
 longer has to fit one V8 string), cuts a walk into --chunks runs (a chunk
 whose node died of SIGILL is walked again, at most three times) and reruns
 only the join with --join-from. Measured at the lane: on the 605 capture the
-reports are byte-identical to the base runner in default mode and with
---chunks 10 (15/15 files, timing aside). Stack check against dev/next-round
-e479d06d8: 605 capture identical (3,519 contexts, 0 diff lines), the 12.1.5
+reports match the base runner in default mode and with --chunks 10: 10/15
+files are byte-identical as stored, and the five corpus scan .txt files differ
+only in the path on their `wrote <--out path>` line, so 15/15 are identical
+once that path is normalized (timing.txt excluded). Stack check against
+dev/next-round e479d06d8: 605 capture identical (3,519 contexts, 0 diff lines), the 12.1.5
 supplement capture identical (2,955 contexts); every verify scan unchanged on
 both (605: 630 kinds, 0 rose / 0 fell, in-total 20,485 -> 20,485; 12.1.5: 628
-kinds, 0 rose / 0 fell); gates diff empty on both.
+kinds, 0 rose / 0 fell); gates diff empty on both. Review fix: the join
+stages inside the directory --out resolves to (a symlinked or mounted --out no
+longer fails the publishing rename with EXDEV), an --out on another Windows
+drive is no longer taken for inside the kept walk, --join-from / --chunks with
+a missing or empty value exit 2 before anything under --out is cleared, and the
+chmod publication-failure test is skipped on Windows.

@@ -13,11 +13,13 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
@@ -30,6 +32,7 @@ import { writeJsonIndent1 } from "../scripts/verify/jsonWrite";
 import { addEach, mergeState, mergeValue } from "../scripts/verify/merge";
 import { listContextFiles, splitContexts } from "../scripts/verify/rounds";
 import { type IScan, isMainScan } from "../scripts/verify/scan";
+import { isInsideDir, makeStageDir } from "../scripts/verify/stage";
 
 const SCRIPTS = join(__dirname, "../scripts");
 
@@ -373,8 +376,9 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
     expect(keptDirs(cap)).toEqual([]);
   }, 120_000);
 
-  // root writes through a read-only directory: nothing here would fail
-  it.skipIf(process.getuid?.() === 0)(
+  // root writes through a read-only directory, and on Windows the mode bits
+  // of a directory do not stop a file being made in it: nothing here would fail
+  it.skipIf(process.getuid?.() === 0 || process.platform === "win32")(
     "keeps a finished walk whose join threw, and joins it without walking",
     () => {
       const cap = capture();
@@ -443,6 +447,80 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
     expect(keptDirs(cap)).toEqual([]);
     expect(existsSync(join(cap, "s0", "context", "1-1-1.txt"))).toBe(true);
   }, 60_000);
+
+  it("refuses --join-from / --chunks with no value before it touches --out", () => {
+    const cap = capture();
+    const out = join(cap, "out");
+    mkdirSync(out);
+    const last = "the last good run\n";
+    const cases: Array<[string, string[]]> = [
+      ["--join-from", ["--join-from", ""]],
+      ["--join-from", ["--join-from"]],
+      ["--join-from", ["--join-from", "--chunks", "2"]],
+      ["--chunks", ["--chunks"]],
+      ["--chunks", ["--chunks", ""]],
+    ];
+    for (const [flag, more] of cases) {
+      writeFileSync(join(out, "gates.txt"), last);
+      const r = runner(cap, out, ...more);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain(`${flag} takes a value`);
+      expect(r.stdout).not.toContain("contexts");
+      expect(readFileSync(join(out, "gates.txt"), "utf8")).toBe(last);
+      expect(keptDirs(cap)).toEqual([]);
+    }
+  }, 60_000);
+
+  it("stages under the directory --out resolves to, and publishes through a symlink", () => {
+    const cap = capture();
+    const real = join(mkdtempSync(join(tmpdir(), "verify-real-")), "reports");
+    mkdirSync(real);
+    const linkParent = join(cap, "work");
+    mkdirSync(linkParent);
+    const out = join(linkParent, "out");
+    symlinkSync(real, out);
+
+    const stage = makeStageDir(out);
+    expect(dirname(stage)).toBe(realpathSync(real));
+    expect(readdirSync(linkParent)).toEqual(["out"]);
+    rmSync(stage, { recursive: true });
+
+    const r = runner(cap, out, "--workers", "1");
+    expect(r.stdout).toContain("5/5 contexts");
+    expect(r.status).toBe(0);
+    expect(readdirSync(real).sort()).toEqual([
+      "gates.json",
+      "gates.txt",
+      "timing.txt",
+    ]);
+    // the report names the path the caller gave, not the staging directory
+    expect(readFileSync(join(real, "gates.txt"), "utf8")).not.toContain(
+      ".verify-out-",
+    );
+    expect(readdirSync(linkParent)).toEqual(["out"]);
+  }, 60_000);
+});
+
+describe("isInsideDir (T263)", () => {
+  it("calls another Windows drive outside, though path.relative returns an absolute path", () => {
+    const kept = "C:\\walks\\.verify-abc";
+    expect(win32.relative(kept, "D:\\reports\\B195")).toBe(
+      "D:\\reports\\B195",
+    );
+    expect(isInsideDir(kept, "D:\\reports\\B195", win32)).toBe(false);
+    expect(isInsideDir(kept, "C:\\reports\\B195", win32)).toBe(false);
+    expect(isInsideDir(kept, kept, win32)).toBe(true);
+    expect(isInsideDir(kept, `${kept}\\out`, win32)).toBe(true);
+    expect(isInsideDir(kept, "C:\\walks\\.verify-abc..x", win32)).toBe(false);
+  });
+
+  it("keeps the POSIX answers: itself and below are inside, a sibling is not", () => {
+    expect(isInsideDir("/w/.verify-a", "/w/.verify-a", posix)).toBe(true);
+    expect(isInsideDir("/w/.verify-a", "/w/.verify-a/out", posix)).toBe(true);
+    expect(isInsideDir("/w/.verify-a", "/w/.verify-a/..out", posix)).toBe(true);
+    expect(isInsideDir("/w/.verify-a", "/w/out", posix)).toBe(false);
+    expect(isInsideDir("/w/.verify-a", "/w", posix)).toBe(false);
+  });
 });
 
 describe("writeJsonIndent1 (T263)", () => {
