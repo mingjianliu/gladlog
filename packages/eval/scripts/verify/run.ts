@@ -21,7 +21,10 @@
  * A walk that finished keeps its accumulators when the join after it throws,
  * and `--join-from <that directory>` joins them without walking again (same
  * capture, split and scan list — the code may differ: a fixed report writer is
- * what a join is rerun for); the reports do not depend on any of the three. `--files N` keeps the first N
+ * what a join is rerun for); the reports do not depend on any of the three.
+ * The parent cuts the walk once and records it (`split.json`) for every worker
+ * and retry; a verdict takes the walk's own files out of its directory and
+ * removes the directory only if that leaves it empty. `--files N` keeps the first N
  * contexts (a quick pass); `--freeze` deep-freezes the rows, which proves no
  * check writes to what the owners and scans share; `--coverage` writes
  * `coverage.json` for `verify/coverSet.ts`.
@@ -47,6 +50,7 @@ import { deserialize, serialize } from "node:v8";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 
+import { operandsOf, workerArgv } from "./argv";
 import { countsOf } from "./compare";
 import {
   coverageGapsOf,
@@ -57,7 +61,15 @@ import {
 import { type MergeRule, mergeState } from "./merge";
 import { forEachContext, listContextFiles, splitContexts } from "./rounds";
 import { argOf, type IScan, type IScanOpts } from "./scan";
-import { isInsideDir, makeStageDir } from "./stage";
+import {
+  chunkStatePath,
+  isInsideDir,
+  makeStageDir,
+  readSplitRun,
+  removeWalk,
+  WALK_FILE,
+  writeSplit,
+} from "./stage";
 import { timed, timing } from "./timing";
 
 interface ISpec {
@@ -117,8 +129,6 @@ const CHUNKS = Number(argOf("--chunks") ?? WORKERS);
 const JOIN_FROM = argOf("--join-from");
 /** a chunk whose node died of SIGILL is walked this many times at most */
 const SIGILL_ATTEMPTS = 3;
-/** what a kept walk says about itself; a join reads nothing else's states */
-const WALK_FILE = "walk.json";
 const FILES = argOf("--files");
 const STATE = argOf("--state");
 const only = argOf("--scans")?.split(",");
@@ -134,14 +144,23 @@ if (!DIR || !OUT) {
   process.exit(2);
 }
 // a flag that is there with nothing after it is a mistake, not the default: an
-// empty `--join-from "$kept"` would clear the reports and walk the corpus again
-for (const flag of ["--join-from", "--chunks"]) {
-  const i = process.argv.indexOf(flag);
-  if (i < 0) continue;
-  const operand = process.argv[i + 1];
-  if (!operand || operand.startsWith("--")) {
+// empty `--join-from "$kept"` would clear the reports and walk the corpus again.
+// Every place the flag stands, not the first: a wrapper's default followed by
+// the caller's own `--chunks` with nothing after it is the same mistake. And
+// one value only — `argOf` reads the first, so two that differ would run on
+// the one the caller did not mean (the same value twice is let through).
+for (const flag of ["--out", "--join-from", "--chunks"]) {
+  const operands = operandsOf(process.argv.slice(3), flag);
+  for (const operand of operands)
+    if (!operand || operand.startsWith("--")) {
+      console.error(
+        `usage: verify: ${flag} takes a value, got ${operand === undefined ? "nothing" : JSON.stringify(operand)}`,
+      );
+      process.exit(2);
+    }
+  if (new Set(operands).size > 1) {
     console.error(
-      `usage: verify: ${flag} takes a value, got ${operand === undefined ? "nothing" : JSON.stringify(operand)}`,
+      `usage: verify: ${flag} given more than once with different values: ${operands.join(", ")}`,
     );
     process.exit(2);
   }
@@ -188,7 +207,8 @@ async function loadScans(): Promise<Array<{ spec: ISpec; scan: IScan }>> {
 
 async function worker(k: number, n: number, statePath: string): Promise<void> {
   const scans = await loadScans();
-  const run = splitContexts(DIR!, contextFiles(), n, ARCHIVE_DIR)[k]!;
+  // the parent's cut, never this process's own: see `writeSplit`
+  const run = readSplitRun(dirname(statePath), k, n);
   const unmapped: string[] = [];
   const tracker = COVERAGE ? new CoverageTracker() : undefined;
   const named = scans.map((x) => ({ name: x.spec.name, scan: x.scan }));
@@ -292,13 +312,7 @@ function runWorker(
       ...process.execArgv,
       import.meta.filename,
       DIR!,
-      "--out",
-      OUT!,
-      "--worker",
-      `${k}/${n}`,
-      "--state",
-      statePath,
-      ...process.argv.slice(3).filter((a) => a !== "--out" && a !== OUT),
+      ...workerArgv(process.argv.slice(3), OUT!, `${k}/${n}`, statePath),
     ];
     const p = spawn(process.execPath, args, {
       stdio: ["ignore", "inherit", "inherit"],
@@ -446,8 +460,9 @@ async function main(): Promise<void> {
   const tmp = JOIN_FROM
     ? resolve(JOIN_FROM)
     : mkdtempSync(join(dirname(resolve(OUT!)), ".verify-"));
-  // the verdict removes the kept directory, and reports inside it with it
-  // (the directories themselves, whatever the two paths spell)
+  // a kept walk and the reports joined from it stay apart (the directories
+  // themselves, whatever the two paths spell). The verdict takes the walk's
+  // own files out of the kept directory and nothing else (`removeWalk`).
   if (JOIN_FROM && isInsideDir(realpathSync(tmp), realpathSync(OUT!))) {
     console.error(`verify: --out is inside --join-from ${tmp}`);
     process.exit(2);
@@ -463,14 +478,23 @@ async function main(): Promise<void> {
   let judged = false;
   /** a walk costs hours on the wide corpus and a join minutes: what a throw
    * in the join (or a signal during it) leaves is the walk, for
-   * `--join-from`. Everything else leaves nothing, as before. */
+   * `--join-from`. Everything else leaves nothing of the walk: its own files
+   * go, and the directory with them when nothing else is in it — never
+   * recursively, a directory the caller named can be the capture itself. */
   const dropTmp = (): void => {
     if (stage) rmSync(stage, { recursive: true, force: true });
     if (walked && !judged)
       console.error(
         `verify: the walk finished and the join did not; kept its states, join them with --join-from ${tmp}`,
       );
-    else rmSync(tmp, { recursive: true, force: true });
+    else if (
+      !removeWalk(
+        tmp,
+        SPECS.map((s) => s.name),
+      ) &&
+      !JOIN_FROM
+    )
+      console.error(`verify: ${tmp} holds files that are not the walk's, kept`);
   };
   const children: ChildProcess[] = [];
   let stopped: Promise<void> | undefined;
@@ -505,8 +529,11 @@ async function main(): Promise<void> {
     });
   try {
     const paths = Array.from({ length: CHUNKS }, (_, k) =>
-      join(tmp, `w${k}.bin`),
+      chunkStatePath(tmp, k),
     );
+    // cut once, here: no worker and no retry reads an archive's size again
+    if (!JOIN_FROM)
+      writeSplit(tmp, splitContexts(DIR!, selected, CHUNKS, ARCHIVE_DIR));
     // the one shutdown: it also kills, after 5 s, a worker SIGTERM left
     const stopWatch = watchMemory(children, () => void stopWorkers());
     try {

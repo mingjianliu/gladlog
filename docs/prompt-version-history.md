@@ -8606,4 +8606,13 @@ stages inside the directory --out resolves to (a symlinked or mounted --out no
 longer fails the publishing rename with EXDEV), an --out on another Windows
 drive is no longer taken for inside the kept walk, --join-from / --chunks with
 a missing or empty value exit 2 before anything under --out is cleared, and the
-chmod publication-failure test is skipped on Windows.
+chmod publication-failure test is skipped on Windows. Second review fix: a
+verdict removes only the walk's own files from the walk directory (walk.json,
+split.json, the chunk states) and the directory only when that empties it, so
+a --join-from directory holding anything else survives; the chunk partition is
+cut once by the parent, recorded in split.json and read by every worker and
+SIGILL retry; a worker's command line drops the parent's --out by position
+(`--out 10 --chunks 10` keeps its chunk count); every occurrence of --out /
+--join-from / --chunks needs a value and two differing values exit 2; and a
+.verify-out-* stage left inside --out by a killed join is removed before the
+next stage is made.

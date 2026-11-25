@@ -14,6 +14,8 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  rmdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -21,10 +23,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, posix, win32 } from "node:path";
 import { pathToFileURL } from "node:url";
+import { deserialize } from "node:v8";
 
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 
+import { operandsOf, withoutFlag, workerArgv } from "../scripts/verify/argv";
 import { compareRuns, countsOf } from "../scripts/verify/compare";
 import { coverageGapsOf, CoverageTracker } from "../scripts/verify/coverage";
 import { pickCover } from "../scripts/verify/coverSet";
@@ -32,7 +36,14 @@ import { writeJsonIndent1 } from "../scripts/verify/jsonWrite";
 import { addEach, mergeState, mergeValue } from "../scripts/verify/merge";
 import { listContextFiles, splitContexts } from "../scripts/verify/rounds";
 import { type IScan, isMainScan } from "../scripts/verify/scan";
-import { isInsideDir, makeStageDir } from "../scripts/verify/stage";
+import {
+  isInsideDir,
+  isWalkFile,
+  makeStageDir,
+  readSplitRun,
+  removeWalk,
+  writeSplit,
+} from "../scripts/verify/stage";
 
 const SCRIPTS = join(__dirname, "../scripts");
 
@@ -499,14 +510,235 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
     );
     expect(readdirSync(linkParent)).toEqual(["out"]);
   }, 60_000);
+
+  // B197 review 1: the capture directory, the walk restored into it
+  it.skipIf(process.getuid?.() === 0 || process.platform === "win32")(
+    "joins a walk kept beside other files and removes only the walk's own",
+    () => {
+      const cap = capture();
+      const work = mkdtempSync(join(tmpdir(), "verify-work-"));
+      const out = join(work, "reports");
+      mkdirSync(out);
+      chmodSync(out, 0o555);
+      const failed = runner(cap, out, "--workers", "2", "--chunks", "3");
+      chmodSync(out, 0o755);
+      expect(failed.status).not.toBe(0);
+      const [kept] = keptDirs(work);
+      expect(kept).toBeDefined();
+      const walkFiles = readdirSync(join(work, kept!));
+      expect(walkFiles).toContain("walk.json");
+      expect(walkFiles).toContain("split.json");
+      for (const f of walkFiles) renameSync(join(work, kept!, f), join(cap, f));
+      rmdirSync(join(work, kept!));
+      writeFileSync(join(cap, "notes.txt"), "not the walk's\n");
+      writeFileSync(join(cap, "w0.bin.notAScan.0"), "not the walk's\n");
+
+      const joined = runner(cap, out, "--chunks", "3", "--join-from", cap);
+      expect(joined.stdout).toContain("5/5 contexts");
+      expect(joined.status).toBe(0);
+      expect(readdirSync(out).sort()).toEqual([
+        "gates.json",
+        "gates.txt",
+        "timing.txt",
+      ]);
+      expect(readdirSync(cap).sort()).toEqual([
+        "notes.txt",
+        "s0",
+        "w0.bin.notAScan.0",
+      ]);
+      expect(readdirSync(join(cap, "s0", "context"))).toHaveLength(5);
+    },
+    180_000,
+  );
+
+  // B197 review 2: a worker walks what the parent recorded, not its own cut
+  it("walks the chunk the parent recorded, whatever a new cut would give", () => {
+    const cap = capture();
+    const files = listContextFiles(cap);
+    const walkDir = mkdtempSync(join(tmpdir(), "verify-walk-"));
+    // no cut of five equal archives in two gives four and one
+    expect(splitContexts(cap, files, 2).map((r) => r.length)).not.toEqual([
+      4, 1,
+    ]);
+    writeSplit(walkDir, [files.slice(0, 4), files.slice(4)]);
+    const state = join(walkDir, "w0.bin");
+    const r = runner(
+      cap,
+      join(cap, "out"),
+      "--worker",
+      "0/2",
+      "--state",
+      state,
+    );
+    expect(r.status).toBe(0);
+    expect(
+      (deserialize(readFileSync(state)) as { contexts: number }).contexts,
+    ).toBe(4);
+    // a worker of another split does not read this one
+    const other = runner(
+      cap,
+      join(cap, "out"),
+      "--worker",
+      "0/3",
+      "--state",
+      state,
+    );
+    expect(other.status).not.toBe(0);
+    expect(other.stderr).toContain("does not record chunk 0 of 3");
+  }, 120_000);
+
+  // B197 review 4
+  it("refuses a later occurrence with no value, and two values that differ, before it touches --out", () => {
+    const cap = capture();
+    const out = join(cap, "out");
+    mkdirSync(out);
+    const last = "the last good run\n";
+    const cases: Array<[string, string[]]> = [
+      ["--chunks takes a value", ["--chunks", "10", "--chunks"]],
+      ["--join-from takes a value", ["--join-from", cap, "--join-from", ""]],
+      ["--chunks given more than once", ["--chunks", "2", "--chunks", "3"]],
+    ];
+    for (const [message, more] of cases) {
+      writeFileSync(join(out, "gates.txt"), last);
+      const r = runner(cap, out, ...more);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain(message);
+      expect(r.stdout).not.toContain("contexts");
+      expect(readFileSync(join(out, "gates.txt"), "utf8")).toBe(last);
+      expect(readdirSync(out)).toEqual(["gates.txt"]);
+      expect(keptDirs(cap)).toEqual([]);
+    }
+  }, 60_000);
+
+  // B197 review 5
+  it("clears a stage a killed join left inside --out", () => {
+    const cap = capture();
+    const out = join(cap, "out");
+    const stale = join(out, ".verify-out-x");
+    mkdirSync(stale, { recursive: true });
+    writeFileSync(join(stale, "corpusFactScan5.json"), '{"capture": "half');
+    const r = runner(cap, out, "--workers", "1");
+    expect(r.status).toBe(0);
+    expect(readdirSync(out).sort()).toEqual([
+      "gates.json",
+      "gates.txt",
+      "timing.txt",
+    ]);
+  }, 60_000);
+});
+
+describe("verify/argv.ts (T263, B197 review 3 and 4)", () => {
+  it("drops the parent's --out by position, not by value", () => {
+    expect(
+      workerArgv(
+        ["--out", "10", "--chunks", "10", "--scans", "gates"],
+        "10",
+        "2/10",
+        "/w/w2.bin",
+      ),
+    ).toEqual([
+      "--out",
+      "10",
+      "--worker",
+      "2/10",
+      "--state",
+      "/w/w2.bin",
+      "--chunks",
+      "10",
+      "--scans",
+      "gates",
+    ]);
+    expect(
+      withoutFlag(["--chunks", "10", "--out", "10", "--freeze"], "--out"),
+    ).toEqual(["--chunks", "10", "--freeze"]);
+    expect(withoutFlag(["--freeze", "--out"], "--out")).toEqual(["--freeze"]);
+  });
+
+  it("reads the value at every place a flag stands", () => {
+    expect(operandsOf(["--chunks", "10", "--chunks"], "--chunks")).toEqual([
+      "10",
+      undefined,
+    ]);
+    expect(
+      operandsOf(["--join-from", "x", "--join-from", ""], "--join-from"),
+    ).toEqual(["x", ""]);
+    expect(operandsOf(["--out", "o"], "--chunks")).toEqual([]);
+  });
+});
+
+describe("the walk's own files (T263, B197 review 1 and 2)", () => {
+  const SCANS = ["gates", "corpusFactScan5"];
+
+  it("names the manifests, the chunk states and their parts, nothing else", () => {
+    for (const f of [
+      "walk.json",
+      "split.json",
+      "w0.bin",
+      "w12.bin",
+      "w3.bin.gates.0",
+      "w3.bin.corpusFactScan5.17",
+    ])
+      expect(isWalkFile(f, SCANS), f).toBe(true);
+    for (const f of [
+      "w0.bin.other.0",
+      "w.bin",
+      "w0.bin.gates",
+      "xw0.bin",
+      "capture.sha256",
+      "walk.json.bak",
+      "s0",
+    ])
+      expect(isWalkFile(f, SCANS), f).toBe(false);
+  });
+
+  it("removes the walk and leaves a directory that holds anything else", () => {
+    const dir = mkdtempSync(join(tmpdir(), "verify-walk-"));
+    for (const f of ["walk.json", "split.json", "w0.bin", "w0.bin.gates.0"])
+      writeFileSync(join(dir, f), "x");
+    mkdirSync(join(dir, "s0", "context"), { recursive: true });
+    writeFileSync(join(dir, "s0", "context", "1-1-1.txt"), "/a\no\n");
+    writeFileSync(join(dir, "capture.sha256"), "abc\n");
+    // a directory under a walk file's name is not the runner's
+    mkdirSync(join(dir, "w1.bin"));
+    expect(removeWalk(dir, SCANS)).toBe(false);
+    expect(readdirSync(dir).sort()).toEqual(["capture.sha256", "s0", "w1.bin"]);
+    expect(existsSync(join(dir, "s0", "context", "1-1-1.txt"))).toBe(true);
+
+    const own = mkdtempSync(join(tmpdir(), "verify-walk-"));
+    for (const f of ["walk.json", "split.json", "w0.bin", "w0.bin.gates.0"])
+      writeFileSync(join(own, f), "x");
+    expect(removeWalk(own, SCANS)).toBe(true);
+    expect(existsSync(own)).toBe(false);
+    expect(removeWalk(own, SCANS)).toBe(true);
+  });
+
+  it("hands a worker the recorded cut after the archives changed size", () => {
+    const cap = mkdtempSync(join(tmpdir(), "verify-"));
+    const context = join(cap, "s0", "context");
+    mkdirSync(context, { recursive: true });
+    const archive = (i: number) => join(cap, `${i}.txt.gz`);
+    for (let i = 1; i <= 6; i++)
+      writeFileSync(join(context, `${i}-1-1.txt`), `${archive(i)}\nowner\n`);
+    const files = listContextFiles(cap);
+    const walkDir = mkdtempSync(join(tmpdir(), "verify-walk-"));
+    const recorded = splitContexts(cap, files, 3);
+    expect(recorded.map((r) => r.length)).toEqual([2, 2, 2]);
+    writeSplit(walkDir, recorded);
+    // an archive appears mid-walk: a new cut moves every boundary
+    writeFileSync(archive(1), Buffer.alloc(4_000_000));
+    const recut = splitContexts(cap, files, 3);
+    expect(recut.map((r) => r.length)).not.toEqual([2, 2, 2]);
+    for (let k = 0; k < 3; k++)
+      expect(readSplitRun(walkDir, k, 3)).toEqual(recorded[k]);
+    expect(() => readSplitRun(walkDir, 0, 2)).toThrow(/does not record/);
+    expect(() => readSplitRun(walkDir, 3, 3)).toThrow(/does not record/);
+  });
 });
 
 describe("isInsideDir (T263)", () => {
   it("calls another Windows drive outside, though path.relative returns an absolute path", () => {
     const kept = "C:\\walks\\.verify-abc";
-    expect(win32.relative(kept, "D:\\reports\\B195")).toBe(
-      "D:\\reports\\B195",
-    );
+    expect(win32.relative(kept, "D:\\reports\\B195")).toBe("D:\\reports\\B195");
     expect(isInsideDir(kept, "D:\\reports\\B195", win32)).toBe(false);
     expect(isInsideDir(kept, "C:\\reports\\B195", win32)).toBe(false);
     expect(isInsideDir(kept, kept, win32)).toBe(true);
