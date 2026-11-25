@@ -99,62 +99,86 @@ export function parseCsv(text: string): {
   return { header, rows };
 }
 
-export async function fetchLatestBuild(): Promise<string> {
-  const url = "https://wago.tools/api/builds?branch=retail&product=wow";
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch build list: ${res.statusText}`);
-  }
-  const data = (await res.json()) as any;
+/** wago.tools' product key of the live retail client. The builds API returns
+ * every product it tracks — the public test realm (`wowt`), the PTR
+ * (`wowxptr`), beta, Classic — and ignores the `branch` / `product` query
+ * parameters, so the highest version over the whole answer is a test-realm
+ * build whenever one is up (2026-11-22: 12.1.7.71087 on `wowt` while live was
+ * 12.1.5.70961). Maintainer ruling 2026-11-22: a build that is not live is not
+ * used. */
+export const LIVE_RETAIL_PRODUCT = "wow";
 
-  let entries: { version: string }[] = [];
+const compareVersions = (a: string, b: string) => {
+  const aParts = a.split(".").map((s) => parseInt(s, 10) || 0);
+  const bParts = b.split(".").map((s) => parseInt(s, 10) || 0);
+  const maxLen = Math.max(aParts.length, bParts.length);
+  for (let i = 0; i < maxLen; i++) {
+    const aVal = aParts[i] ?? 0;
+    const bVal = bParts[i] ?? 0;
+    if (aVal !== bVal) {
+      return aVal - bVal;
+    }
+  }
+  return 0;
+};
+
+/**
+ * The highest LIVE retail build in a wago.tools `/api/builds` answer: the
+ * entries under the `wow` key of the by-product object, or the entries whose
+ * own `product` is `wow` when the answer is a flat list. Entries of any other
+ * product never count, and an answer with no live entry is an error — never
+ * a fallback to "the highest of whatever came back".
+ */
+export function latestLiveBuild(data: unknown): string {
+  let entries: { version?: unknown; product?: unknown }[] = [];
   if (Array.isArray(data)) {
-    entries = data;
+    entries = data.filter(
+      (e) => e && typeof e === "object" && e.product === LIVE_RETAIL_PRODUCT,
+    );
   } else if (data && typeof data === "object") {
-    for (const val of Object.values(data)) {
-      if (Array.isArray(val)) {
-        entries.push(...val);
-      }
-    }
-  }
-
-  if (entries.length === 0) {
-    throw new Error("No build entries found");
-  }
-
-  const compareVersions = (a: string, b: string) => {
-    const aParts = a.split(".").map((s) => parseInt(s, 10) || 0);
-    const bParts = b.split(".").map((s) => parseInt(s, 10) || 0);
-    const maxLen = Math.max(aParts.length, bParts.length);
-    for (let i = 0; i < maxLen; i++) {
-      const aVal = aParts[i] ?? 0;
-      const bVal = bParts[i] ?? 0;
-      if (aVal !== bVal) {
-        return aVal - bVal;
-      }
-    }
-    return 0;
-  };
-
-  let highestEntry = entries[0];
-  for (let i = 1; i < entries.length; i++) {
-    if (compareVersions(entries[i].version, highestEntry.version) > 0) {
-      highestEntry = entries[i];
+    const live = (data as Record<string, unknown>)[LIVE_RETAIL_PRODUCT];
+    if (Array.isArray(live)) {
+      entries = live.filter(
+        (e) =>
+          e &&
+          typeof e === "object" &&
+          (e.product === undefined || e.product === LIVE_RETAIL_PRODUCT),
+      );
     }
   }
 
   // Shape check on the build number: this value is interpolated into cache file
   // names and URLs, so validating it guards against path poisoning if the API is
   // hijacked (final review F6)
-  if (!/^\d+\.\d+\.\d+\.\d+$/.test(highestEntry.version)) {
-    throw new Error(`Unexpected build version format: ${highestEntry.version}`);
+  const versions = entries.map((e) => e.version);
+  for (const v of versions) {
+    if (typeof v !== "string" || !/^\d+\.\d+\.\d+\.\d+$/.test(v)) {
+      throw new Error(`Unexpected build version format: ${String(v)}`);
+    }
   }
-  return highestEntry.version;
+  if (versions.length === 0) {
+    throw new Error(
+      `No live retail build (product "${LIVE_RETAIL_PRODUCT}") in the build list`,
+    );
+  }
+  return (versions as string[]).reduce((hi, v) =>
+    compareVersions(v, hi) > 0 ? v : hi,
+  );
+}
+
+export async function fetchLatestBuild(): Promise<string> {
+  const url = "https://wago.tools/api/builds";
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch build list: ${res.statusText}`);
+  }
+  return latestLiveBuild(await res.json());
 }
 
 /**
  * Build-number resolution for every datagen script (single source):
- * explicit CLI argument > DATAGEN_BUILD (the batch pin) > wago latest.
+ * explicit CLI argument > DATAGEN_BUILD (the batch pin) > wago's latest LIVE
+ * retail build (`latestLiveBuild`).
  * Scripts must not call fetchLatestBuild() for their own build — per-script
  * resolution is how genSpellIcons ran a whole batch on a stale manifest build
  * while every other artifact was on the new one (2026-08-11). Manifest-reading

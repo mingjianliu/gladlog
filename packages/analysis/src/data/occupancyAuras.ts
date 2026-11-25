@@ -10,7 +10,7 @@
 /**
  * Channels the log shows only as the caster's self-aura. Ultimate Penitence:
  * the logged 421453 has no Is Channelled bit in SpellMisc (Attributes_1 =
- * 0x8000, 12.1.0.69587 / 12.1.5.69952), a cast bar (CastingTimeIndex 16) and
+ * 0x8000, 12.1.0.69587 / 12.1.5.70391), a cast bar (CastingTimeIndex 16) and
  * a 6.5 s self-aura (DurationIndex 589; observed 6.509 s, ae9d6fbc); the
  * channelled sibling 421434 is never logged (0 rows; not observed). So the
  * channel is visible only as 421453's aura.

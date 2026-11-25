@@ -22,7 +22,7 @@
  * Evidence (Game-Behaviour Rule; `kickLockoutScan.ts` re-runs the corpus leg,
  * fix-FT `scl-lockout-split-605.txt` is the run this was decided on):
  *  - DB2 row: SpellEffect 1211582 of 1223529 reads −65 in builds
- *    12.1.0.69273 and 69382 and −40 in 69404, 69587, 12.1.5.69594 and 69952
+ *    12.1.0.69273 and 69382 and −40 in 69404, 69587, 12.1.5.70391 and 70783
  *    (the datagen cache's SpellEffect CSVs — the repo's generated tables
  *    carry the aura's name only, so neither number is in them).
  *  - What it covers: aura 232 has no class mask or label, it shortens the
@@ -130,8 +130,8 @@ export const KICK_LOCKOUT_VICTIM_MODIFIERS: readonly KickLockoutVictimModifier[]
  * Evidence (Game-Behaviour Rule; `kickLockoutScan.ts` re-runs the corpus leg
  * — its "victims with a DB2 interrupt-duration aura" block — and carries the
  * full DB2 list, every SpellEffect row with aura 232 MOD_MECHANIC_DURATION,
- * misc 26, of build 12.1.7.70740; the rows of the three ids below read the
- * same in 12.1.0.69587, 12.1.5.69952 and 12.1.5.70391):
+ * misc 26, of build 12.1.5.70391; the rows of the three ids below read the
+ * same in 12.1.0.69587):
  *  - Concentration Aura 317920: effect 0, area aura (Effect 65) 232 / misc
  *    26, base −30, PvpMultiplier 0.67 → ×0.799. No class mask or label: the
  *    row shortens the interrupt mechanic on its holder, as Storm Conduit's

@@ -378,7 +378,7 @@ export interface IHolderSeconds {
 export const STORM_CONDUIT_HOTFIX_EPOCH_MS = Date.UTC(2026, 7, 18, 0, 0, 0);
 
 /** Every shaman totem is Nature school (DB2 SpellMisc.SchoolMask 8 for all
- * of these at 12.1.5.69594), so Storm Conduit's "Nature totems" is every
+ * of these at 12.1.5.70391), so Storm Conduit's "Nature totems" is every
  * totem. Stone Bulwark 108270 and Mana Tide 16191 are Nature too but have
  * zero corpus casts (observedSpellIdsGenerated) — left out, a dead id only
  * looks authoritative (Curated-List Completeness Rule). */
@@ -589,7 +589,7 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   },
   // Lethal Calibration (Survival, FT F20 2026-10-11): "Each enemy hit by
   // Wildfire Bomb reduces the cooldown of Boomstick by 2.0 sec, up to 10
-  // sec." DB2 12.1.5.69594: SpellEffect 1272696 (aura 42, a server proc —
+  // sec." DB2 12.1.5.70391: SpellEffect 1272696 (aura 42, a server proc —
   // no trigger spell, no class mask) base 2000 ms, and 1285246 dummy 5 = the
   // cap in hits; the tooltip is `$s1/1000` and `$s1/1000*$s2`.
   // Corpus, 605 new-season files (ledgerImpossibleCastScan, talents from

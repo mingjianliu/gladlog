@@ -54,8 +54,9 @@ export interface IMitigationEntry {
  * it overrides. Entries the generation layer cannot extract (unresolved / zero
  * hits) or extracts wrongly (contradicting game facts) are pinned here.
  *
- * Evidence basis (2026-07 human review, DB2 build 12.1.0.68629, full
- * SpellEffect table of 628107 rows):
+ * Evidence basis (2026-07 human review of the full SpellEffect table; the
+ * aura-87 / 39 / 40 rows of every id this file names were re-read on the live
+ * build 12.1.5.70391 on 2026-11-25, pipeline T250):
  * - "aura39/40" = DB2 school-immunity / damage-immunity rows (immunities are
  *   pct=100 per the spec decision);
  * - "DR aura <id>" = the cast id itself has no aura-87 row; the actual
@@ -97,7 +98,7 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "198589": { pct: 25, schoolMask: 0x7f }, // Blur 疾影术:DR aura 212800(S2 归档已观测),`aura87 pts=-25 misc=127`;cast id 198589 自己只有一条 `E64 trig=212800`,所以生成层按 cast id 找不到它。2026-08-22 用户确认「的确是减伤,而且是大技能」后补登记
   // NOT Greater Invisibility 110959 (user ruling R58, 2026-11-18): it had a 60 % row here from
   // 2026-09-26 on the strength of buff 113862 (`aura87 pts=-60 misc=127`). Nothing triggers that
-  // buff (110959 triggers 110960 only, 110960 triggers nothing; DB2 12.1.7), the 110959 tooltip
+  // buff (110959 triggers 110960 only, 110960 triggers nothing; DB2 12.1.5.70391), the 110959 tooltip
   // names no reduction, 113862 has 0 rows in 605 files / 713 casts, and damage taken with 110960
   // up and for 3 s after is 0.98x baseline. It is not a wall; the press stays a defensive press
   // (invisibility) for the cooldown ledger. Supersedes the 2026-09-26 row and the 2026-09-30 keep.

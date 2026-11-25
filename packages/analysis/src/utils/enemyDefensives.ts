@@ -181,7 +181,7 @@ const FEIGN_DEATH_CAST_ID = "5384";
  * ruling D8, 2026-10-10: "假死印它的吸收"). Read from the ledger's own table,
  * so the two readers of "a Feign Death happened" stay one.
  *
- * Three-way evidence (Game-Behaviour rule), build 12.1.5.69594:
+ * Three-way evidence (Game-Behaviour rule), build 12.1.5.70391:
  *  - DB2: Survival Tactics 202748 = aura 69 (SCHOOL_ABSORB) on every school
  *    (`abilityEffectsGenerated`: `absorbs`, mask 127) and no school immunity
  *    (aura 39) — `test/enemyDefensives.test.ts` re-reads both;

@@ -1,5 +1,5 @@
 /** GH #155 (2026-10-21): reading duration extensions off talent tooltips —
- * every case is a real zhCN tooltip (build 12.1.5.69594). */
+ * every case is a real zhCN tooltip (build 12.1.5.70391). */
 import { describe, expect, it } from "vitest";
 
 import {

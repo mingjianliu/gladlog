@@ -111,7 +111,7 @@ const EARLY_MS = 15;
 const GCD_MS = 1_500;
 /** Auras whose DB2 row shortens or lengthens the interrupt mechanic on the
  * unit that holds them (SpellEffect aura 232 MOD_MECHANIC_DURATION, misc 26)
- * — every such row of the build, fetched 2026-11-11 (12.1.7.70740); the
+ * — every such row of the build (12.1.5.70391, re-read 2026-11-25); the
  * `ask DB2 first` leg. `db2` is what the row's base and PvpMultiplier say
  * the multiplier is; the split below is the corpus leg. A product entry
  * (`KICK_LOCKOUT_VICTIM_AURAS`) overrides the name and number here. */

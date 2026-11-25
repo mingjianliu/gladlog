@@ -10,7 +10,7 @@ Read the `build` field in `packages/analysis/src/data/datagen-manifest.json` and
 
 ### 2. Check the Latest Retail Build
 
-GET `https://wago.tools/api/builds?branch=retail&product=wow`, take the highest `version`, and record it as `LATEST_BUILD`. If fetching fails, ask the user for the current latest build number.
+GET `https://wago.tools/api/builds` and take the highest `version` **under the `wow` key only** (the live retail client), and record it as `LATEST_BUILD`. The answer lists every product wago tracks — `wowt` (the public test realm), `wowxptr` (the PTR), beta, Classic — and ignores `branch` / `product` query parameters, so the highest version of the whole answer is a test-realm build whenever one is up (2026-11-22: `wowt` 12.1.7.71087 while live was 12.1.5.70961). A build that is not live is not used (maintainer ruling 2026-11-22); `lib/wagoCsv.ts`'s `latestLiveBuild()` applies the same rule when `DATAGEN_BUILD` is not set. If fetching fails, ask the user for the current latest build number.
 
 ### 3. Compare
 
@@ -20,7 +20,7 @@ GET `https://wago.tools/api/builds?branch=retail&product=wow`, take the highest 
 
 Run from repo root. **`DATAGEN_BUILD` must first be pinned to `LATEST_BUILD` discovered in step 2**—
 all generators resolve builds through a single source in `lib/wagoCsv.ts`'s `resolveBuild()` (CLI argument >
-`DATAGEN_BUILD` > latest wago). Without pinning, if wago releases a new build mid-batch, mixed-build
+`DATAGEN_BUILD` > wago's latest live retail build). Without pinning, if wago releases a new build mid-batch, mixed-build
 artifacts will be produced; before 2026-08-11, `genSpellIcons` would also read an old build from the previous
 round's manifest (the actual record of an entire batch of icons extracted from the wrong build can be seen in
 09ae85b on that day). In addition, set `DATAGEN_CACHE` to reuse large table downloads:

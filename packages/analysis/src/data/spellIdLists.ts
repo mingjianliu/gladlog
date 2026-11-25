@@ -201,7 +201,7 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
  * The presses whose `[ENEMY DEF]` line is the fact `(invisible, …)` and
  * nothing else (user rulings R58 + R61, 2026-11-18): Greater Invisibility
  * 110959. It had a 60 % wall row (2026-09-26) that no evidence carried — the
- * reduction's buff 113862 is triggered by nothing in DB2 12.1.7, has 0 rows
+ * reduction's buff 113862 is triggered by nothing in DB2 12.1.5.70391, has 0 rows
  * in 605 files / 713 casts, and damage taken is 0.98x baseline. R61: "Keep a
  * fact line with no reduction and no immunity". Cast id → the logged aura
  * the line's length is read from (`ENEMY_INVISIBILITY_AURAS`). Not a
@@ -231,7 +231,7 @@ export type EnemySelfDefensiveHandMechanism =
  * `utils/selfDefensiveMechanism.ts` derives it from `abilityProfile`, the
  * mitigation tables and the mechanic immunities; these three have no such
  * dimension there). Cast id → the mechanism. DB2 `SpellEffect`, build
- * 12.1.5.69594 (the same rows on 12.1.0.69587); every id is in
+ * 12.1.5.70391 (the same rows on 12.1.0.69587); every id is in
  * `observedSpellIdsGenerated.json`.
  *
  *  - Evasion 5277 — row 1892: Effect 6 (APPLY_AURA), aura 49
@@ -421,7 +421,7 @@ export type EnemyProcSaveEffect = "heal proc" | "cheat-death proc";
  * Guardian, 31230 Cheat Death, 86949 Cauterize) are never logged; `via` says
  * whether that id is the proc's aura on the unit or its heal of itself.
  *
- * Three-way evidence (Game-Behaviour rule), build 12.1.5.69594:
+ * Three-way evidence (Game-Behaviour rule), build 12.1.5.70391:
  *  - DB2 (`talentEffectInventoryGenerated.json`): 31616 = effect 136, a heal
  *    of 40 % of max health, no aura; the talents 31230 and 86949 = aura 316
  *    on every school (mask 127) — a hit that would kill is absorbed instead

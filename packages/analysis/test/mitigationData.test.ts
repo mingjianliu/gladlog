@@ -65,7 +65,7 @@ describe("减伤表防腐(无第三态)", () => {
 
 describe("锚点(游戏事实,2026-07 人审后钉死)", () => {
   // All three anchors were confirmed by human review: 22812/33206 come straight
-  // from the DB2 12.1.0.68629 aura-87 rows (the SpellID is the whitelist id);
+  // from the DB2 12.1.5.70391 aura-87 rows (the SpellID is the whitelist id);
   // 642 is a DB2 aura-39 (school immunity) row, given pct=100 via OVERRIDES per
   // the spec's immunity semantics.
   test("Barkskin 22812:20% 全学派", () => {

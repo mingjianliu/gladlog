@@ -1,7 +1,7 @@
 /**
  * User rulings R58 + R61 (2026-11-18): Greater Invisibility reduces no
  * damage and is no immunity. Its 60 % wall row (2026-09-26) stood on buff
- * 113862, which nothing triggers in DB2 12.1.7, which has 0 rows in 605
+ * 113862, which nothing triggers in DB2 12.1.5.70391, which has 0 rows in 605
  * files / 713 casts, and under which damage taken was 0.98x baseline
  * (eee45a66 r3: a `burst-into-mitigation` row on a mage who took full damage
  * and died in that burst). Every reader of "a protection was up or in hand"

@@ -108,7 +108,7 @@ export const OPPRESSING_ROAR_PVP_CC_DURATION_MULT = 1.3;
 /**
  * What the Roar covers: aura 232 is keyed by SpellMechanic, one row per
  * mechanic (`EffectMiscValue_0`) — the 17 rows of 372048 in
- * `talentEffectInventoryGenerated.json` (build 12.1.5.69594), each 50 × 0.6:
+ * `talentEffectInventoryGenerated.json` (build 12.1.5.70391), each 50 × 0.6:
  * charm 1, disorient 2, disarm 3, fear 5, root 7, silence 9, sleep 10,
  * snare 11, stun 12, freeze 13, knockout 14, polymorph 17, banish 18, turn 23,
  * interrupt 26, daze 27, sap 30. NOT on it: horror 24 (Mortal Coil) and

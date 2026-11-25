@@ -59,7 +59,7 @@ export const CAST_PARAM_DURATIONS: Record<string, ICastParamDuration> = {
     castIds: ["315341"],
     baseSeconds: 2,
     perUnitSeconds: 2,
-    note: "Between the Eyes — its own tooltip (12.1.7 zhCN): 1 CP 4 s, 2 6 s, 3 8 s, 4 10 s, 5 12 s, 6 14 s, 7 16 s = 2 + 2 × CP (GH #176, 2026-11-02; 605 file 0284fcd9: lived 16.0 s at 7 CP and 14.0 s at 6 CP). DB2's 2 s is the 0-point base. Applications stack (「多次施加可以重叠生效」).",
+    note: "Between the Eyes — its own tooltip (12.1.5.70391 zhCN): 1 CP 4 s, 2 6 s, 3 8 s, 4 10 s, 5 12 s, 6 14 s, 7 16 s = 2 + 2 × CP (GH #176, 2026-11-02; 605 file 0284fcd9: lived 16.0 s at 7 CP and 14.0 s at 6 CP). DB2's 2 s is the 0-point base. Applications stack (「多次施加可以重叠生效」).",
   },
   "355941": {
     param: "empower",

@@ -497,7 +497,7 @@ describe("enemyDefensiveEvents", () => {
 
 describe("Greater Invisibility is no mitigation (user ruling R58, 2026-11-18)", () => {
   // It had a cast-keyed 60 % row from 2026-09-26 on the strength of buff
-  // 113862 (aura 87 −60). Nothing triggers that buff in DB2 12.1.7, it has 0
+  // 113862 (aura 87 −60). Nothing triggers that buff in DB2 12.1.5.70391, it has 0
   // rows in 605 files / 713 casts, and damage taken is 0.98x baseline. No
   // row, no self-save membership: KILL ATTEMPTS and the kill windows do not
   // count it. Its `[ENEMY DEF]` line is the fact `(invisible, …)` (R61).

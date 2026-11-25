@@ -111,7 +111,7 @@ const MECHANIC_NAMES: Readonly<Record<number, string>> = {
  * its label prints the number on the Game-Behaviour Rule's three legs (user
  * 2026-10-11: print it if a corpus split supports it; `(redirect)` had
  * replaced an unevidenced `(25%, Ts)` the same day):
- *  (a) DB2 12.1.5.69594, SpellEffect 46148 of 53480: aura 87
+ *  (a) DB2 12.1.5.70391, SpellEffect 46148 of 53480: aura 87
  *      (MOD_DAMAGE_PERCENT_TAKEN), −15 × PvpMultiplier 1.66666 = −25;
  *  (b) it is the cast's own aura on its target, MiscValue 127 — every
  *      school, no class mask or label in between — and the log shows aura
