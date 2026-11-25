@@ -13,10 +13,18 @@ import {
   HEALER_HELD_OFFENSIVE_SPEC,
   isHealerHeldOffensive,
 } from "../data/healerHeldOffensive";
-import { MITIGATION_TABLE } from "../data/mitigationData";
+import {
+  type IResolvedMitigation,
+  resolveMitigation,
+} from "../data/mitigationComponents";
+import {
+  immunityMaskStopsSchool,
+  MITIGATION_TABLE,
+} from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "../data/spellIdLists";
+import { spellSchoolMask } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals, pressSecondsOfAura } from "./auraIntervals";
 import { withoutImmunityBranchWalls } from "./auraMasteryBranch";
@@ -861,35 +869,103 @@ export function burstDamageBySchoolOn(
 const ALL_SCHOOLS_MASK = 0x7f;
 /**
  * User ruling R102 (2026-11-20, pipeline T166: "挡不到就不印"): does the
- * wall's school touch NONE of this damage? `bySchool` is the burst holder's
- * ledger damage on the target over the stretch of the burst the wall
- * covered (`burstDamageBySchoolOn`). True only for a wall with a signed
- * school-limited `MITIGATION_TABLE` row (Blessing of Protection 0x1, Cloak
- * of Shadows / Spellwarding / Anti-Magic Zone 0x7e) that met damage, none
- * of it in a school the row covers — Blessing of Protection over 448k of
- * frost and arcane (605 s0 14 r1). False — the wall stays — for an
- * all-school row, a wall with no row (an absorb or a reflect: Anti-Magic
- * Shell, Nether Ward — outside the ruling), a wall that met no damage of a
- * known school at all, and one that touches any part of it. One predicate for the ledger's
- * `defensivesHit` and every reader of it; scan5/t166 `ledgerWallSchool`
- * imports it.
+ * wall touch NONE of this damage? `res` is the wall as THIS application
+ * resolved (`resolveMitigation`: the table row plus its caster's talents —
+ * Cloak of Shadows with Bait and Switch carries a physical 20 %, Blessing
+ * of Protection with Echoing Blessings a magic 15 %); `bySchool` is the
+ * burst holder's ledger damage on the target over the stretch of the burst
+ * the wall covered (`burstDamageBySchoolOn`). True only when the wall met
+ * damage of a known school and no component of it reaches any of that
+ * damage — Blessing of Protection over 448k of frost and arcane (605 s0 14
+ * r1). An immunity component reaches a hit only when it covers every
+ * school of it (`immunityMaskStopsSchool`: a physical+fire hit lands
+ * through Cloak's magic immunity). False — the wall stays — for a wall
+ * with no table row (an absorb or a reflect: Anti-Magic Shell, Nether Ward
+ * — outside the ruling), one whose talents could not be settled, one that
+ * met no damage of a known school, and one any component of which reaches
+ * any part of it. One predicate for the ledger's `defensivesHit` and every
+ * reader of it; what the wall REFUSED is `wallRefusedAttackOf`.
  */
 export function wallTouchesNoneOf(
-  wallAuraSpellId: string,
+  res: IResolvedMitigation | undefined,
   bySchool: Readonly<Record<string, number>>,
 ): boolean {
-  const mask = MITIGATION_TABLE[wallTableIdOfAura(wallAuraSpellId)]?.schoolMask;
-  if (mask === undefined || (mask & ALL_SCHOOLS_MASK) === ALL_SCHOOLS_MASK)
-    return false;
+  if (!res || res.unresolved.length > 0) return false;
   let total = 0;
   let touched = 0;
   for (const [school, amount] of Object.entries(bySchool)) {
+    const hit = Number(school) & ALL_SCHOOLS_MASK;
     // a row whose school the log did not give says nothing either way
-    if ((Number(school) & ALL_SCHOOLS_MASK) === 0) continue;
+    if (hit === 0) continue;
     total += amount;
-    if ((Number(school) & mask) !== 0) touched += amount;
+    if (
+      res.components.some(
+        (c) =>
+          (c.schoolMask & hit) !== 0 &&
+          (c.kind !== "immunity" || immunityMaskStopsSchool(c.schoolMask, hit)),
+      )
+    )
+      touched += amount;
   }
   return total > 0 && touched === 0;
+}
+
+/**
+ * R102's other half: did the wall REFUSE an attack of the holder's in
+ * [fromMs, toMs]? A go into an immunity lands nothing in its schools — the
+ * rows come back refused, which is the wall working (5c48e842 r5: Rapid
+ * Fire IMMUNE on Blessing of Protection, then an Arcane Shot landing).
+ * A refused row counts when
+ *  - it is on the target, by one of `attackers` (the holder and its pets:
+ *    a pet's damage is merged into its owner's rows, its misses are not),
+ *  - an immunity component of the wall covers every school of it (a
+ *    Shockwave's physical IMMUNE under Cloak of Shadows is the stun
+ *    refused by something else — 60eed1bf 1:23; a percentage wall such as
+ *    Anti-Magic Zone refuses nothing),
+ *  - it is IMMUNE, or a spell's MISS (Cloak turns spells into misses —
+ *    2de375dc 1:05; a swing's MISS is an ordinary miss), and
+ *  - the attack deals damage (`isDamaging`: a swing, or a spell with a
+ *    damage row somewhere in the round) — a control refused is no burst
+ *    damage stopped.
+ */
+export function wallRefusedAttackOf(
+  res: Pick<IResolvedMitigation, "components"> | undefined,
+  attackers: ReadonlyArray<Pick<ICombatUnit, "missesOut">>,
+  targetId: string,
+  fromMs: number,
+  toMs: number,
+  isDamaging: (spellId: string) => boolean,
+): boolean {
+  const immunities = (res?.components ?? []).filter(
+    (c) => c.kind === "immunity",
+  );
+  if (immunities.length === 0) return false;
+  return attackers.some((u) =>
+    (u.missesOut ?? []).some((m) => {
+      if (
+        m.destUnitId !== targetId ||
+        m.logLine.timestamp < fromMs ||
+        m.logLine.timestamp > toMs
+      )
+        return false;
+      const swing = (m.logLine.event as string).startsWith("SWING");
+      const type = (m as { missType?: string }).missType;
+      if (type !== "IMMUNE" && !(type === "MISS" && !swing)) return false;
+      const school = swing
+        ? 0x1
+        : logSchoolMask(
+            hitSchoolId(
+              m as { spellSchoolId?: string; damageSchoolId?: string },
+            ),
+          ) ||
+          (spellSchoolMask(String(m.spellId)) ?? 0);
+      if ((school & ALL_SCHOOLS_MASK) === 0) return false;
+      if (!swing && !isDamaging(String(m.spellId))) return false;
+      return immunities.some((c) =>
+        immunityMaskStopsSchool(c.schoolMask, school),
+      );
+    }),
+  );
 }
 
 export function analyzeBurstLedger(
@@ -924,6 +1000,14 @@ export function analyzeBurstLedgerUncached(
     (petsMemo ??= (
       Object.values(combat.units ?? {}) as unknown as ICombatUnit[]
     ).filter((u) => u.ownerId === player.id));
+  // spells of the holder's side with a damage row somewhere in the round
+  let damagingIdsMemo: Set<string> | undefined;
+  const isDamagingSpell = (spellId: string): boolean =>
+    (damagingIdsMemo ??= new Set(
+      [player, ...allies, ...petsOfHolder()].flatMap((u) =>
+        (u.damageOut ?? []).map((d) => String(d.spellId)),
+      ),
+    )).has(spellId);
   let recordsAttackSpellMemo: boolean | undefined;
   const recordsAttackSpell = (): boolean =>
     (recordsAttackSpellMemo ??= documentRecordsAttackSpell(
@@ -1180,29 +1264,21 @@ export function analyzeBurstLedgerUncached(
             : iv.endMs;
         const overlapMs = Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
-        // T166 (user ruling R102): a wall whose schools touch none of the
-        // holder's damage in the stretch it covered is not this burst's
-        // …unless it REFUSED a hit of the holder there: a physical go
-        // into Blessing of Protection lands nothing physical — its swings
-        // come back IMMUNE, which is the wall working, not missing
+        // T166 (user ruling R102): a wall that reaches none of the holder's
+        // damage in the stretch it covered, and refused none of its
+        // attacks there, is not this burst's
         const lo = Math.max(iv.startMs, fromMs);
         const hi = Math.min(endMs, toMs);
-        // (a pet's damage is merged into its owner's rows, its misses stay
-        // on the pet — codex 85-tk-L2-T166-1 #1: a hunter's Rapid Fire
-        // refused by Blessing of Protection, then an Arcane Shot landing)
-        const refusedUnder = [player, ...petsOfHolder()].some((u) =>
-          (u.missesOut ?? []).some(
-            (m) =>
-              m.destUnitId === target.id &&
-              m.missType === "IMMUNE" &&
-              m.logLine.timestamp >= lo &&
-              m.logLine.timestamp <= hi,
-          ),
-        );
+        const wallRes = resolveMitigation(wallTableIdOfAura(iv.spellId), {
+          carrierIsCaster: iv.srcUnitName === target.name,
+          caster: (combat.units as Record<string, ICombatUnit> | undefined)?.[
+            iv.srcUnitId ?? ""
+          ],
+          atMs: iv.startMs,
+        });
         if (
-          !refusedUnder &&
           wallTouchesNoneOf(
-            iv.spellId,
+            wallRes,
             burstDamageBySchoolOn(
               player,
               target.id,
@@ -1210,6 +1286,14 @@ export function analyzeBurstLedgerUncached(
               hi,
               recordsAttackSpell(),
             ),
+          ) &&
+          !wallRefusedAttackOf(
+            wallRes,
+            [player, ...petsOfHolder()],
+            target.id,
+            lo,
+            hi,
+            isDamagingSpell,
           )
         )
           continue;

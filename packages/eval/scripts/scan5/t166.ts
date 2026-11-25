@@ -29,6 +29,8 @@ import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
 import {
   analyzeBurstLedger,
   burstDamageBySchoolOn,
+  wallRefusedAttackOf,
+  wallTouchesNoneOf,
 } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   limitedImmunitySchoolMask,
@@ -42,7 +44,8 @@ export const CHECKS = [
   "ledgerWallSchool",
   "ledgerLimitedImmunityNoRow",
 ] as const;
-const NO_ROW_NONE = "touches none of the holder's damage, still printed";
+const NO_ROW_NONE =
+  "reaches none of the holder's damage and refused none, still printed";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `ledgerLimitedImmunityNoRow|${NO_ROW_NONE}`,
 ]);
@@ -72,24 +75,55 @@ export function run(ctx: IRoundCtx): void {
       if (MITIGATION_TABLE[id] || mask === undefined) continue;
       ctx.bump("ledgerLimitedImmunityNoRow");
       const fromMs = ctx.start + e.fromSeconds * 1000;
+      const lo = fromMs + Math.max(0, d.startOffsetMs ?? 0);
+      const hi = Math.min(
+        fromMs + (d.endOffsetMs ?? Infinity),
+        ctx.start + e.toSeconds * 1000,
+      );
+      // the same two readings the ledger takes of a table wall, on the DB2
+      // immunity's mask
+      const asImmunity = {
+        spellId: id,
+        positional: false,
+        components: [
+          {
+            kind: "immunity" as const,
+            schoolMask: mask,
+            pctMin: 100,
+            pctMax: 100,
+          },
+        ],
+        unresolved: [],
+      };
       const by = burstDamageBySchoolOn(
         owner,
         t!.unitId,
-        fromMs + Math.max(0, d.startOffsetMs ?? 0),
-        Math.min(
-          fromMs + (d.endOffsetMs ?? Infinity),
-          ctx.start + e.toSeconds * 1000,
-        ),
+        lo,
+        hi,
         documentRecordsAttackSpell(Object.values(combat.units ?? {})),
       );
-      let total = 0;
-      let touched = 0;
-      for (const [school, amount] of Object.entries(by)) {
-        if ((Number(school) & 0x7f) === 0) continue;
-        total += amount;
-        if ((Number(school) & mask) !== 0) touched += amount;
-      }
-      if (total > 0 && touched === 0)
+      const total = Object.entries(by).reduce(
+        (n, [school, amount]) =>
+          (Number(school) & 0x7f) === 0 ? n : n + amount,
+        0,
+      );
+      const attackers = [
+        owner,
+        ...(Object.values(combat.units ?? {}) as any[]).filter(
+          (u) => u.ownerId === owner.id,
+        ),
+      ];
+      const damaging = new Set<string>(
+        attackers.flatMap((u) =>
+          (u.damageOut ?? []).map((x: any) => String(x.spellId)),
+        ),
+      );
+      if (
+        wallTouchesNoneOf(asImmunity, by) &&
+        !wallRefusedAttackOf(asImmunity, attackers, t!.unitId, lo, hi, (sid) =>
+          damaging.has(sid),
+        )
+      )
         ctx.violate(
           "ledgerLimitedImmunityNoRow",
           NO_ROW_NONE,
@@ -159,4 +193,18 @@ export function run(ctx: IRoundCtx): void {
       );
     }
   }
+  // a burst the ledger holds walls for with no printed block at all
+  entries.forEach((e, k) => {
+    if (used.has(k)) return;
+    for (const d of e.dominantTarget?.defensivesHit ?? []) {
+      ctx.bump(C);
+      ctx.violate(
+        C,
+        `held by the ledger, no burst block printed: ${d.spellName}`,
+        ctx.start + e.fromSeconds * 1000,
+        `${ctx.roundKey}|${owner.id}|${Math.floor(e.fromSeconds)}|${d.spellName}|noblock`,
+        `burst ${e.fromSeconds.toFixed(1)}s–${e.toSeconds.toFixed(1)}s on ${e.dominantTarget?.unitName ?? "-"}`,
+      );
+    }
+  });
 }
