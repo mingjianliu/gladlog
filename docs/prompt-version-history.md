@@ -8669,3 +8669,16 @@ aimedControlLandsPastSpan 0 -> 6 (12.1.5) is the same shape. Falls:
 troughReadPastCut and respondedOnRefusedPress follow the restated windows.
 This batch also carries the report-synth visual baseline for B250's chip (单开
 -> 身上无队友大招), user-reviewed.
+
+v668 (pipeline batch B252, T189; fact14 D12, signed exception 1): [ENEMY DEF]
+press HP is read at the press when the aura comes from another cast
+(pressSpellId / pressSrcUnitId / pressLineIndex on the event; hpAtPress takes
+them). Measured per part (parent = the T256 tree, candidate = T189 on it):
+605: 31 [ENEMY DEF] lines restated in 31 contexts / 10 archives -- 28 change
+their HP (25 lower, 3 higher, median -6 points: the reading before the press's
+own heal) and 3 drop an `(at 100% HP)` that was the healed reading (no reading
+before the press); 12.1.5: 42 lines in 36 contexts / 11 archives, all 42
+change their HP (39 lower, 3 higher, median -3). Sum 73 lines. No other line
+kind moved; no menu row. Gates 0 failures on both parts; scan5 on the changed
+archives identical (605 556 -> 556, 12.1.5 1,084 -> 1,084, 0 rose / 0 fell);
+the new t189 check (enemyDefTriggerPressHp) flags nothing.

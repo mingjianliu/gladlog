@@ -1930,5 +1930,12 @@
  *  inside it now answers (`2.2s before it opened`), and a press at the
  *  span's end whose control landed past it no longer does.
  *  See docs/prompt-version-history.md.
+ *
+ * v668 (2026-11-25; pipeline batch B252, T189): An enemy defensive put up
+ *  by another cast than its aura (Peaceweaver by Restoral; a proc a
+ *  teammate's press set off) prints the HP at that press: the press's own
+ *  heal logged a millisecond before its cast row is the cut (signed
+ *  exception 1), so the line no longer reads the healed HP.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 667;
+export const PROMPT_VERSION = 668;
