@@ -43,7 +43,11 @@
  *    siblings — D24's one window per canonical cooldown). `windowHeaderRow` (the row directly under an
  *    `[OFFENSIVE WINDOW]` header, which the legend lets miss its opener) and
  *    `noAura` (no aura of that name logged: the window cannot be read off
- *    the log) are measured, not in the total.
+ *    the log) are measured, not in the total. A press the row's own
+ *    selection gives no window (`resEnemyEffectWindow` on the producer's
+ *    timeline entry: an effect aura that reached no player — pipeline T260,
+ *    a934b1af r4 0:18, Odyn's Fury IMMUNE on the player, its 385060 only on
+ *    an elemental) is not expected on the row.
  *  - `groundingAteOmitted` (D26): a `[YOU] [CD]` / `[TEAM] [CD]` Grounding
  *    Totem line and its player's SPELL_SUMMON 204336 at that second (the
  *    totem GUID). Truth set inside [summon, summon + 3.5 s]: (a) SPELL_ABSORBED
@@ -80,6 +84,7 @@
  */
 import { readFileSync } from "node:fs";
 
+import { resEnemyEffectWindow } from "@gladlog/analysis/src/context/resourceSnapshot";
 import { isResRowLine } from "@gladlog/analysis/src/context/resRow";
 import spellReach from "@gladlog/analysis/src/data/spellReachGenerated.json";
 import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
@@ -91,6 +96,7 @@ import {
 import { AOE_CC_LANDING_WINDOW_S } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   cooldownEffectAuras,
+  reconstructEnemyCDTimeline,
   roundEndEndsEffect,
 } from "@gladlog/analysis/src/utils/enemyCDs";
 import {
@@ -630,6 +636,36 @@ function resEnemySameSecondPressMissing(ctx: IRoundCtx, rows: IResRow[]): void {
         line: l,
       });
   }
+  // the producer's own entry for a press, asked whether the row gives it a
+  // window at all (`resEnemyEffectWindow`, pipeline T260)
+  let timeline: ReturnType<typeof reconstructEnemyCDTimeline> | null = null;
+  const producerGivesNoWindow = (u: any, name: string, s: number): boolean => {
+    if (timeline === null) {
+      const friends = (ctx.players as any[]).filter(
+        (p) => p.reaction === ctx.owner.reaction,
+      );
+      const enemies = (ctx.players as any[]).filter(
+        (p) => p.reaction !== ctx.owner.reaction,
+      );
+      timeline = reconstructEnemyCDTimeline(
+        enemies as never,
+        { ...ctx.legacy, startTime: ctx.start, endTime: ctx.end } as never,
+        ctx.owner as never,
+        friends as never,
+      );
+    }
+    const entries = (
+      timeline.players.find((p) => p.playerName === u.name)?.offensiveCDs ?? []
+    ).filter(
+      (c) =>
+        nameOf(c.spellId, c.spellName) === name &&
+        Math.floor(c.castTimeSeconds) === s,
+    );
+    return (
+      entries.length > 0 &&
+      entries.every((c) => resEnemyEffectWindow(c) === undefined)
+    );
+  };
   for (const row of rows) {
     for (const cd of cds) {
       if (cd.s !== row.s) continue;
@@ -704,6 +740,7 @@ function resEnemySameSecondPressMissing(ctx: IRoundCtx, rows: IResRow[]): void {
         )
       )
         continue;
+      if (!listed && producerGivesNoWindow(u, cd.name, row.s)) continue;
       ctx.bump("resEnemySameSecondPressMissing");
       if (listed) continue;
       ctx.violate(

@@ -11,9 +11,9 @@
  *
  *  - `resEnemyInstantWindow`: counted, each side of each round once — every
  *    press the producer's own selection (`resEnemyEffectWindow`) gives the
- *    instant window. Kinds: `triggered effect aura, none logged` (the
+ *    instant window. Kinds: `triggered effect aura, no span logged` (the
  *    total; 605 base 60: Champion's Spear 51, Odyn's Fury 6, Reaper's Mark
- *    3), and out of the total `effect aura by name only, none logged` (1,
+ *    3), and out of the total `effect aura by name only, no span logged` (1,
  *    Dark Transformation) and `instant, no effect aura` (105: Meteor 94,
  *    Soul Fire 10, Shadow Blades 1).
  */
@@ -29,8 +29,8 @@ import { type IRoundCtx, nameOf } from "./ctx";
 const C = "resEnemyInstantWindow";
 export const CHECKS = [C] as const;
 const K = {
-  noAura: "triggered effect aura, none logged",
-  byName: "effect aura by name only, none logged",
+  noAura: "triggered effect aura, no span logged",
+  byName: "effect aura by name only, no span logged",
   instant: "instant, no effect aura",
 } as const;
 /** the inventory: a cast with no effect aura DB2 chains to it */
