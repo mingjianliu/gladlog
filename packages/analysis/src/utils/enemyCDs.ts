@@ -2402,11 +2402,18 @@ function reconstructEnemyCDTimelineUncached(
     }
 
   // Find aligned burst windows: clusters of 2+ casts within BURST_CLUSTER_SECONDS
+  const burstGroupEndSeconds = (roundDamageEndMs(combat) - matchStartMs) / 1000;
   const allCastsRaw = players
     .flatMap((p) =>
       // a refused press (T29) put no effect in any window
+      // …nor did a press after the round's end (pipeline T237: 605 s0 156-2,
+      // Blood Fury 0.3 s after the deciding death joined the window before
+      // it and carried its end past the round's)
       p.offensiveCDs
-        .filter((cd) => !cd.refusedAtPress)
+        .filter(
+          (cd) =>
+            !cd.refusedAtPress && cd.castTimeSeconds <= burstGroupEndSeconds,
+        )
         .map((cd) => ({
           time: cd.castTimeSeconds,
           // (an effect T41 found still up when the slice ended keeps its

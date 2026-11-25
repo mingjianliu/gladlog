@@ -47,6 +47,7 @@ const PK = {
   gained: "eligible only without rows after endTime",
   byDeath: "eligible by the pressured unit's death, window under 8 s",
   byDeathAtDeath: "…the same without rows after roundEndMs()",
+  died: "point whose pressured unit died inside it",
 } as const;
 const K = {
   seg: "segment",
@@ -93,16 +94,18 @@ export function run(ctx: IRoundCtx): void {
     ),
   };
   const anyLate = units.some(late);
-  pointInventory(ctx, legacy, units, endMs);
-  // the product's other round end (`roundEndMs`: the ending death / the
-  // combat's end) against the bound this reader uses — an inventory
-  if (roundEndMs(legacy) !== endMs)
+  // the point inventory's two named cuts are the raw log end and
+  // `roundEndMs()`, whatever the reader's own bound is
+  pointInventory(ctx, legacy, units, legacy.endTime);
+  // the product's two round ends (`roundEndMs`: the ending death / the
+  // combat's end; `combat.endTime`: the log's) — an inventory
+  if (roundEndMs(legacy) !== legacy.endTime)
     ctx.violate(
       C,
       K.endDiffers,
-      endMs,
+      legacy.endTime,
       "roundEnd",
-      `roundEndMs ${((roundEndMs(legacy) - ctx.start) / 1000).toFixed(1)} s, endTime ${((endMs - ctx.start) / 1000).toFixed(1)} s`,
+      `roundEndMs ${((roundEndMs(legacy) - ctx.start) / 1000).toFixed(1)} s, endTime ${((legacy.endTime - ctx.start) / 1000).toFixed(1)} s`,
     );
   const key = (s: { fromSeconds: number; toSeconds: number }) =>
     `${Math.floor(s.fromSeconds)}-${Math.floor(s.toSeconds)}`;
@@ -216,6 +219,18 @@ function pointInventory(
             `${side}#${pk(p)}#${kind}`,
             `${say(p, p)}; death at ${p.pressured?.diedSec} (${p.pressured!.diedSec! - p.tSec}s in), window end ${p.endSec}`,
           );
+    // every point that reads its pressured unit dead inside the window
+    // (`[BURST ANSWERED] … still died` on an answered one): the set a
+    // change of the damage's round end must not move (ruling R111)
+    for (const p of real)
+      if (p.pressured?.died)
+        ctx.violate(
+          P,
+          PK.died,
+          ctx.start + p.tSec * 1000,
+          `${side}#${pk(p)}#died`,
+          `${say(p, p)}; responded=${p.responded}`,
+        );
     for (const p of real.filter(eligible)) {
       ctx.bump(P);
       const at = ctx.start + p.tSec * 1000;
