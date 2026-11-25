@@ -1753,16 +1753,35 @@ export function eventTriggerTimesMs(
           uncastIds.includes(String(e.spellId)),
       )
       .map((e) => e.logLine.timestamp);
-    for (const e of unit.actionOut ?? [])
+    // an APPLIED of an aura that is already up is the log re-stating it,
+    // not an application (codex 85-tk-L3-T240-1e #4: 62d13045 r3, the tea
+    // cast and applied at 82.950 s and re-stated in a 24-aura batch at
+    // 85.334 s): the id must have come off since its last APPLIED
+    const up = new Set<string>();
+    const rows = (unit.actionOut ?? [])
+      .filter(
+        (e) =>
+          e.destUnitId === e.srcUnitId && uncastIds.includes(String(e.spellId)),
+      )
+      .sort(
+        (a, b) =>
+          a.logLine.timestamp - b.logLine.timestamp ||
+          (a.logLine.lineIndex ?? 0) - (b.logLine.lineIndex ?? 0),
+      );
+    for (const e of rows) {
+      const id = String(e.spellId);
+      if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED) up.delete(id);
+      if (e.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      const restated = up.has(id);
+      up.add(id);
       if (
-        e.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-        e.destUnitId === e.srcUnitId &&
-        uncastIds.includes(String(e.spellId)) &&
+        !restated &&
         !castMs.some(
           (c) => Math.abs(c - e.logLine.timestamp) <= AURA_WITHOUT_CAST_ROW_MS,
         )
       )
         out.push(e.logLine.timestamp);
+    }
   }
   const energizeIds = r.triggerEnergizeIds;
   if (energizeIds?.length)
@@ -2665,17 +2684,6 @@ export const TIME_SPIRAL_FREE_PRESSES: Readonly<
   "375240": {
     spellIds: ["1953", "212653"],
     note: "Mage — Blink / Shimmer",
-  },
-  // Not Time Spiral, the same shape (pipeline T240, codex 85-tk-L3-T240-1d
-  // #1): the Mistweaver set bonus's proc 1296687 — DB2 SpellEffect 1319382,
-  // aura 411, +1 charge on category 1518, the kick's — rises ~0.1 s after a
-  // kick and the next kick spends it: fa2c363c, three procs, kick rows
-  // 10–18 ms before the aura's REMOVED, 0.84–1.13 s after the kick that
-  // raised it. That kick stands on the earlier one's cooldown. None in the
-  // 64 Mistweaver files of the 605.
-  "1296687": {
-    spellIds: ["107428", "467307"],
-    note: "Monk (Mistweaver set bonus) — Rising Sun Kick / Rushing Wind Kick",
   },
   // charge category 1365
   "375252": {

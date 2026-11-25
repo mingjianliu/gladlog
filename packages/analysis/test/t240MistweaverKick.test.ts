@@ -362,50 +362,6 @@ describe("T240 review round 2 on real orderings", () => {
 });
 
 describe("T240 review round 4 on real logs", () => {
-  const aura = (spellId: string, event: LogEvent, atS: number) => ({
-    spellId,
-    srcUnitId: "m",
-    destUnitId: "m",
-    timestamp: T0 + Math.round(atS * 1000),
-    logLine: { event, timestamp: T0 + Math.round(atS * 1000) },
-  });
-  const entryOf = (kicks: number[], auraEvents: unknown[]) => {
-    const u = makeUnit("m", {
-      class: CombatUnitClass.Monk,
-      spec: CombatUnitSpec.Monk_Mistweaver,
-      info: { talents: [], pvpTalents: [] },
-      spellCastEvents: kicks.map((sec) =>
-        makeSpellCastEvent(KICK, T0 + Math.round(sec * 1000), ""),
-      ),
-      auraEvents,
-    } as unknown as Parameters<typeof makeUnit>[1]);
-    return unitCooldownEntry(
-      u,
-      {
-        startTime: T0,
-        endTime: T0 + 300_000,
-        units: { m: u },
-      } as unknown as AtomicArenaCombat,
-      KICK,
-    )!;
-  };
-  it("the kick that spends the set bonus's extra charge is a press, standing on the earlier kick's cooldown (1d #1, fa2c363c)", () => {
-    // kick 83.308 s, the proc's aura 83.417 s, kick 84.244 s, the aura gone 84.255 s
-    const e = entryOf(
-      [83.308, 84.244],
-      [
-        aura("1296687", LogEvent.SPELL_AURA_APPLIED, 83.417),
-        aura("1296687", LogEvent.SPELL_AURA_REMOVED, 84.255),
-      ],
-    );
-    expect(e.casts.map((c) => [c.timeSeconds, c.freeRecast ?? false])).toEqual([
-      [83.308, false],
-      [84.244, true],
-    ]);
-    expect(pressReadyAgainAtSeconds(e, 84.244)).toBeCloseTo(95.308, 2);
-    // without the proc the second row is the first press's duplicate, as before
-    expect(entryOf([83.308, 84.244], []).casts).toHaveLength(1);
-  });
   it("a tea whose cast row the log left out still resets the kick (1d #2, e7444643)", () => {
     const u = {
       id: "m",
@@ -432,5 +388,23 @@ describe("T240 review round 4 on real logs", () => {
         (g) => (g.atMs - T0) / 1000,
       ),
     ).toEqual([33.45]);
+    // re-stated while up (1e #4, 62d13045 r3: cast and applied at 82.950 s,
+    // re-stated in a batch at 85.334 s): no trigger; off and on again with
+    // no cast row: one
+    const w = {
+      ...u,
+      spellCastEvents: [row("SPELL_CAST_SUCCESS", TEA, 82.95)],
+      actionOut: [
+        row("SPELL_AURA_APPLIED", TEA, 82.95),
+        row("SPELL_AURA_APPLIED", TEA, 85.334),
+        row("SPELL_AURA_REMOVED", TEA, 90),
+        row("SPELL_AURA_APPLIED", TEA, 95),
+      ],
+    } as unknown as Parameters<typeof eventTriggersFor>[0];
+    expect(
+      eventTriggersFor(w, [EVENT_COOLDOWN_REDUCTIONS["1277302"]!]).map(
+        (g) => (g.atMs - T0) / 1000,
+      ),
+    ).toEqual([82.95, 95]);
   });
 });
