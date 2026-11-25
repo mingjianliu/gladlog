@@ -201,6 +201,16 @@ export const zhReportCards = {
   "report.mistakesCard.sameWave": " ＋同一波:{list}",
 
   // ── KpiChips.tsx ──
+  // ── VerdictLine.tsx ──
+  "report.verdict.died": "{time} {name} 阵亡",
+  "report.verdict.unpressed": "{spell} 可用未按",
+  "report.verdict.yours": "你的",
+  "report.verdict.whose": "{name} 的",
+  "report.verdict.missed": "{caster} {spell} 可给未给",
+  "report.verdict.blocked": "{caster} {spell} 被控给不了",
+  "report.verdict.sep": "，",
+  "report.verdict.end": "。",
+  "report.verdict.open": "看死亡回顾",
   "report.kpi.findings": "失误",
   "report.kpi.majorN": "{n} 重大",
   "report.kpi.restN": "{n} 一般",

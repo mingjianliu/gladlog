@@ -142,26 +142,44 @@ function MiniSpark({ line }: { line: BracketLine }) {
     hi = Math.max(hi, p.rating);
   }
   const span = hi - lo || 1;
+  // Stretched to the cell's width (non-scaling stroke keeps the line weight);
+  // the dashed line is the first rating, so the rise or fall reads at a glance.
+  const W = 400;
+  const y = (r: number) => 32 - ((r - lo) * 28) / span;
   const d = pts
     .map(
       (p, i) =>
-        `${((i * 96) / (pts.length - 1)).toFixed(1)},${(28 - ((p.rating - lo) * 24) / span).toFixed(1)}`,
+        `${((i * W) / (pts.length - 1)).toFixed(1)},${y(p.rating).toFixed(1)}`,
     )
     .join(" ");
   const up = (line.delta ?? 0) >= 0;
+  const baseY = y(pts[0]!.rating).toFixed(1);
   return (
     <svg
       className="cs-spark"
-      viewBox="0 0 96 32"
+      viewBox={`0 0 ${W} 36`}
+      preserveAspectRatio="none"
       aria-hidden="true"
       data-testid="cs-spark"
     >
+      <line
+        x1={0}
+        x2={W}
+        y1={baseY}
+        y2={baseY}
+        stroke="var(--mute)"
+        strokeOpacity={0.5}
+        strokeWidth={1}
+        strokeDasharray="3 4"
+        vectorEffect="non-scaling-stroke"
+      />
       <polyline
         points={d}
         fill="none"
         stroke={up ? "var(--win)" : "var(--loss)"}
-        strokeWidth={1.6}
+        strokeWidth={1.8}
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );

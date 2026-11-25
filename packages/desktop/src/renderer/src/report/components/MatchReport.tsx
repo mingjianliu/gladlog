@@ -79,6 +79,7 @@ import { Timeline } from "./Timeline";
 import { TimeRangeBar } from "./TimeRangeBar";
 import { UncoveredHighlightsCard } from "./UncoveredHighlightsCard";
 import { TeamSideContext } from "./UnitName";
+import { VerdictLine } from "./VerdictLine";
 import { VideoTab } from "./VideoTab";
 import { WindowAnalysisCard, type WindowCardState } from "./WindowAnalysisCard";
 import { WindowList } from "./WindowList";
@@ -685,6 +686,16 @@ export function MatchReport({
     const pool = friendly.length > 0 ? friendly : all;
     setRecap(pool.reduce((a, b) => (b.deathS > a.deathS ? b : a)));
   }, [deathRecaps, source]);
+  // The summary card's headline: our side's last death — the same pick the
+  // auto-open effect above makes, minus its enemy fallback.
+  const verdictRecap = useMemo(() => {
+    const friendly = (deathRecaps ?? []).filter((r) =>
+      isFriendlyUnit(source, r.unitId),
+    );
+    return friendly.length > 0
+      ? friendly.reduce((a, b) => (b.deathS > a.deathS ? b : a))
+      : null;
+  }, [deathRecaps, source]);
   // The open recap is a pick (unit + death), not a frozen copy: when the
   // list is derived again — a language switch, or the English spell names
   // (namesVersion) landing — the card shows the same death from the new list.
@@ -1101,16 +1112,27 @@ export function MatchReport({
           <div className="rpt-body">
             {/* KPI chips row (UI redesign 1a): whole-match glance, never linked
               to the time window */}
-            {mistakesAll && vulnBands ? (
-              <KpiChips
-                mistakes={mistakesAll}
-                bands={vulnBands}
-                kickRows={kickFull!}
-                dispelDash={dispelFull!}
-              />
-            ) : (
-              <SkelKpiRow />
-            )}
+            <div className="rpt-summary">
+              {verdictRecap && (
+                <VerdictLine
+                  recap={verdictRecap}
+                  onOpen={() => {
+                    setRecap(verdictRecap);
+                    setSideTab("recap");
+                  }}
+                />
+              )}
+              {mistakesAll && vulnBands ? (
+                <KpiChips
+                  mistakes={mistakesAll}
+                  bands={vulnBands}
+                  kickRows={kickFull!}
+                  dispelDash={dispelFull!}
+                />
+              ) : (
+                <SkelKpiRow />
+              )}
+            </div>
             {/* Two-column workbench (1a): at ≥1440px left = curve/meters/ledger,
               right = death recap/mistakes; narrow viewports fall back to a
               single column (the grid is driven by CSS breakpoints, the

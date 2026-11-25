@@ -12,14 +12,14 @@
 @import "@fontsource/inter/latin-600.css";
 @import "@fontsource/inter/latin-700.css";
 :root {
-  --bg: #161826;
+  --bg: #12141d;
   --surface: #1b1e2c;
   --surface-2: #12141f;
-  --hairline: #3f424d;
-  --hairline-soft: #292b31;
+  --hairline: #2c2f3d;
+  --hairline-soft: #23262f;
   --ink: #e9e9ed;
   --ink-2: #b2b6ca;
-  --mute: #75798c;
+  --mute: #8f93a8;
   --accent: #9184d9;
   --accent-text: #d2cefd;
   --accent-soft: #b5abfc;
@@ -336,7 +336,7 @@ pre {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 .badge {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--mute);
 }
@@ -417,7 +417,7 @@ pre {
 .rpt-meta,
 .rpt-round {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--font-data);
   margin-top: 4px;
 }
@@ -439,7 +439,7 @@ pre {
   align-items: center;
 }
 .rpt-card-label {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--mute);
@@ -459,7 +459,7 @@ pre {
   border: none;
   border-radius: 4px;
   padding: 3px 12px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-mode-seg button:hover {
   color: var(--ink);
@@ -578,7 +578,7 @@ pre {
 }
 .rpt-tl-axis {
   fill: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-data);
 }
 .rpt-tl-line {
@@ -640,7 +640,7 @@ pre {
   align-items: center;
   gap: 8px;
   padding: 0 0 4px 34px;
-  font-size: 11px;
+  font-size: 12px;
 }
 /* Flow curves (伤害/治疗/承伤/被治疗): one overlaid line per unit, same weight
    as the crisp HP runs. No plateau fade here — a rate is never "pinned". */
@@ -774,7 +774,7 @@ pre {
   text-align: center;
 }
 .coach-chat-head {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   letter-spacing: 0.06em;
   margin-bottom: 6px;
@@ -825,11 +825,11 @@ pre {
 }
 .coach-chat-fail-text {
   color: var(--danger, #c0392b);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: 6px;
 }
 .coach-chat-retry {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
 }
 /* Markdown 渲染容器(derive/markdown):气泡本身已是 pre-wrap,块级元素只需
@@ -865,7 +865,7 @@ pre {
   border-radius: 3px;
   background: var(--surface-2);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 .coach-chat-md .coach-md-pre {
   margin: 0 0 6px;
@@ -875,7 +875,7 @@ pre {
   background: var(--surface-2);
   overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 .coach-chat-md .coach-md-quote {
@@ -892,7 +892,7 @@ pre {
 .coach-chat-md .coach-md-table {
   margin: 0 0 6px;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
 }
 .coach-chat-md .coach-md-table th,
 .coach-chat-md .coach-md-table td {
@@ -919,7 +919,7 @@ pre {
 }
 .coach-chat-disclaimer {
   margin-top: 6px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ink-2);
 }
 .rpt-ai-full .rpt-ai-body {
@@ -961,7 +961,7 @@ pre {
   margin-bottom: 6px;
 }
 .rpt-finding-sev {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 700;
@@ -995,14 +995,14 @@ pre {
   border: none;
   padding: 4px 0 0;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .rpt-finding-ev {
   margin-top: 8px;
 }
 .rpt-finding-ev button {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
 }
 .rpt-finding-ev .rpt-finding-jump {
@@ -1192,7 +1192,7 @@ pre {
   border: 1px solid var(--hairline-soft);
   border-radius: 5px;
   padding: 4px 7px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: default;
 }
 .rpt-frame-burst {
@@ -1202,7 +1202,7 @@ pre {
 }
 .rpt-frame-pct {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   margin-top: 1px;
 }
 .rpt-replay-frames.enemy .rpt-frame {
@@ -1244,12 +1244,12 @@ pre {
 }
 .rpt-frame-dead {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
 }
 .rpt-frame-pct {
   font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: 12px;
   flex: none;
 }
 .rpt-replay-hover-ring {
@@ -1324,7 +1324,7 @@ pre {
   border: none;
   border-radius: 4px;
   padding: 3px 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-replay-speed button.active {
   background: var(--accent-line);
@@ -1382,7 +1382,7 @@ pre {
   gap: 10px;
 }
 .rpt-gcd-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
 }
 .rpt-gcd-chips {
@@ -1467,7 +1467,7 @@ pre {
   right: 5px;
   transform: translateY(-50%);
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 .rpt-gcd-col {
@@ -1486,7 +1486,7 @@ pre {
   white-space: nowrap;
 }
 .rpt-gcd-density {
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-gcd-bands {
   display: flex;
@@ -1499,7 +1499,7 @@ pre {
   color: var(--gold);
   background: transparent;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 9px;
   cursor: pointer;
 }
@@ -1667,7 +1667,7 @@ pre {
 .rpt-shuffle-seq i {
   font-style: normal;
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 7px;
   border-radius: 3px;
@@ -1770,7 +1770,7 @@ pre {
   background: var(--surface);
   border: 1px solid var(--hairline);
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 15px;
   text-align: center;
 }
@@ -1782,11 +1782,11 @@ pre {
 .dev-rail-foot button {
   width: 100%;
   padding: 4px 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dev-rebuild-progress {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   text-align: center;
 }
@@ -1829,7 +1829,7 @@ pre {
   border-radius: 4px;
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 8px;
 }
 .dev-kv {
@@ -1842,12 +1842,12 @@ pre {
   flex: none;
   width: 72px;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 .dev-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 10px;
 }
 .dev-table th {
@@ -1874,7 +1874,7 @@ pre {
   border-radius: 0;
   background: var(--surface-2);
   padding: 0 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   overflow: hidden;
 }
@@ -1934,7 +1934,7 @@ pre {
   background: transparent;
   text-align: left;
   padding: 4px 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dev-match-rows button:hover {
   background: var(--surface);
@@ -1950,7 +1950,7 @@ pre {
 .dev-mr-2 {
   display: block;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
 }
 .dev-match-count {
   flex: none;
@@ -1958,7 +1958,7 @@ pre {
   padding-top: 6px;
   border-top: 1px solid var(--hairline-soft);
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 .dev-col-tree {
   display: flex;
@@ -1972,13 +1972,13 @@ pre {
 }
 .dev-json-searchbar button {
   flex: none;
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 10px;
 }
 .dev-search-note {
   flex: none;
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* JSON 树:一行一节点,横向内容自己滚,不撑破布局 */
@@ -1988,7 +1988,7 @@ pre {
   min-height: 0;
   margin-top: 8px;
   overflow: auto;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .dev-node {
@@ -2015,7 +2015,7 @@ pre {
   border-radius: 0;
   background: transparent;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.7;
 }
 .dev-node-toggle.ph {
@@ -2031,7 +2031,7 @@ pre {
   background: transparent;
   padding: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent-text);
 }
 .dev-node-key:hover {
@@ -2057,17 +2057,17 @@ pre {
   align-items: center;
   gap: 8px;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
 }
 .dev-node-pager button {
   padding: 0 6px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* 右栏动作 */
 .dev-col-actions h3 {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   word-break: break-all;
 }
@@ -2075,11 +2075,11 @@ pre {
   display: block;
   width: 100%;
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: 12px;
   text-align: left;
 }
 .dev-action-note {
-  font-size: 11px;
+  font-size: 12px;
   word-break: break-all;
 }
 .dev-facts {
@@ -2089,7 +2089,7 @@ pre {
   margin: 12px 0 0;
   padding-top: 8px;
   border-top: 1px solid var(--hairline-soft);
-  font-size: 11px;
+  font-size: 12px;
 }
 .dev-facts dt {
   color: var(--mute);
@@ -2115,7 +2115,7 @@ pre {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   flex-wrap: wrap;
 }
 .dev-ai-t,
@@ -2131,11 +2131,11 @@ pre {
   gap: 6px;
 }
 .dev-ai-ops button {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 8px;
 }
 .dev-ai-body h4 {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
   margin: 8px 0 4px;
 }
@@ -2145,7 +2145,7 @@ pre {
   background: var(--surface-2);
   border-radius: 6px;
   padding: 8px;
-  font-size: 11px;
+  font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -2165,7 +2165,7 @@ pre {
 }
 .dev-diag-bar button {
   flex: none;
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 8px;
 }
 .dev-diag-bar button.active {
@@ -2184,7 +2184,7 @@ pre {
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dev-diag-rows li {
   display: flex;
@@ -2200,7 +2200,7 @@ pre {
   flex: none;
   width: 40px;
   text-transform: uppercase;
-  font-size: 10px;
+  font-size: 11px;
 }
 .dev-diag-lv.lv-warn {
   color: var(--gold);
@@ -2270,7 +2270,7 @@ pre {
 .rpt-spellicon-fallback {
   background: var(--surface-2);
   color: var(--ink-2);
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-data);
   font-weight: bold;
 }
@@ -2375,13 +2375,13 @@ pre {
 }
 .mlr-dur,
 .mlr-rating {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 /* Structural-completeness badge (meta.structuralIssues non-empty): the match
    was stored but the log did not contain the whole game. */
 .mlr-partial {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 3px;
@@ -2401,7 +2401,7 @@ pre {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--mute);
@@ -2447,7 +2447,7 @@ pre {
 }
 .mlr-when {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 
@@ -2535,13 +2535,13 @@ pre {
   border: 1px solid var(--gold-dim);
   border-radius: 999px;
   color: var(--gold);
-  font-size: 11px;
+  font-size: 12px;
 }
 /* 恐慌性使用徽标(#10 T5)——事件行内联,同一份 detectPanicDefensives 判定。 */
 .rpt-recap-panic-badge {
   margin-left: 4px;
   color: var(--loss);
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
 }
 /* 更省替代提示(#10 T5,F166 同一谓词)——附在「死亡时可用而未按」pill 上。 */
@@ -2660,13 +2660,13 @@ pre {
 }
 .rpt-recap-subtotal-note {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-recap-fold-cell {
   padding: 2px 0;
 }
 .rpt-recap-fold-toggle {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
   background: none;
   border: none;
@@ -2697,7 +2697,7 @@ pre {
   background: rgba(255, 255, 255, 0.02);
 }
 .rpt-recap-mitigation-title {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
   margin: 0 0 4px;
 }
@@ -2755,7 +2755,7 @@ pre {
 }
 .rpt-stats th {
   text-align: left;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
   font-weight: normal;
   padding: 4px 8px 4px 0;
@@ -2771,7 +2771,7 @@ pre {
 }
 .rpt-stats-dim {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ── 回放三小件(backlog #11)── */
@@ -2790,7 +2790,7 @@ pre {
   stroke-width: calc(2px * var(--rpt-zoom-k, 1));
 }
 .rpt-replay-damp {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--loss);
   font-family: var(--font-data);
   white-space: nowrap;
@@ -2816,7 +2816,7 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 10px;
   border: none;
   border-radius: 0;
@@ -2837,7 +2837,7 @@ pre {
 /* 另一种语言生成的 AI 内容的语言标签(spec §6.13):与旧版槽标签同一档的小标 */
 .rpt-content-lang {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   padding: 1px 6px;
   margin-left: 6px;
@@ -2850,7 +2850,7 @@ pre {
 /* AI 自查标注:结果区顶部一行淡色小字,不抢结论的视线 */
 .rpt-self-review-note {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 
@@ -2865,7 +2865,7 @@ pre {
 /* kick table rate notes: their own line under the percentage */
 .rpt-kick-note {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   white-space: normal;
 }
 /* the cast-control summary wraps instead of running out of its card */
@@ -2885,11 +2885,11 @@ pre {
 }
 .rpt-stats-detail-title {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
   min-width: 52px;
 }
 .rpt-stats-detail-item {
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .rpt-stats-detail-t {
@@ -2948,7 +2948,7 @@ pre {
   overflow: hidden;
 }
 .mlf-seg button {
-  font-size: 11px;
+  font-size: 12px;
   padding: 0 9px;
   border: none;
   border-radius: 0;
@@ -2960,7 +2960,7 @@ pre {
   color: var(--accent-text);
 }
 .mlf select {
-  font-size: 11px;
+  font-size: 12px;
   height: 26px;
   max-width: 108px;
   background: var(--surface);
@@ -2978,7 +2978,7 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   height: 26px;
   padding: 0 8px;
   background: var(--accent-fill);
@@ -2993,7 +2993,7 @@ pre {
   gap: 4px;
 }
 .mlf input[type="date"] {
-  font-size: 11px;
+  font-size: 12px;
   height: 26px;
   max-width: 118px;
   background: var(--surface);
@@ -3004,11 +3004,11 @@ pre {
 }
 .mlf-datesep {
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
 }
 .mlf-clear {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   border: none;
   background: transparent;
@@ -3040,11 +3040,11 @@ pre {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-trb select,
 .rpt-tl-head select {
-  font-size: 11px;
+  font-size: 12px;
   height: 24px;
   max-width: 240px;
   background: var(--surface);
@@ -3060,7 +3060,7 @@ pre {
   color: var(--accent-text);
 }
 .rpt-trb-clear {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   border: none;
   background: transparent;
@@ -3131,7 +3131,7 @@ pre {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: 12px;
 }
 /* 关键 / 全部 presets (UI review 2026-08-21 #5) */
 .rpt-events-presets {
@@ -3145,7 +3145,7 @@ pre {
 }
 .rpt-events-filters select,
 .rpt-events-filters input[type="search"] {
-  font-size: 11px;
+  font-size: 12px;
   height: 26px;
   background: var(--surface);
   color: var(--ink);
@@ -3289,7 +3289,7 @@ pre {
   background: transparent;
   border: none;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .rpt-events-chip-x {
@@ -3318,7 +3318,7 @@ pre {
   border: 1px solid var(--hairline);
   border-radius: 999px;
   padding: 2px 9px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .rpt-events-kind-chip.active {
@@ -3356,7 +3356,7 @@ pre {
 }
 .rpt-events-kind-cnt {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* 聚合行(死亡清场 / ×N tick)与展开子行 */
@@ -3375,7 +3375,7 @@ pre {
   color: var(--mute);
 }
 .rpt-events-group-chip {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gold);
   border: 1px solid var(--gold-dim);
   border-radius: 999px;
@@ -3441,7 +3441,7 @@ pre {
   margin: 8px 0;
 }
 .rpt-export-report {
-  font-size: 11px;
+  font-size: 12px;
   height: 24px;
   white-space: nowrap;
 }
@@ -3560,7 +3560,7 @@ pre {
   color: #ffffffb0;
 }
 .dash-band-k {
-  font-size: 11px;
+  font-size: 12px;
   color: #ffffff90;
 }
 .dash-card-head {
@@ -3636,7 +3636,7 @@ pre {
 }
 .dash-comp-foot {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 .dash-stat {
@@ -3654,7 +3654,7 @@ pre {
   font-weight: bold;
 }
 .dash-stat-k {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 .dash-win {
@@ -3691,7 +3691,7 @@ pre {
   border-top: 1px solid var(--hairline);
 }
 .dash-learning-status {
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 6px;
   border-radius: 8px;
 }
@@ -3743,7 +3743,7 @@ pre {
   align-items: start;
 }
 .dash-note {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
   font-weight: normal;
 }
@@ -3769,7 +3769,7 @@ pre {
 }
 .settings-saved-inline {
   color: var(--win);
-  font-size: 11px;
+  font-size: 12px;
 }
 .settings-saved-inline.settings-saved-failed {
   color: var(--loss);
@@ -3796,7 +3796,7 @@ pre {
 }
 /* on/off state beside a toggle button, whose label names the action */
 .settings-state {
-  font-size: 11px;
+  font-size: 12px;
   color: #9a9eb2;
   border: 1px solid var(--hairline);
   border-radius: 999px;
@@ -3835,7 +3835,7 @@ pre {
   border: 1px solid color-mix(in srgb, var(--win) 33%, transparent);
   border-radius: 999px;
   padding: 1px 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .settings-actions {
   display: flex;
@@ -3849,7 +3849,7 @@ pre {
 .settings-note {
   display: block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: #8a8ea0;
 }
 .settings-seg {
@@ -3930,7 +3930,7 @@ pre {
 }
 .onboard-hint {
   margin-top: 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
 }
 
@@ -3940,7 +3940,7 @@ pre {
   gap: 8px;
 }
 .import-progress {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
@@ -3956,7 +3956,7 @@ pre {
   gap: 6px;
 }
 .rpt-finding-flags button {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 7px;
   color: var(--mute);
 }
@@ -3987,19 +3987,19 @@ pre {
 .dash-issue-rec {
   margin-left: 8px;
   color: var(--loss);
-  font-size: 10px;
+  font-size: 11px;
 }
 .dash-issue-done {
   margin-left: 8px;
   color: var(--win);
-  font-size: 10px;
+  font-size: 11px;
 }
 .dash-issue-recent {
   margin-left: auto;
   border: none;
   background: transparent;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
@@ -4028,7 +4028,7 @@ pre {
 
 /* AI 生成流式预览(phase3 #4) */
 .rpt-ai-preview {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
   background: var(--surface-2);
   border-radius: 6px;
@@ -4075,7 +4075,7 @@ pre {
   overflow: hidden;
 }
 .rpt-ledger-tabs button {
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 10px;
   border: none;
   border-radius: 0;
@@ -4100,7 +4100,7 @@ pre {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-ledger-spells {
   color: var(--ink-2);
@@ -4121,7 +4121,7 @@ pre {
   border-radius: 999px;
   background: transparent;
   padding: 0 9px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   color: var(--ink-2);
   cursor: pointer;
@@ -4141,7 +4141,7 @@ pre {
   gap: 5px;
   border: none;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   cursor: pointer;
   padding: 0;
@@ -4189,7 +4189,7 @@ pre {
 .rpt-aura-scale {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
 }
 .rpt-aura-legend {
@@ -4208,7 +4208,7 @@ pre {
   border: none;
   background: transparent;
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   padding: 0 0 0 21px;
 }
@@ -4235,7 +4235,7 @@ button.rpt-mistakes-showminor:hover {
 }
 
 .rpt-ledger-chip {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 8px;
   border: 1px solid var(--hairline);
@@ -4331,7 +4331,7 @@ button.rpt-mistakes-showminor:hover {
   padding: 8px 10px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-ai-goals-title {
   color: var(--mute);
@@ -4356,7 +4356,7 @@ button.rpt-mistakes-showminor:hover {
 }
 .rpt-replay-zoom-reset,
 .rpt-replay-zoom-btn {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   border: 1px solid var(--hairline);
   border-radius: 6px;
@@ -4370,7 +4370,7 @@ button.rpt-mistakes-showminor:hover {
   margin: 8px 0 4px;
 }
 .dash-chars button {
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 10px;
   border: 1px solid var(--hairline);
   border-radius: 12px;
@@ -4384,7 +4384,7 @@ button.rpt-mistakes-showminor:hover {
 .dash-chars-n {
   margin-left: 5px;
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* 泳道列底折叠汇总(结束前施法过密的 +N,防止下推越过结束线) */
@@ -4415,7 +4415,7 @@ button.rpt-mistakes-showminor:hover {
 .rpt-axis-t {
   text-align: right;
   padding-right: 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
   font-variant-numeric: tabular-nums;
   padding-top: 4px;
@@ -4461,7 +4461,7 @@ button.rpt-mistakes-showminor:hover {
 }
 .rpt-axis-detail {
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-axis-finding {
   max-width: 64ch;
@@ -4475,7 +4475,7 @@ button.rpt-mistakes-showminor:hover {
   background: transparent;
   padding: 1px 8px;
   margin-bottom: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   text-align: left;
   cursor: pointer;
@@ -4484,7 +4484,7 @@ button.rpt-mistakes-showminor:hover {
   color: var(--ink);
 }
 .rpt-axis-node-minor .rpt-axis-detail {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mute);
 }
 .rpt-axis-seg {
@@ -4497,7 +4497,7 @@ button.rpt-mistakes-showminor:hover {
   border: none;
   background: transparent;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
   cursor: pointer;
 }
@@ -4554,7 +4554,7 @@ button.rpt-mistakes-showminor:hover {
   gap: 6px;
 }
 .rpt-breakdown-tag {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ink-2);
   border: 1px solid var(--hairline);
   border-radius: 3px;
@@ -4709,7 +4709,7 @@ button.rpt-mistakes-showminor:hover {
   border-radius: 0 7px 7px 0;
   color: var(--accent-text);
   padding: 5px 8px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
 }
 /* 运行中禁用整个 split(brief 口径):箭头此前只靠 disabled 属性挡点击,
@@ -4795,7 +4795,7 @@ button.rpt-mistakes-showminor:hover {
   right: 10px;
 }
 .rpt-finding-sev {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   border-radius: 4px;
@@ -4817,7 +4817,7 @@ button.rpt-mistakes-showminor:hover {
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
   background: color-mix(in srgb, var(--gold) 12%, transparent);
   color: var(--gold);
   white-space: nowrap;
@@ -4912,7 +4912,7 @@ button.rpt-mistakes-showminor:hover {
   border: 1px solid var(--hairline);
   border-radius: 8px;
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-2);
   z-index: 5;
   cursor: pointer;
@@ -4931,7 +4931,7 @@ button.rpt-mistakes-showminor:hover {
   );
 }
 .rpt-gcd-legend {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent-text);
 }
 .rpt-gcd-cursor-badge {
@@ -5074,7 +5074,7 @@ button.rpt-mistakes-showminor:hover {
   color: var(--accent-text);
   border-radius: 5px;
   padding: 0 5px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .rpt-arc-turning:hover {
@@ -5244,7 +5244,7 @@ button.rpt-mistakes-showminor:hover {
 }
 .dash-nb-caret {
   color: var(--mute);
-  font-size: 10px;
+  font-size: 11px;
 }
 .dash-nb-cat {
   font-weight: 500;
@@ -5283,7 +5283,7 @@ button.rpt-mistakes-showminor:hover {
 }
 .dash-nb-actions button {
   padding: 0 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dash-nb-actions button.active {
   color: var(--win);
@@ -5303,7 +5303,7 @@ button.rpt-mistakes-showminor:hover {
   border-radius: 0 6px 6px 0;
 }
 .rpt-finding-deep-tag {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--accent-text);
   letter-spacing: 0.08em;
@@ -5656,7 +5656,7 @@ button.rpt-kpi:hover {
 /* Passive-dispel suffix on the 驱散 chip (UI review 2026-08-21 #3) */
 .rpt-kpi-passive {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: 6px;
 }
 
@@ -5714,7 +5714,7 @@ button.rpt-kpi:hover {
 }
 .rpt-ccbreak-foot {
   color: var(--mute);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 8px;
 }
 /* 报告 bug 弹层(2026-08-02) */
@@ -5744,7 +5744,7 @@ button.rpt-kpi:hover {
   flex-wrap: wrap;
 }
 .rpt-bug-result {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--mute);
   word-break: break-all;
 }
@@ -6069,7 +6069,7 @@ button.rpt-kpi:hover {
 }
 .rpt-video-bt-death {
   fill: var(--loss);
-  font-size: 11px;
+  font-size: 12px;
 }
 .rpt-video-bt-head {
   stroke: var(--gold);
@@ -6139,7 +6139,7 @@ button.rpt-kpi:hover {
 .rpt-skel-seg span {
   border-radius: 4px;
   padding: 3px 12px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: normal;
   color: var(--ink-2);
 }
@@ -6334,7 +6334,7 @@ button.rpt-kpi:hover {
 .cs-avatar-sm {
   width: 18px;
   height: 18px;
-  font-size: 10px;
+  font-size: 11px;
   border-width: 1px;
 }
 /* spec icon avatar: the round icon inside a class-coloured ring */
@@ -6604,16 +6604,298 @@ button.rpt-kpi:hover {
 /* events table: whose pet a pet source is */
 .rpt-events-owner {
   margin-left: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: #9a9eb2;
 }
 
 /* notebook entry on the record overview: which character it was */
 .dash-nb-char {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent-text);
   border: 1px solid var(--accent-line);
   border-radius: 999px;
   padding: 0 7px;
   white-space: nowrap;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Visual pass (2026-11, mockup approved on the Design canvas).
+   Three rules, applied over the component styles above:
+   1. a card is a surface, not an outline — top-level cards lose their border
+      and nested boxes become hairline-separated sections;
+   2. colour has one job each: accent = clickable, win/loss = result or
+      rating change, gold = warning; status notes are a dot + text, not a
+      coloured outline pill;
+   3. no UI text under 11px (the two replacements at the top of this pass:
+      10 → 11, 11 → 12) and --mute raised to pass 4.5:1 on --surface.
+   ════════════════════════════════════════════════════════════════════════ */
+.rpt-meters-card,
+.rpt-timeline,
+.dash-card,
+.rpt-ledger,
+.rpt-engage,
+.rpt-recap,
+.coach-chat-card {
+  background: var(--surface);
+  border-color: transparent;
+  border-radius: 12px;
+}
+.rpt-meters-card,
+.dash-card,
+.rpt-ledger,
+.rpt-engage,
+.rpt-recap {
+  padding: 14px 16px;
+}
+/* a ledger nested in the engagement panel stays flat (rule above it) */
+.rpt-engage-body > .rpt-ledger {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+/* nested box inside the death recap → a section */
+.rpt-recap-mitigation {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 0 0;
+}
+/* summary card: the verdict sentence + whole-match figures */
+.rpt-summary {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rpt-verdict {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.rpt-verdict-text {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.rpt-verdict-open {
+  flex: none;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-soft);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rpt-verdict-open:hover {
+  color: var(--ink);
+}
+.rpt-kpi-row {
+  gap: 6px 28px;
+}
+.rpt-kpi {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+}
+.rpt-kpi-k {
+  color: var(--ink-2);
+}
+.rpt-kpi-v {
+  font-weight: 600;
+}
+/* status notes: dot + text */
+.rpt-ledger-chip {
+  --chip-c: var(--mute);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.rpt-ledger-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--chip-c);
+}
+.rpt-ledger-chip-bad {
+  --chip-c: var(--loss);
+  color: var(--loss);
+}
+.rpt-ledger-chip-warn {
+  --chip-c: var(--gold);
+  color: var(--ink-2);
+}
+.rpt-ledger-chip-good {
+  --chip-c: var(--win);
+  color: var(--ink-2);
+}
+.rpt-ledger-chip-kill {
+  --chip-c: var(--gold);
+  color: var(--gold);
+}
+.rpt-ledger-chip-dim {
+  color: var(--mute);
+}
+.rpt-ledger-row {
+  gap: 6px 14px;
+  font-size: 12.5px;
+  padding: 5px 0;
+}
+.rpt-recap-pill {
+  border: none;
+  padding: 0;
+  margin-left: 8px;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.rpt-recap-verdictish {
+  font-size: 12.5px;
+  margin: 6px 0;
+}
+/* GCD lane entries: filled, not outlined */
+.rpt-gcd-act {
+  border-color: transparent;
+}
+/* match list: rating change is a result colour; the batch checkbox shows on
+   hover / focus / when ticked instead of a white square on every row */
+.mlr-dur,
+.mlr-rating {
+  font-size: 12px;
+}
+.mlr-rating.up {
+  color: var(--win);
+}
+.mlr-rating.down {
+  color: var(--loss);
+}
+.mlr-check {
+  opacity: 0;
+  transition: opacity 80ms;
+}
+li:hover .mlr-check,
+.mlr-check:focus-within,
+.mlr-check:has(input:checked) {
+  opacity: 1;
+}
+.app-sidebar input[type="date"],
+.app-sidebar select {
+  color-scheme: dark;
+}
+/* record overview: a list (one character per row, one line per bracket)
+   instead of equal-height cards with empty halves */
+.cs-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+.cs-summary > div {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  background: none;
+}
+.cs-summary .cs-k {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.cs-summary .cs-v {
+  font-size: 15px;
+}
+.cs-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 2px 20px;
+  overflow-x: auto;
+}
+.cs-card {
+  display: grid;
+  grid-template-columns: 250px minmax(560px, 1fr);
+  align-items: center;
+  gap: 16px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 14px 0;
+}
+.cs-card:first-child {
+  border-top: none;
+}
+.cs-card:hover {
+  border-color: var(--hairline);
+}
+.cs-card:first-child:hover {
+  border-color: transparent;
+}
+.cs-card:hover .cs-card-name {
+  color: var(--accent-text);
+}
+.cs-card-head .cs-chev {
+  display: none;
+}
+.cs-lines {
+  gap: 12px;
+}
+.cs-line {
+  grid-template-columns: 104px 150px 190px minmax(0, 1fr);
+  gap: 16px;
+  padding: 0;
+  border-top: none;
+}
+.cs-line-rating {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+.cs-line-num {
+  font-size: 20px;
+}
+.cs-bar {
+  height: 4px;
+  overflow: visible;
+}
+.cs-bar-mid {
+  top: -2px;
+  bottom: -2px;
+}
+.cs-spark {
+  width: 100%;
+  max-width: 440px;
+  height: 36px;
+  justify-self: end;
+}
+.cs-kpis > div {
+  border: none;
+  border-radius: 12px;
+}
+.cs-chip {
+  border-color: transparent;
+  background: var(--surface);
+}
+.cs-chip-on {
+  background: var(--accent-fill);
+}
+.cs-empty {
+  border: none;
 }

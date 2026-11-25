@@ -20,8 +20,7 @@ export const enStats = {
   "stats.kpi.sparkTitle": "Open the full rating curve",
   "stats.kpi.sparkAria": "Expand the rating curve",
   "stats.kpi.medianDuration": "Median duration",
-  "stats.practice.title":
-    "What to practise this week — mistakes notebook + long-term patterns",
+  "stats.practice.title": "What to practise this week",
   "stats.practice.patternsOnOverview": "Long-term patterns are computed across all characters — see the overview.",
   "stats.learning.consolidating": "Consolidating…",
   "stats.learning.consolidate": "Consolidate again",

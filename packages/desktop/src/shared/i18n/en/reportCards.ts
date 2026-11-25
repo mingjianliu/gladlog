@@ -214,6 +214,16 @@ export const enReportCards = {
   "report.mistakesCard.sameWave": " + same wave: {list}",
 
   // ── KpiChips.tsx ──
+  // ── VerdictLine.tsx ──
+  "report.verdict.died": "{time} {name} died",
+  "report.verdict.unpressed": "{spell} was up and not pressed",
+  "report.verdict.yours": "You",
+  "report.verdict.whose": "{name}",
+  "report.verdict.missed": "{caster} could have given {spell}",
+  "report.verdict.blocked": "{caster} could not give {spell} (CC'd)",
+  "report.verdict.sep": "; ",
+  "report.verdict.end": ".",
+  "report.verdict.open": "Open death recap",
   "report.kpi.findings": "Findings",
   "report.kpi.majorN": "{n} major",
   "report.kpi.restN": "{n} average",

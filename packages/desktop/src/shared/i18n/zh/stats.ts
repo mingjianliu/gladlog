@@ -15,7 +15,7 @@ export const zhStats = {
   "stats.kpi.sparkTitle": "点开评分曲线大图",
   "stats.kpi.sparkAria": "展开评分曲线大图",
   "stats.kpi.medianDuration": "时长中位",
-  "stats.practice.title": "这周该练什么 —— 错题本 + 长期规律(1e 合卡)",
+  "stats.practice.title": "这周该练什么",
   "stats.practice.patternsOnOverview": "长期规律按全部角色统计，回到战绩总览查看。",
   "stats.learning.consolidating": "整合中…",
   "stats.learning.consolidate": "重新整合",
