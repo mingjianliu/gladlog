@@ -17,6 +17,10 @@
  *    external (`. Kind = trinketed / broke out. Non-zero on a capture taken
  *    before rulings R98 + R115 landed, 0 on one taken with them. Counted: every FAILED
  *    attempt of the owner's side whose `primary` is the trinket or a break.
+ *    An external that IS the immunity the line already names (Blessing of
+ *    Protection / Spellwarding behind `forced a full immunity`, the
+ *    producer's own `immunityNames`) is not printed a second time — an
+ *    inventory kind, never a failure.
  *  - `breakWithOwnWallUnnamed`: inventory, never a failure — the same
  *    attempts with a wall of the target's own (`defensivePopped`) that the
  *    break's text does not name either (R98 asked about externals).
@@ -30,7 +34,9 @@ export const CHECKS = [
   "breakWithOwnWallUnnamed",
 ] as const;
 const OWN_WALL = "a wall of the target's own beside the break";
+const IS_THE_IMMUNITY = "the external is the immunity the line names";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  `breakWithExternalUnnamed|${IS_THE_IMMUNITY}`,
   `breakWithOwnWallUnnamed|${OWN_WALL}`,
 ]);
 
@@ -69,9 +75,12 @@ export function run(ctx: IRoundCtx): void {
       (p) => p.from === Math.floor(a.fromSeconds) && p.target === a.targetName,
     );
     const fact = `${ctx.roundKey}|${owner.reaction}|${a.targetUnitId}|${Math.round(a.fromSeconds * 1000)}`;
-    const externals = attr.externalReceived.filter(
+    const received = attr.externalReceived.filter(
       (n) => !(attr.brokeOut ?? []).includes(n),
     );
+    // the producer's own set: what made the immunity the line names
+    const immunity = attr.immunityBaited ? (attr.immunityNames ?? []) : [];
+    const externals = received.filter((n) => !immunity.includes(n));
     const detail = `${a.targetName} ${a.fromSeconds.toFixed(1)}–${a.toSeconds.toFixed(1)}s ${attr.primary}${attr.brokeOut?.length ? ` (${attr.brokeOut.join("/")})` : ""}${attr.immunityBaited ? " + immunity" : ""}; externals ${externals.join("/") || "-"}; own walls ${attr.defensivePopped.join("/") || "-"}`;
     if (
       externals.length > 0 &&
@@ -83,6 +92,19 @@ export function run(ctx: IRoundCtx): void {
         ctx.start + a.fromSeconds * 1000,
         fact,
         detail,
+        line?.line,
+      );
+    if (
+      externals.length === 0 &&
+      received.length > 0 &&
+      (line?.failed ?? "").includes("forced a full immunity")
+    )
+      ctx.violate(
+        "breakWithExternalUnnamed",
+        IS_THE_IMMUNITY,
+        ctx.start + a.fromSeconds * 1000,
+        fact,
+        `${detail}; immunity from ${immunity.join("/")}`,
         line?.line,
       );
     if (attr.defensivePopped.length > 0)
