@@ -32,7 +32,9 @@ import {
   CANCEL_CC_NEAR_S,
   forcedStopInstantsMs,
   STOPPED_JUST_BEFORE_S,
+  targetDropInstantsMs,
 } from "./castStopEvidence";
+import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
 import { kickCastSpellId, LANDED_PAIR_MS } from "./enemyInterrupts";
 import { PET_COMMAND_MS } from "./petCommands";
 import type { RawStreams } from "./rawStreams";
@@ -186,10 +188,7 @@ export function missedKickText(
  * candidate reads this. */
 export type MissedKickKind = "immune" | "reflected" | "missed";
 export function missedKickKind(
-  k: Pick<
-    IKickAuditEntry,
-    "kickMiss" | "refusedAtCastSpellName" | "targetId"
-  >,
+  k: Pick<IKickAuditEntry, "kickMiss" | "refusedAtCastSpellName" | "targetId">,
 ): MissedKickKind {
   if (!k.refusedAtCastSpellName || !k.kickMiss) return "missed";
   // the row has to be on the unit whose bar was running: a kick aimed at a
@@ -438,6 +437,15 @@ export function analyzeKickAudit(
    *  - `unfinished` (the silenced branch): any end but a completion or
    *    somebody's interrupt — whether the silence or the target stopped it
    *    the log cannot tell. */
+  // the kicker's side: the players that are not the kicked side's
+  let dropMs: number[] | undefined;
+  const kickerSideDropMs = () =>
+    (dropMs ??= targetDropInstantsMs(
+      allUnits.filter(
+        (u) => u.info && !enemyPlayers.some((p) => p.id === u.id),
+      ),
+      TARGETED_CC_DODGE_SPELLS,
+    ));
   const openCastOf = (
     enemy: ICombatUnit,
     kickMs: number,
@@ -515,12 +523,27 @@ export function analyzeKickAudit(
           firstDeathMs(u) <= kickMs,
       );
     };
+    // pipeline T194 (GH #173 item 35): a press of the kicker's side that
+    // drops its presser as a target (`targetDropInstantsMs` — Shadowmeld,
+    // Transcendence: Transfer, Feign Death) between the bar's start and the
+    // kick. A START row names no target, so the bar may have lost its own:
+    // whether the unit faked the log cannot tell, and the kick is `missed`,
+    // never called a juke — the reading `castBarOutcomesOf` gives the same
+    // bar from the caster's own prompt (`dodgeMs` → "dodged"), and the
+    // death of the bar's likely target above. 605 + 12.1.5 captures: 15
+    // `JUKED by fake` lines had one.
+    const targetDroppedInside = () => {
+      const startMs = matchStartMs + Math.round(last.t * 1000);
+      return kickerSideDropMs().some((ms) => ms >= startMs && ms <= kickMs);
+    };
     const open =
       want === "unfinished"
         ? end.kind !== "completed" && end.kind !== "kicked"
         : end.kind === "none"
-          ? !forcedInside() && !supersededInside()
-          : end.kind === "stopped" && end.near === null;
+          ? !forcedInside() && !supersededInside() && !targetDroppedInside()
+          : end.kind === "stopped" &&
+            end.near === null &&
+            !targetDroppedInside();
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };
 

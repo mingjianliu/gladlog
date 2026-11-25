@@ -70,8 +70,8 @@ import {
 import {
   CANCEL_CC_NEAR_S,
   DISPLACEMENT_EVIDENCE_IDS,
-  feignDeathInstantsMs,
   STOPPED_JUST_BEFORE_S,
+  targetDropInstantsMs,
 } from "./castStopEvidence";
 import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
 import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
@@ -237,16 +237,10 @@ export function ownerCastBarOutcomes(params: {
   // Forward check, 1,925 interruption rows of the 91 fact7 files: within
   // ±100 ms of one 4.8 % of feigns and 5.7 % of Shadowmelds, against 2.4 %
   // by chance; Vanish 2.3 %, invisibility 1.4 %, so neither joins them.
-  const dodgeMs = (params.enemies ?? []).flatMap((e) => [
-    ...(e.spellCastEvents ?? [])
-      .filter(
-        (c) =>
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          TARGETED_CC_DODGE_SPELLS.has(c.spellId ?? ""),
-      )
-      .map((c) => c.logLine.timestamp),
-    ...feignDeathInstantsMs(e),
-  ]);
+  const dodgeMs = targetDropInstantsMs(
+    params.enemies ?? [],
+    TARGETED_CC_DODGE_SPELLS,
+  );
   const unloggedSilenceMs =
     params.allUnits && params.roundEndAtMs !== undefined
       ? unloggedSilencesOnOwner({

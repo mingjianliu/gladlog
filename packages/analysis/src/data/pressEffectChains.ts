@@ -18,8 +18,9 @@
  *    movement speed by $s1% for $d. Upon expiring, increases your movement
  *    speed by $186258s1% for another $186258d." 290 press facts, 3 + 9 s.
  *  - the same burst's copy on the hunter's allies, 356781 → 186258 (codex
- *    85-tk-G-T40-1 #3): the line reads that copy when the hunter's own row
- *    is logged ahead of the cast row. Its second phase is the ally's own
+ *    85-tk-G-T40-1 #3): the line reads that copy only when the hunter has
+ *    no row of its own — one logged just ahead of the cast row is the
+ *    press's (pipeline T194, `pressDuration`). Its second phase is the ally's own
  *    aura (`PRESS_EFFECT_CHAIN_HOLDER_SOURCED`): 3cd1a2aa at 1:41, 3.0 +
  *    9.0 s on the ally while the hunter's own, with Aspect of the Fox, ran
  *    3.0 + 13.0 s.

@@ -161,3 +161,31 @@ export function feignDeathInstantsMs(
       .map((a) => a.timestamp),
   ];
 }
+
+/**
+ * The instants (epoch ms) at which one of `units` pressed something that
+ * drops it as a target: a SUCCESS of `dropSpellIds` — the callers pass
+ * `TARGETED_CC_DODGE_SPELLS` (Shadowmeld, Transcendence: Transfer;
+ * ccTrinketAnalysis.ts, which this module cannot import: a cycle) — and
+ * its Feign Deaths (`feignDeathInstantsMs`, no cast row). One list for the
+ * two readers of "the cast bar lost its
+ * target": `castBarOutcomesOf`'s `dodgeMs` (castCancels.ts) and the kick
+ * audit's juke test (kickAudit.ts `openCastOf`, pipeline T194).
+ */
+export function targetDropInstantsMs(
+  units: ReadonlyArray<
+    Pick<ICombatUnit, "spellCastEvents" | "unconsciousRecords" | "auraEvents">
+  >,
+  dropSpellIds: ReadonlySet<string>,
+): number[] {
+  return units.flatMap((e) => [
+    ...(e.spellCastEvents ?? [])
+      .filter(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          dropSpellIds.has(c.spellId ?? ""),
+      )
+      .map((c) => c.logLine.timestamp),
+    ...feignDeathInstantsMs(e as never),
+  ]);
+}

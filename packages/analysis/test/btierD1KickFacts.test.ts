@@ -747,3 +747,45 @@ describe("kick-priority-missed youChannelling (B7b)", () => {
     expect("youChannelling" in none[0]!.facts).toBe(false);
   });
 });
+
+describe("kickAudit: a target-dropping press inside the bar is no juke (pipeline T194)", () => {
+  const SHADOWMELD = "58984";
+  // the priest began a Benediction at 1 s that has no end row; the kick
+  // goes out at 2 s
+  const audit = (melder: { id: string; atS: number; enemy?: boolean }) => {
+    const p1 = kicker(2);
+    const e1 = priest(10, 20);
+    const other = makeUnit(melder.id, {
+      name: "Other",
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          SHADOWMELD,
+          T0 + melder.atS * 1000,
+          melder.id,
+          "Other",
+          melder.id,
+          "Other",
+          0,
+          "Shadowmeld",
+        ),
+      ],
+    } as any);
+    const enemies = melder.enemy ? [e1, other] : [e1];
+    const units = Object.fromEntries([p1, e1, other].map((u) => [u.id, u]));
+    return analyzeKickAudit(p1, enemies, { ...combat, units })[0]!;
+  };
+
+  it("reads a bar nobody dropped out of as the juke it was", () => {
+    // pressed before the bar began: not inside it
+    expect(audit({ id: "p2", atS: 0.5 }).result).toBe("juked");
+    // the kicked side's own Shadowmeld drops no target of the bar
+    expect(audit({ id: "e2", atS: 1.5, enemy: true }).result).toBe("juked");
+  });
+
+  it("a teammate of the kicker dropped as a target inside the bar: missed, as the cast-bar reader's `dodged`", () => {
+    const k = audit({ id: "p2", atS: 1.5 });
+    expect(k.result).toBe("missed");
+    expect(missedKickText(k)).toBe("hit nothing");
+  });
+});

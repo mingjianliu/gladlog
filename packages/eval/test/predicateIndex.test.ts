@@ -608,6 +608,13 @@ const INDEX: PredicateRow[] = [
     symbol: "feignDeathInstantsMs",
     mod: castStopEvidence,
   },
+  // pipeline T194: the target-drop presses, for the cast-bar reader and the
+  // kick audit
+  {
+    file: `${A}/utils/castStopEvidence.ts`,
+    symbol: "targetDropInstantsMs",
+    mod: castStopEvidence,
+  },
   // fact11 D5 / D6: the aura-less silence and the [SILENCE] set
   {
     file: `${A}/utils/unloggedSilence.ts`,

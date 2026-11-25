@@ -370,16 +370,28 @@ describe("[PRESS] lasts — a series' follow-ups at their own reading (codex 85-
     ).toBe(9);
   });
 
-  it("#3 the ally's copy heads a series too: its second phase is the ally's own aura", () => {
+  // codex 85-tk-G-T40-1 #3, re-read by pipeline T194 (GH #218 3.6): the
+  // ally's copy heads a series of the ALLY's own aura, 3 + 9 s. It is the
+  // press's length only when the hunter has no row of its own.
+  const allyCopy = (ownRowAheadMs: number | undefined) => {
     const cast = makeSpellCastEvent("186257", T, "hun", "Hun", "hun", "Hun");
+    const own =
+      ownRowAheadMs === undefined
+        ? undefined
+        : makeAuraEvent(
+            APPLIED,
+            "186257",
+            T - ownRowAheadMs,
+            "hun",
+            "hun",
+            "BUFF",
+          );
     const hun = makeUnit("hun", {
       spec: CombatUnitSpec.Hunter_Marksmanship,
+      // Aspect of the Fox: +4 s on the hunter's own second phase
       info: { talents: [], pvpTalents: ["1219162"] } as any,
       spellCastEvents: [cast],
-      // the hunter's own row, logged 2 ms ahead of the cast row
-      auraEvents: [
-        makeAuraEvent(APPLIED, "186257", T - 2, "hun", "hun", "BUFF"),
-      ],
+      auraEvents: own ? [own] : [],
     });
     const head = makeAuraEvent(APPLIED, "356781", T, "hun", "ally", "BUFF");
     const second = makeAuraEvent(
@@ -397,7 +409,25 @@ describe("[PRESS] lasts — a series' follow-ups at their own reading (codex 85-
         second,
       ],
     });
-    const d = pressDuration(hun, cast as any, [hun, ally], hun.spellCastEvents);
+    return {
+      d: pressDuration(hun, cast as any, [hun, ally], hun.spellCastEvents),
+      own,
+      head,
+      ally,
+      second,
+    };
+  };
+
+  it("#3 the hunter's own row, logged ahead of the cast row, is the press's: 3 + 13 s with Aspect of the Fox", () => {
+    // 605 capture: 22 press facts printed the ally copy's 12 s for a hunter
+    // whose own series ran 16 s
+    const { d, own } = allyCopy(2);
+    expect(d?.row).toBe(own);
+    expect(d?.durationSeconds).toBe(16);
+  });
+
+  it("#3 with no row of the hunter's own, the ally's copy stands: its second phase is the ally's aura", () => {
+    const { d, head, ally, second } = allyCopy(undefined);
     expect(d?.row).toBe(head);
     expect(d?.followUps).toEqual([
       { spellId: "186258", source: ally, applied: second },

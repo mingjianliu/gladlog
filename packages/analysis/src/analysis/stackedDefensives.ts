@@ -214,6 +214,27 @@ export function stackedDefensivePairs(
     } catch {
       continue;
     }
+    // pipeline T194 (GH #207 item 9): one press that runs as two auras on
+    // the unit — Touch of Karma's 10 s marker 122470 and its absorb 125174,
+    // both the key 122470 — is one defensive of the stack. Left as two
+    // intervals it printed the same `[STACKED DEFENSIVES]` line twice (605
+    // + 12.1.5 captures: 14 line facts, every one a Touch of Karma). Of two
+    // overlapping runs of one key from one source the shorter stands: the
+    // defensive was up no longer than the aura of it that ended first.
+    const one: IAuraInterval[] = [];
+    for (const iv of ivs) {
+      const key = stackedDefensiveKeyOf(iv.spellId);
+      const at = one.findIndex(
+        (o) =>
+          stackedDefensiveKeyOf(o.spellId) === key &&
+          o.srcUnitName === iv.srcUnitName &&
+          o.fromS < iv.toS &&
+          iv.fromS < o.toS,
+      );
+      if (at < 0) one.push(iv);
+      else if (iv.toS - iv.fromS < one[at]!.toS - one[at]!.fromS) one[at] = iv;
+    }
+    ivs = one.sort((a, b) => a.fromS - b.fromS);
     for (let i = 0; i < ivs.length; i++) {
       for (let j = i + 1; j < ivs.length; j++) {
         const first = ivs[i]!;

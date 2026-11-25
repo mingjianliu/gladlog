@@ -31,13 +31,15 @@
  *    `JUKE_LOOKBACK_MS` before the kick, with a target-dropping press of the
  *    KICKER's side between that bar's start and the kick. The presses are the
  *    ones `ownerCastBarOutcomes` hands `castBarOutcomesOf` as `dodgeMs`:
- *    SUCCESS rows of `TARGETED_CC_DODGE_SPELLS` and `feignDeathInstantsMs`.
+ *    the product's `targetDropInstantsMs` (castStopEvidence.ts).
  *    (The unit that pressed is the one the BAR may have been on, the kick
  *    target's own target — a START row names no target, so this is an upper
  *    bound on bars that lost their target.)
  *    Population (`bump`): every juked / missed kick of the owner's with a
- *    target and such a bar. Kinds: `juked, target pressed X` /
- *    `missed, target pressed X`. The detail carries what `castBarOutcomesOf`
+ *    target and such a bar. Kinds: `juked, a target-drop press inside the
+ *    bar` (in total: the audit reads such a kick `missed` since pipeline
+ *    T194) / out of total `missed, a target-drop press inside the bar`; the
+ *    detail names the press. The detail carries what `castBarOutcomesOf`
  *    says of that bar when handed the same `dodgeMs`.
  *
  *  - `anotherSchoolIntersects` (207.8): the kick-eaten menu rows that say
@@ -63,7 +65,7 @@ import {
   JUKE_LOOKBACK_MS,
 } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { PRESS_LANDED_SAME_INSTANT_MS } from "@gladlog/analysis/src/utils/castMissRows";
-import { feignDeathInstantsMs } from "@gladlog/analysis/src/utils/castStopEvidence";
+import { targetDropInstantsMs } from "@gladlog/analysis/src/utils/castStopEvidence";
 import {
   analyzePlayerCCAndTrinket,
   POST_KICK_WINDOW_S,
@@ -90,9 +92,14 @@ export const CHECKS = [NH, KD, AS] as const;
 const NH_PRINTED = "folded pair of heals inside a printed stretch";
 const NH_UNPRINTED = "folded pair of heals, no printed line affected";
 const AS_UNRESOLVED = "press not found in the log";
+/** the defect: the audit calls a juke a bar that may have lost its target */
+const KD_JUKED = "juked, a target-drop press inside the bar";
+/** the reading the audit gives since pipeline T194 */
+const KD_MISSED = "missed, a target-drop press inside the bar";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `${NH}|${NH_UNPRINTED}`,
   `${AS}|${AS_UNRESOLVED}`,
+  `${KD}|${KD_MISSED}`,
 ]);
 
 const FEIGN_DEATH_ID = "5384";
@@ -213,24 +220,26 @@ function kickDodge(ctx: IRoundCtx): void {
   if (enemies.length === 0) return;
   // the kicker's side's target-dropping presses, as `ownerCastBarOutcomes`
   // collects the `dodgeMs` of a unit's opponents
+  // the product's own list (`targetDropInstantsMs`), one unit at a time so
+  // the row can say who pressed; the name is the row's, for the detail only
   const dodges: Array<{ ms: number; name: string; by: string }> =
-    friends.flatMap((e) => [
-      ...((e.spellCastEvents ?? []) as any[])
-        .filter(
+    friends.flatMap((e) =>
+      targetDropInstantsMs([e], TARGETED_CC_DODGE_SPELLS).map((ms) => {
+        const row = ((e.spellCastEvents ?? []) as any[]).find(
           (c) =>
-            ev(c) === SUCCESS && TARGETED_CC_DODGE_SPELLS.has(c.spellId ?? ""),
-        )
-        .map((c) => ({
-          ms: tsOf(c) as number,
-          name: nameOf(c.spellId, c.spellName ?? ""),
+            ev(c) === SUCCESS &&
+            tsOf(c) === ms &&
+            TARGETED_CC_DODGE_SPELLS.has(c.spellId ?? ""),
+        );
+        return {
+          ms,
+          name: row
+            ? nameOf(row.spellId, row.spellName ?? "")
+            : nameOf(FEIGN_DEATH_ID, "Feign Death"),
           by: e.name as string,
-        })),
-      ...feignDeathInstantsMs(e).map((ms) => ({
-        ms,
-        name: nameOf(FEIGN_DEATH_ID, "Feign Death"),
-        by: e.name as string,
-      })),
-    ]);
+        };
+      }),
+    );
   const failed = ctx.rawStreams().castFailed;
   // the call the `[KICK]` lines are rendered from (timelineSections/kick.ts)
   for (const k of analyzeKickAudit(owner, enemies, ctx.legacy as never)) {
@@ -265,7 +274,7 @@ function kickDodge(ctx: IRoundCtx): void {
     const head = `${fmtTime(kickS)}  [KICK]   your ${k.kickSpellName}`;
     ctx.violate(
       KD,
-      `${k.result}, target pressed ${press.name}`,
+      k.result === "juked" ? KD_JUKED : KD_MISSED,
       kickMs,
       `${owner.id}#${Math.floor(kickS * 10)}`,
       `${k.kickSpellName} at ${kickS.toFixed(2)} on ${k.targetName ?? "?"} reads ${k.result}${k.jukedBySpellName ? ` by ${k.jukedBySpellName}` : ""}; its ${nameOf(bar.id, bar.name)} bar began ${bar.t.toFixed(2)} and ${press.by} pressed ${press.name} at ${((press.ms - ctx.start) / 1000).toFixed(2)} (castBarOutcomesOf with these presses: ${near})`,

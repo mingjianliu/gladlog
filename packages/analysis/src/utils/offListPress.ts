@@ -754,6 +754,31 @@ export function pressDuration(
       undefined,
       AURA_BEFORE_CAST_ROW_MAX_MS,
     );
+  // pipeline T194 (GH #218 3.6): the press's copy on an ally whose follow-up
+  // the ALLY applies to itself (`PRESS_EFFECT_CHAIN_HOLDER_SOURCED` — Aspect
+  // of the Cheetah's 356781) is the first row at or after the cast row when
+  // the caster's own aura was logged just ahead of it, and the line then
+  // priced the caster's press from the ally's second phase: 3 + 9 s printed
+  // for a hunter whose own, with Aspect of the Fox, ran 3 + 13 s (605
+  // capture: 22 press facts, 2 read the hunter's own row). The caster's own
+  // row of the cast's own aura is the press's; the copy stands only when
+  // the caster has none.
+  if (
+    candidates[0] !== undefined &&
+    candidates[0].unit.id !== caster.id &&
+    PRESS_EFFECT_CHAIN_HOLDER_SOURCED.has(candidates[0].row.spellId ?? "") &&
+    cast.spellId !== undefined
+  ) {
+    const own = pressAuraCandidates(
+      caster,
+      cast,
+      [caster],
+      nextPressMs,
+      new Set([cast.spellId]),
+      AURA_BEFORE_CAST_ROW_MAX_MS,
+    );
+    if (own.length) candidates = [...own, ...candidates];
+  }
   // an empowered press lands at its release (codex 20-179a #3: Dream
   // Breath's bundle at a 2 s release is no re-state)
   const landAt = empowerReleaseMs(caster, cast, nextPressMs) ?? at;
