@@ -1922,5 +1922,13 @@
  *  span. A burst with no ally offensive cooldown on the player says so: `No
  *  ally offensive CD on you during this burst.` (was `Solo burst`).
  *  See docs/prompt-version-history.md.
+ *
+ * v667 (2026-11-25; pipeline batch B251, T256): Whether a landed control
+ *  answers an enemy burst is decided by the control LANDING inside the
+ *  response span, while the printed time stays its press (ruling R109,
+ *  extending R90): a press a moment before the span whose control landed
+ *  inside it now answers (`2.2s before it opened`), and a press at the
+ *  span's end whose control landed past it no longer does.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 666;
+export const PROMPT_VERSION = 667;

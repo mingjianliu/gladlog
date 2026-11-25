@@ -8645,3 +8645,27 @@ and 005dd9a6 when scanned alone (279 checked / 50 flagged each), so the full-
 run count depends on the run's other archives (scan nondeterminism); in-total
 20,693 -> 20,677. The 12.1.5 part was not measured for this batch (B251 onward
 report it).
+
+v667 (pipeline batch B251, T256; ruling R109): a control answers an enemy
+burst when it LANDS inside the response span; the printed time stays the
+press. Measured per part (parent = the T161 tree on 2ce4285ad, candidate =
+T256 on it; analysis code otherwise identical to c711793af). 605 (3,519
+contexts): 19 contexts in 7 archives change; [BURST ANSWERED] lines 12
+restated (a press just before the span whose control landed inside it now
+answers, e.g. Binding Shot `2.2s before it opened`), 4 newly present, 3 gone
+(the control landed past the span); the [BURST ANSWERED] legend newly present
+in 7 contexts; 1 menu row added. 12.1.5 (285 files): 30 contexts in 10
+archives; 15 restated, 6 newly present, 12 gone, the legend gone where the
+round no longer lists one; 2 menu rows removed. Sum: 49 contexts, 27 restated,
+10 new, 15 gone. Gates 0 failures on both parts. scan5 (subset of the changed
+archives, both parts): in-total 574 -> 573 (605) and 1,611 -> 1,612 (12.1.5).
+The rises are judged: anothersOwnWallById Fade / Aspect of the Turtle moves
+between `the window's only kind of answer` and `beside another answer` (605
+15+0 -> 12+3, 12.1.5 0+3 -> 3+0: the same rows, the other answer came or
+went); answeredOnlyByAnothersWall +1 on 12.1.5 (08d8c005 r4 2:25: the
+Entangling Roots that landed 7.0 s in, past the window, no longer answers it,
+leaving a teammate's Tree of Life pressed 0.9 s before); new inventory
+aimedControlLandsPastSpan 0 -> 6 (12.1.5) is the same shape. Falls:
+troughReadPastCut and respondedOnRefusedPress follow the restated windows.
+This batch also carries the report-synth visual baseline for B250's chip (单开
+-> 身上无队友大招), user-reviewed.
