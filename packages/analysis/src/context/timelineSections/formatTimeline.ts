@@ -734,7 +734,7 @@ export function formatTimeline(
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
     ...(procLinesEmitted
       ? [
-          "[PROC] = an automatically applied effect (a passive or a talent-replaced button; `(no press)` = a cooldown's aura a talent or another spell put up, the button not spent); no button of ITS OWN was pressed at that second. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
+          "[PROC] = an automatically applied effect (a passive or a talent-replaced button; `(no press)` = a cooldown's aura a talent or another spell put up, the button not spent); the [PROC] line itself is not a press of that button — when the player also pressed it in the same second, that press has its own line. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
         ]
       : []),
     "",
