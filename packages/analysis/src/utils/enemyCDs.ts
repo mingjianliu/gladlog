@@ -19,6 +19,7 @@ import {
 import { isOffensivePressFactFor } from "../data/enemyHealCds";
 import { isHealerHeldOffensive } from "../data/healerHeldOffensive";
 import {
+  PERIODIC_DAMAGE_AURA_IDS,
   PERIODIC_TRIGGER_SPELLS,
   SCRIPTED_PERIODIC_TRIGGER_AURA_IDS,
 } from "../data/periodicAuraGenerated";
@@ -1027,12 +1028,28 @@ function observedEffectEnd(
 export const PERIODIC_LAST_TRIGGER_SLACK_MS = 100;
 
 /**
+ * Is `auraId` a channel whose own aura deals its ticks — DB2: a channelled
+ * spell (`CHANNELED_SPELL_IDS`) carrying a periodic-damage aura itself
+ * (`PERIODIC_DAMAGE_AURA_IDS`), the tick rows under the aura's own id
+ * (Disintegrate 356995)? Its last tick is logged just after its REMOVED, as
+ * a periodic trigger's is (`lastPeriodicTriggerEndS`, pipeline T248).
+ */
+export function isOwnTickChannelAura(auraId: string): boolean {
+  return (
+    CHANNELED_SPELL_IDS.has(auraId) && PERIODIC_DAMAGE_AURA_IDS.has(auraId)
+  );
+}
+
+/**
  * fact10 D29 (1cbbdcb3 Burst #3, 2:01.766): a periodic-trigger aura's
  * (`PERIODIC_TRIGGER_SPELLS`, DB2 effect 23 / 227) last trigger is logged
  * just after its REMOVED — Boomstick 1261193's fourth volley 1261215 1 ms
  * later, Burst #1's 12 ms — and is the effect's own: the effect ends at that
  * row, by the caster (pets merged), within
  * `PERIODIC_LAST_TRIGGER_SLACK_MS` and not past the combat's end.
+ * Pipeline T248: so is the last tick of a channel whose own aura ticks
+ * (`isOwnTickChannelAura`) — Disintegrate's aura off at 41.021 s, its last
+ * tick (42k) 4 ms later, left out of the burst ledger's `your damage`.
  */
 export function lastPeriodicTriggerEndS(
   caster: ICombatUnit,
@@ -1040,7 +1057,9 @@ export function lastPeriodicTriggerEndS(
   endS: number,
   combat: AtomicArenaCombat,
 ): number {
-  const ids = PERIODIC_TRIGGER_SPELLS.get(auraId);
+  const ids =
+    PERIODIC_TRIGGER_SPELLS.get(auraId) ??
+    (isOwnTickChannelAura(auraId) ? [auraId] : undefined);
   // one the game scripts (`SCRIPTED_PERIODIC_TRIGGER_AURA_IDS`, no trigger
   // id in DB2) fires a spell of its own name — Void Ray 473728's 1214595,
   // 1 ms after its REMOVED (cover set 32-4 r4 1:05)

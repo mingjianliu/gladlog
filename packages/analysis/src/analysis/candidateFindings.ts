@@ -53,6 +53,7 @@ import { bracketKey } from "../utils/bracketKey";
 import {
   analyzeBurstLedger,
   burstDamageBySchoolOn,
+  burstDamageEndSeconds,
   wallUpAtOpen,
 } from "../utils/burstLedger";
 import {
@@ -4991,7 +4992,8 @@ function dpsOwnerEvents(
       wall: { startOffsetMs?: number; endOffsetMs?: number },
     ): Record<string, number> => {
       const burstFromMs = combat.startTime + b.fromSeconds * 1000;
-      const burstToMs = combat.startTime + b.toSeconds * 1000;
+      // the ledger's own end for its damage (a trailing last tick, T248)
+      const burstToMs = combat.startTime + burstDamageEndSeconds(b) * 1000;
       return burstDamageBySchoolOn(
         owner,
         targetId,

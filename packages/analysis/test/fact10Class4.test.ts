@@ -19,7 +19,9 @@ import {
   PERIODIC_TRIGGER_SPELLS,
   SCRIPTED_PERIODIC_TRIGGER_AURA_IDS,
 } from "../src/data/periodicAuraGenerated";
+import { burstDamageEndMs } from "../src/utils/burstLedger";
 import {
+  isOwnTickChannelAura,
   observedEffectEndSeconds,
   PERIODIC_LAST_TRIGGER_SLACK_MS,
 } from "../src/utils/enemyCDs";
@@ -92,7 +94,13 @@ const combatWith = (lastHitS: number, spellId = VOLLEY) => {
 };
 const endOf = (lastHitS: number, spellId?: string) => {
   const { unit, combat } = combatWith(lastHitS, spellId);
-  return observedEffectEndSeconds(unit as never, BOOMSTICK, 119.247, Infinity, combat);
+  return observedEffectEndSeconds(
+    unit as never,
+    BOOMSTICK,
+    119.247,
+    Infinity,
+    combat,
+  );
 };
 
 describe("fact10 D29 — a periodic trigger's last tick after the REMOVED", () => {
@@ -103,10 +111,9 @@ describe("fact10 D29 — a periodic trigger's last tick after the REMOVED", () =
     expect(endOf(121.767)).toBeCloseTo(121.767, 6);
   });
   it("a row past the slack, or of another spell, does not", () => {
-    expect(endOf(121.766 + (PERIODIC_LAST_TRIGGER_SLACK_MS + 1) / 1000)).toBeCloseTo(
-      121.766,
-      6,
-    );
+    expect(
+      endOf(121.766 + (PERIODIC_LAST_TRIGGER_SLACK_MS + 1) / 1000),
+    ).toBeCloseTo(121.766, 6);
     expect(endOf(121.767, "1261216")).toBeCloseTo(121.766, 6);
   });
 });
@@ -140,5 +147,96 @@ describe("fact10 D29 residual — a scripted periodic trigger reads its ticks by
   it("cover set 32-4 r4: its tick 1 ms after the REMOVED ends the effect; another name does not", () => {
     expect(endOf("Void Ray", 121.767)).toBeCloseTo(121.767, 6);
     expect(endOf("Eye Beam", 121.767, "198030")).toBeCloseTo(121.766, 6);
+  });
+});
+
+describe("pipeline T248 — a channel whose own aura ticks: the tick after the REMOVED", () => {
+  const DISINTEGRATE = "356995";
+  const endOf = (tickS: number, tickId = DISINTEGRATE) => {
+    const { unit, combat } = combatWith(120.3);
+    const evoker = unit as any;
+    evoker.spellCastEvents[0] = {
+      ...evoker.spellCastEvents[0],
+      spellId: DISINTEGRATE,
+      spellName: "Disintegrate",
+    };
+    evoker.auraEvents = evoker.auraEvents.map((a: any) => ({
+      ...a,
+      spellId: DISINTEGRATE,
+      spellName: "Disintegrate",
+    }));
+    evoker.damageOut = [
+      { ...hit(120.3, DISINTEGRATE), spellName: "Disintegrate" },
+      { ...hit(tickS, tickId), spellName: "Disintegrate" },
+    ];
+    return observedEffectEndSeconds(
+      evoker,
+      DISINTEGRATE,
+      119.247,
+      Infinity,
+      combat,
+    );
+  };
+  it("DB2: Disintegrate is a channel with a periodic-damage aura of its own, and no trigger spell", () => {
+    expect(isOwnTickChannelAura(DISINTEGRATE)).toBe(true);
+    expect(PERIODIC_TRIGGER_SPELLS.has(DISINTEGRATE)).toBe(false);
+    // a channel that triggers another spell is the trigger table's, not this
+    expect(isOwnTickChannelAura(BOOMSTICK)).toBe(false);
+  });
+  it("605 s2 201-1: its tick 4 ms after the REMOVED ends the effect", () => {
+    expect(endOf(121.77)).toBeCloseTo(121.77, 6);
+  });
+  it("a row past the slack, or of another id, does not", () => {
+    expect(
+      endOf(121.766 + (PERIODIC_LAST_TRIGGER_SLACK_MS + 1) / 1000),
+    ).toBeCloseTo(121.766, 6);
+    expect(endOf(121.77, "357209")).toBeCloseTo(121.766, 6);
+  });
+});
+
+describe("pipeline T248 — the burst ledger's damage reads on to a trailing last tick", () => {
+  const DISINTEGRATE = "356995";
+  // the burst [119.0, 121.766]: the channel's aura comes off at its end
+  const endMs = (
+    tickS: number,
+    capS = 300,
+    removedS = 121.766,
+    backUpS?: number,
+  ) => {
+    const { unit, combat } = combatWith(120.3);
+    const evoker = unit as any;
+    evoker.auraEvents = [
+      { ...aura(LogEvent.SPELL_AURA_APPLIED, 119.247), spellId: DISINTEGRATE },
+      { ...aura(LogEvent.SPELL_AURA_REMOVED, removedS), spellId: DISINTEGRATE },
+      ...(backUpS === undefined
+        ? []
+        : [
+            {
+              ...aura(LogEvent.SPELL_AURA_APPLIED, backUpS),
+              spellId: DISINTEGRATE,
+            },
+          ]),
+    ];
+    evoker.damageOut = [hit(120.3, DISINTEGRATE), hit(tickS, DISINTEGRATE)];
+    return burstDamageEndMs(evoker, at(119), at(121.766), at(capS), combat);
+  };
+  it("605 s2 201-1: the tick 4 ms after the channel's REMOVED is inside", () => {
+    expect(endMs(121.77)).toBe(at(121.77));
+  });
+  it("a tick past the slack, a channel that ended after the burst, and the round's end leave the burst's end", () => {
+    expect(endMs(121.766 + (PERIODIC_LAST_TRIGGER_SLACK_MS + 1) / 1000)).toBe(
+      at(121.766),
+    );
+    // the aura came off after the burst's end: not this burst's channel
+    expect(endMs(121.9, 300, 121.85)).toBe(at(121.766));
+    // never past the round's end
+    expect(endMs(121.77, 121.768)).toBe(at(121.768));
+  });
+  it("a channel chained into its next one: the row after the aura is back up is the next channel's", () => {
+    // 605 s2 27-1 1:39.574: REMOVED and APPLIED in one millisecond
+    expect(endMs(121.77, 300, 121.766, 121.766)).toBe(at(121.766));
+    expect(endMs(121.77, 300, 121.766, 121.77)).toBe(at(121.766));
+    // back up only after the tick: the tick is the ending channel's
+    expect(endMs(121.77, 300, 121.766, 121.9)).toBe(at(121.77));
   });
 });

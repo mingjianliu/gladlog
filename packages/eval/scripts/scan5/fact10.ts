@@ -82,7 +82,9 @@
  *    `Boomstick`: 1261193 off at 2:01.766, the 4th volley 1261215 1 ms
  *    later, printed 0.23M / 0.30M with it). Sums: the owner's damageOut (pets
  *    merged) on the Target from the first own press of the header's opening
- *    second. Counted: every entry with such a trailing tick.
+ *    second. Counted: every entry with such a trailing tick — one inside
+ *    the round, before the aura is back up (a channel chained into its next
+ *    one: that row is the next channel's first tick).
  *  - summonDiedBeforePulse (class 6, D10): a `[CC AVOIDED?] … did not
  *    land` line of a press whose summon (SPELL_SUMMON within the press's
  *    instant, owned by the caster) died (`nonPlayerUnitKill`) before any row
@@ -1000,6 +1002,7 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
   const auras = ((o.auraEvents ?? []) as any[]).filter(
     (a) => a.srcUnitId === o.id && a.destUnitId === o.id,
   );
+  const roundEnd = roundEndMs(ctx.legacy);
   let head: { from: number; to: number; opener: string } | null = null;
   for (const l of ctx.text.split("\n")) {
     const h = BURST_HEAD.exec(l);
@@ -1045,10 +1048,22 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
       );
       if (!rem) continue;
       const name = nameOf(id, c.spellName);
+      // the aura back up at once is the channel chained into its next one,
+      // and the ledger reads no row past the round's end (pipeline T248:
+      // 605 s2 27-3 0:59 — the round over at 59.331 s, REMOVED and APPLIED
+      // at 59.543 s, the next channel's first tick 1 ms later)
+      const backUp = auras.find(
+        (a, j) =>
+          j > auras.indexOf(rem) &&
+          String(a.spellId) === id &&
+          ev(a) === APPLIED,
+      );
       const tick = ((o.damageOut ?? []) as any[]).filter(
         (d) =>
           tsOf(d) > tsOf(rem) &&
           tsOf(d) <= tsOf(rem) + 100 &&
+          tsOf(d) <= roundEnd &&
+          (!backUp || tsOf(d) < tsOf(backUp)) &&
           nameOf(d.spellId, d.spellName) === name,
       );
       if (tick.length === 0) continue;

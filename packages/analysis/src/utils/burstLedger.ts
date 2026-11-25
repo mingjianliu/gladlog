@@ -52,6 +52,7 @@ import {
   EFFECT_START_AFTER_S,
   EFFECT_START_BEFORE_S,
   IEnemyCDCast,
+  lastPeriodicTriggerEndS,
   observedEffectEndSeconds,
   reconstructEnemyCDTimeline,
 } from "./enemyCDs";
@@ -294,6 +295,11 @@ export interface IBurstLedgerTargetDamage extends IBurstTargetDamage {
 export interface IBurstLedgerEntry {
   fromSeconds: number;
   toSeconds: number;
+  /** Where the burst's damage sums stop when that is past `toSeconds`: the
+   * last tick of an own channel that ended inside the burst
+   * (`burstDamageEndMs`, pipeline T248). Read through
+   * `burstDamageEndSeconds`. */
+  damageToSeconds?: number;
   /** Offensive CDs opening this burst, cast order. */
   spells: Array<{
     spellId: string;
@@ -558,6 +564,69 @@ export function dropOnePressAuraTwins(hits: IBurstDefensiveHit[]): void {
       );
     hits.splice(i, 1);
   }
+}
+
+/**
+ * Where a burst's DAMAGE is read to (pipeline T248): its end (`toMs`), or the
+ * last tick of one of the player's own channels / periodic triggers whose
+ * aura came off inside the burst and whose last tick the log wrote just after
+ * that REMOVED (`lastPeriodicTriggerEndS`, the effect's own end) — past the
+ * burst's end by the slack at most, never past `capMs` (the round's end).
+ * 605 s2 201-1 Burst #1: Dragonrage and the Disintegrate channelled under it
+ * both off at 41.021 s, the channel's last tick (42k on the Target) 4 ms
+ * later — `your damage 1.52M` for 1.567M. The burst's span, its header and
+ * every other reading keep `toMs`.
+ */
+export function burstDamageEndMs(
+  player: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+  capMs: number,
+  combat: Parameters<typeof lastPeriodicTriggerEndS>[3],
+): number {
+  let end = toMs;
+  const auras = player.auraEvents ?? [];
+  auras.forEach((a, i) => {
+    if (a.logLine.event !== LogEvent.SPELL_AURA_REMOVED) return;
+    if (a.srcUnitId !== player.id || a.destUnitId !== player.id) return;
+    const t = a.logLine.timestamp;
+    if (t < fromMs || t > toMs || !a.spellId) return;
+    const tickMs = Math.round(
+      combat.startTime +
+        lastPeriodicTriggerEndS(
+          player,
+          a.spellId,
+          (t - combat.startTime) / 1000,
+          combat,
+        ) *
+          1000,
+    );
+    if (tickMs <= end) return;
+    // the aura back up by that row (a channel chained into its next one:
+    // REMOVED and APPLIED in one millisecond, 605 s2 27-1 1:39.574) — the
+    // row is the next channel's
+    const reapplied = auras.some(
+      (b, j) =>
+        j > i &&
+        b.spellId === a.spellId &&
+        b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        b.srcUnitId === player.id &&
+        b.destUnitId === player.id &&
+        b.logLine.timestamp <= tickMs,
+    );
+    if (!reapplied) end = tickMs;
+  });
+  return Math.max(toMs, Math.min(end, capMs));
+}
+
+/** The end a burst's damage is read to, off its ledger entry
+ * (`damageToSeconds`, set only when it is past `toSeconds`). The one reader
+ * for whoever sums the burst's damage again (`burstDamageBySchoolOn`'s
+ * callers). */
+export function burstDamageEndSeconds(
+  b: Pick<IBurstLedgerEntry, "toSeconds" | "damageToSeconds">,
+): number {
+  return b.damageToSeconds ?? b.toSeconds;
 }
 
 /** A row of an attacker's `damageOut` the ledger counts inside
@@ -1323,6 +1392,14 @@ export function analyzeBurstLedgerUncached(
     );
     const fromMs = matchStartMs + fromSeconds * 1000;
     const toMs = matchStartMs + toSeconds * 1000;
+    // the damage reads on to a trailing last tick (`burstDamageEndMs`)
+    const damageToMs = burstDamageEndMs(
+      player,
+      fromMs,
+      toMs,
+      roundEndAtMs,
+      combat,
+    );
 
     // Player damage (pet damage is merged into damageOut upstream) to enemy players.
     const damageMap = new Map<string, number>();
@@ -1338,7 +1415,7 @@ export function analyzeBurstLedgerUncached(
       // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`;
       // F16 retest idx 2: 0457a45e's `0.40M of it absorbed` was two-thirds
       // Time Dilation — the other burst readers already skip it)
-      if (!isLedgerDamageRow(d, fromMs, toMs)) continue;
+      if (!isLedgerDamageRow(d, fromMs, damageToMs)) continue;
       const amount = Math.abs(d.effectiveAmount);
       damageMap.set(d.destUnitId, (damageMap.get(d.destUnitId) ?? 0) + amount);
       if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
@@ -1688,6 +1765,9 @@ export function analyzeBurstLedgerUncached(
       ...(healerHeldOverlapping.length > 0 ? { healerHeldOverlapping } : {}),
       fromSeconds,
       toSeconds,
+      ...(damageToMs > toMs
+        ? { damageToSeconds: (damageToMs - matchStartMs) / 1000 }
+        : {}),
       spells: group.map((cd) => ({
         spellId: cd.spellId,
         spellName: cd.spellName,
