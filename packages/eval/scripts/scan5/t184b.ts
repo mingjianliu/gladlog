@@ -18,7 +18,10 @@
  *    from their landing removed, (b3) the pre-span summons re-timed at
  *    their landing.
  */
-import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import {
+  burstResponseSpanMs,
+  burstWindowDecisionPoints,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import {
   BURST_ANSWERED_MAX_HP_PCT,
@@ -36,7 +39,6 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 
 /** `GROUND_CONTROL_FUSE_MS` (not exported at the merge-base) */
 const FUSE_MS = 3000;
-const PRE_MS = 1500;
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -54,7 +56,8 @@ export function run(ctx: IRoundCtx): void {
     const pr = p.pressured;
     if (pr === null) continue;
     ctx.bump("summonControlWindowDump");
-    const w0 = p.tMs - PRE_MS;
+    // the engine's own span start (the opener's ms, ruling R113)
+    const w0 = burstResponseSpanMs(p.tMs, p.leadMs).w0;
     const summons = new Map<
       any,
       { dist: number; pre: boolean; land: number }

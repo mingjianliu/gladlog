@@ -33,6 +33,7 @@ import {
 } from "@gladlog/analysis";
 import {
   BURST_HEAL_CD_IDS,
+  burstResponseSpanMs,
   burstWindowDecisionPoints,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
@@ -54,7 +55,6 @@ import {
 } from "../src/explore/storeAccess";
 
 const DOUBLE_GAP_S = 3;
-const PRE_S = 1.5;
 const WALL_IDS = new Set(spellIdLists.bigDefensiveSpellIds.map(String));
 const EXTERNAL_IDS = new Set(
   spellIdLists.externalDefensiveSpellIds.map(String),
@@ -105,7 +105,8 @@ async function main(): Promise<void> {
       if (!pid || pid === owner.id || !w.feasible) continue;
       const mate: any = friends.find((f) => f.id === pid);
       if (!mate) continue;
-      const lo = w.tMs - PRE_S * 1000;
+      // the engine's own span start (the opener's ms, ruling R113)
+      const lo = burstResponseSpanMs(w.tMs, w.leadMs).w0;
       const hi = start + (w.endSec + 1) * 1000;
       const sec = (ms: number) => Math.floor((ms - start) / 1000);
       const name = (id: string, fallback: string) =>

@@ -186,8 +186,8 @@ export function run(ctx: IRoundCtx): void {
       // opener's ms, R113), in round seconds
       const span = burstResponseSpanMs(p.tMs, p.leadMs);
       if (
-        x.s < p.tSec + (span.w0 - p.tMs) / 1000 ||
-        x.s > p.tSec + (span.w1 - p.tMs) / 1000
+        x.s < (span.w0 - (p.tMs - p.tSec * 1000)) / 1000 ||
+        x.s > (span.w1 - (p.tMs - p.tSec * 1000)) / 1000
       )
         continue;
       if (

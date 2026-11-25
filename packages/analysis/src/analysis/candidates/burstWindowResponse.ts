@@ -240,6 +240,10 @@ export function burstWindowResponseEvents(
     // (`burstResponseSpanMs` — its start from the opener's own ms, ruling
     // R113; its end from the decision point's floored second).
     const span = burstResponseSpanMs(p.tMs, p.leadMs);
+    // round seconds from the round's own start ms: one division, so the
+    // span's inclusive start is the same number an event at that ms has
+    // (codex 85-tk-L2-T258-2 #3: 10.024 − 1.5 read 8.524000000000001)
+    const roundStartMs = p.tMs - p.tSec * 1000;
     const attempted = ownerAttempts
       ? formatAttemptedFact(
           ownerAttempts.tools.flatMap((tool) =>
@@ -247,8 +251,8 @@ export function burstWindowResponseEvents(
               castFailedInWindow(
                 ownerAttempts.rawStreams,
                 ownerAttempts.ownerId,
-                p.tSec + (span.w0 - p.tMs) / 1000,
-                p.tSec + (span.w1 - p.tMs) / 1000,
+                (span.w0 - roundStartMs) / 1000,
+                (span.w1 - roundStartMs) / 1000,
                 Number(tool.spellId),
               ),
               tool.casts.map((c) => c.timeSeconds),
