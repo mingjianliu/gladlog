@@ -23,6 +23,14 @@
  *    cast, the only cast id in that window) anywhere in the round. A cast
  *    before the removal with no such dose seen is out of the total (`no
  *    spender seen`).
+ *    Pipeline T192 (ruling R121): in the total too, as `one-charge aura,
+ *    holder's cast at the removal` — a DB2 charge aura
+ *    (`PROC_CHARGE_AURA_IDS`, SpellAuraOptions.ProcCharges) with no dose row
+ *    during the application and the holder's cast of another spell
+ *    ≤ `CHARGE_CAST_MS` before its removal: that cast ended it (Vanish's
+ *    opener).
+ *  - `ownPressEndWithoutCast`: the reverse — a line reading `ended by your
+ *    own X` on such an aura with no cast of X by the holder in that window.
  *  - `earlyEndReadExpired`: printed `(expired)` / `(expired; …)` on a
  *    removal more than the slack (`JITTER_MS`, at most half the length, as
  *    the producer) before the full length ends. Only buffs the producer
@@ -36,11 +44,13 @@
  */
 import {
   BUFF_FADE_EARLY_TOLERANCE_S,
+  CHARGE_CAST_MS,
   ENDS_WITH_ITS_CHARGE_IDS,
   extractOwnerCDBuffExpiry,
   runsWithHaste,
 } from "@gladlog/analysis/src/context/timelineHelpers";
 import { ownEffectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
+import { PROC_CHARGE_AURA_IDS } from "@gladlog/analysis/src/data/procChargeAurasGenerated";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
@@ -63,6 +73,7 @@ import {
 export const CHECKS = [
   "absorbEmptiedReadExpired",
   "chargeSpentReadEarly",
+  "ownPressEndWithoutCast",
   "earlyEndReadExpired",
   "fadeOffset",
 ] as const;
@@ -80,12 +91,15 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ...BUCKETS.map((b) => `fadeOffset|${b}`),
 ]);
 
+/** in the total: a DB2 charge aura the holder's own cast ended, read as an
+ * early end with no cause (pipeline T192) */
+const ONE_CHARGE_KIND = "one-charge aura, holder's cast at the removal";
+
 const FADE_LINE = /^\s*(\d+:\d\d)\s+\[BUFF FADED\]\s+(.+?) \((.+)\)\s*$/;
 /** a removal this far before the full length is no log jitter: the
  * producer's own measured slack (605 at PV547: 15,630 of 19,048 logged
  * `expired` fades sit −0.2…+0.05 s from the full length) */
 const JITTER_MS = BUFF_FADE_EARLY_TOLERANCE_S * 1000;
-const CHARGE_CAST_MS = 100;
 const REMOVED_DOSE = "SPELL_AURA_REMOVED_DOSE";
 
 const bucketOf = (earlyMs: number): (typeof BUCKETS)[number] =>
@@ -239,6 +253,29 @@ export function run(ctx: IRoundCtx): void {
         );
     }
 
+    // the reverse of the one-charge reading: `ended by your own X` on a
+    // DB2 charge aura needs X cast by the holder at the removal
+    const own = /^ended by your own (.+?)(;|$)/.exec(claim);
+    if (own && PROC_CHARGE_AURA_IDS.has(auraId)) {
+      ctx.bump("ownPressEndWithoutCast");
+      const at = ((holder.spellCastEvents ?? []) as any[]).some(
+        (c) =>
+          ev(c) === SUCCESS &&
+          tsOf(c) <= removedMs &&
+          removedMs - tsOf(c) <= CHARGE_CAST_MS &&
+          nameOf(c.spellId, c.spellName ?? "") === own[1],
+      );
+      if (!at)
+        ctx.violate(
+          "ownPressEndWithoutCast",
+          name,
+          removedMs,
+          key,
+          `${name} reads ended by ${own[1]}; no such cast by the holder within ${CHARGE_CAST_MS} ms before the removal`,
+          line.trim(),
+        );
+    }
+
     // a charge buff spent by its spender
     if (claim.startsWith("ended after")) {
       ctx.bump("chargeSpentReadEarly");
@@ -265,6 +302,13 @@ export function run(ctx: IRoundCtx): void {
           }),
       );
       const finals = castsBefore(removedMs).filter((x) => x);
+      const doseSeen = ((holder.auraEvents ?? []) as any[]).some(
+        (a) =>
+          ev(a) === REMOVED_DOSE &&
+          String(a.spellId) === auraId &&
+          tsOf(a) >= castMs &&
+          tsOf(a) <= removedMs,
+      );
       const spent = finals.find((x) => spenders.has(x));
       if (spent)
         ctx.violate(
@@ -273,6 +317,25 @@ export function run(ctx: IRoundCtx): void {
           removedMs,
           key,
           `${name} removed ${removedMs - Math.max(...casts.filter((c) => String(c.spellId) === spent && tsOf(c) <= removedMs).map(tsOf))} ms after ${nameOf(spent, spent)}, which spends its doses`,
+          line.trim(),
+        );
+      else if (
+        // pipeline T192 (ruling R121): a one-charge aura (DB2 ProcCharges,
+        // no dose row of it this round) with the holder's cast of another
+        // spell at its removal was ended by that cast
+        PROC_CHARGE_AURA_IDS.has(auraId) &&
+        !doseSeen &&
+        finals.some((x) => x !== id)
+      )
+        ctx.violate(
+          "chargeSpentReadEarly",
+          ONE_CHARGE_KIND,
+          removedMs,
+          key,
+          `${name} (aura ${auraId}, DB2 ProcCharges) removed after ${finals
+            .filter((x) => x !== id)
+            .map((x) => nameOf(x, x))
+            .join(", ")}`,
           line.trim(),
         );
       else if (finals.length > 0)

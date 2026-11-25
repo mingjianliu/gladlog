@@ -72,6 +72,9 @@
     "excludeCasterGenerated.ts": {
       "entries": 45
     },
+    "procChargeAurasGenerated.ts": {
+      "entries": 196
+    },
     "pressTriggeredCastsGenerated.ts": {
       "edges": 5
     },

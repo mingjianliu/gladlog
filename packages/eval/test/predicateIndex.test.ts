@@ -98,6 +98,7 @@ import * as offGcdGenerated from "@gladlog/analysis/src/data/offGcdGenerated";
 import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
 import * as periodicAuraGenerated from "@gladlog/analysis/src/data/periodicAuraGenerated";
+import * as procChargeAuras from "@gladlog/analysis/src/data/procChargeAurasGenerated";
 import * as purgeRemovalsGenerated from "@gladlog/analysis/src/data/purgeRemovalsGenerated";
 import * as pvpTalentReplacesGenerated from "@gladlog/analysis/src/data/pvpTalentReplacesGenerated";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
@@ -5238,6 +5239,17 @@ const INDEX: PredicateRow[] = [
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "BUFF_FADE_EARLY_TOLERANCE_S",
     mod: timelineHelpers,
+  },
+  // pipeline T192: the cast that spends a charge aura, and DB2's charge auras
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "CHARGE_CAST_MS",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/data/procChargeAurasGenerated.ts`,
+    symbol: "PROC_CHARGE_AURA_IDS",
+    mod: procChargeAuras,
   },
   {
     file: `${A}/context/timelineHelpers.ts`,

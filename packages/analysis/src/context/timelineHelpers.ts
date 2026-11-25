@@ -16,6 +16,7 @@ import {
   HASTE_DURATION_SPELL_IDS,
 } from "../data/channeledGenerated";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
+import { PROC_CHARGE_AURA_IDS } from "../data/procChargeAurasGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   auraEndFromLog,
@@ -516,6 +517,12 @@ export function runsWithHaste(spellId: string): boolean {
     isChannelledPress(spellId) || HASTE_DURATION_SPELL_IDS.has(spellId)
   );
 }
+
+/** How long before a charge aura's dose row or removal the holder's cast
+ * that spent it is logged (`cdExpiry`: `charges_spent`, and the cast that
+ * ended a one-charge aura, pipeline T192). scan5/t103 and scan5/t192 import
+ * it. */
+export const CHARGE_CAST_MS = 100;
 
 /** How close to a buff's removal the holder's own press counts as taking it,
  * and how far before the natural end it must be (`cdExpiry`, fact8 D35). */
@@ -1267,16 +1274,15 @@ export function extractOwnerCDBuffExpiry(
         // spell that spent a dose (its cast ≤ 100 ms before the dose came
         // off) again ≤ 100 ms before the removal; one dose spent, then the
         // buff cancelled, is no charges spent
-        const CHARGE_CAST_MS = 100;
+        const castRowsBefore = (ms: number) =>
+          (holder.spellCastEvents ?? []).filter(
+            (c) =>
+              (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
+              c.logLine.timestamp <= ms &&
+              ms - c.logLine.timestamp <= CHARGE_CAST_MS,
+          );
         const castsBefore = (ms: number) =>
-          (holder.spellCastEvents ?? [])
-            .filter(
-              (c) =>
-                (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
-                c.logLine.timestamp <= ms &&
-                ms - c.logLine.timestamp <= CHARGE_CAST_MS,
-            )
-            .map((c) => c.spellId);
+          castRowsBefore(ms).map((c) => c.spellId);
         const doseRows = holder.auraEvents.filter(
           (a) =>
             a.spellId === endAuraId &&
@@ -1333,6 +1339,30 @@ export function extractOwnerCDBuffExpiry(
             (onLastCharge && spenders.size > 0))
         )
           cause = "charges_spent";
+        // pipeline T192 (user ruling R121, 2026-11-25): a charge aura (DB2
+        // SpellAuraOptions.ProcCharges, `PROC_CHARGE_AURA_IDS`) that never
+        // logged a dose — one charge, so no row names what spends it — and
+        // came off ≤ `CHARGE_CAST_MS` after its holder's own cast was ended
+        // by that cast: Vanish's 11327 goes with the opener. 605 + 12.1.5
+        // captures: 762 `ended after N of M s — no dispel logged` lines had
+        // such a cast, 504 of them Vanish, the only one of their 22 buffs
+        // with the field set. The press's own cast is no opener; with no
+        // cast at the removal the line stays as it was.
+        if (
+          cause === "ended_early" &&
+          !endedByOwnPress &&
+          doseRows.length === 0 &&
+          PROC_CHARGE_AURA_IDS.has(endAuraId)
+        ) {
+          const opener = castRowsBefore(span.removedMs)
+            .filter((c) => !!c.spellId && c.spellId !== cd.spellId)
+            .at(-1);
+          if (opener)
+            endedByOwnPress = getEnglishSpellName(
+              opener.spellId!,
+              opener.spellName ?? "",
+            );
+        }
         // WO6 #3 (n45): a BROKEN line ended it — enemy damage broke the
         // aura (Mass Invisibility broken by Refining Fire), which the log
         // names: the shared break reader of the CC lines
@@ -2031,7 +2061,8 @@ function summonLabel(
   const kind =
     (summonOwners instanceof SummonOwnerNames
       ? summonOwners.kinds.get(d.srcUnitId)
-      : undefined) ?? summonKindOf(d.srcUnitId || undefined, undefined, srcType);
+      : undefined) ??
+    summonKindOf(d.srcUnitId || undefined, undefined, srcType);
   return `${rosterLabelOfId(map, id)}'s ${kind}`;
 }
 
