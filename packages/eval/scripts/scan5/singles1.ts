@@ -132,7 +132,7 @@ import {
   successesOf,
   tsOf,
 } from "./ctx";
-import { DB2_BUILD, db2Lines } from "./db2Cache";
+import { DB2_BUILD, db2Lines, db2TablePath } from "./db2Cache";
 
 export const CHECKS = [
   "allyOnlySelfSave",
@@ -1149,7 +1149,9 @@ export function report(): string[] {
     )
     .sort();
   return [
-    `singles1: ally-only = log targets ∧ DB2 Exclude Caster (SpellMisc ${DB2_BUILD})`,
+    // asked of the cache, not of the lookup (a per-process cache): a run that
+    // did not select the check may have no table (codex 85-tk-L5-T249-1c)
+    `singles1: ally-only = log targets ∧ ${db2TablePath("SpellMisc") ? `DB2 Exclude Caster (SpellMisc ${DB2_BUILD})` : `no DB2 SpellMisc — log only, ≥ ${LOG_ONLY_MIN_ALLY} ally casts`}`,
     `singles1 inventory — spells the log shows cast only on another unit of the caster's side (≥ 3 casts, never self, never untargeted): ${names.length}`,
     `  ${names.slice(0, 60).join(", ")}`,
   ];
