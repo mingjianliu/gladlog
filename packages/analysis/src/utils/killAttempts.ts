@@ -1150,6 +1150,12 @@ export function extractKillAttempts(
           pressName: into.spellName,
           cast: into.cast,
         };
+      return openerNameOf(cl);
+    };
+    /** the cluster named for the press that opened it, wherever that went */
+    const openerNameOf = (
+      cl: (typeof clusters)[number],
+    ): { name: string; pressName: string; cast: number } => {
       const first = cl.casts[0]!;
       // an enemy player or any unit of theirs (a pet: 691a7f31 1:13, a Ray
       // of Frost into the hunter's pet)
@@ -1271,7 +1277,7 @@ export function extractKillAttempts(
         clusterTo,
       );
       if (!formSpan) continue;
-      const anchorOf = anchorNameOf(
+      const intoOf = anchorNameOf(
         cl,
         target,
         creditEndMs(formSpan.toSeconds),
@@ -1291,8 +1297,8 @@ export function extractKillAttempts(
       // the Recklessness, then 300k of its go on e2 — the re-cut read 14 %
       // focus on e1, or fell under the floor and dropped the attempt).
       const recut =
-        anchorOf.cast > formSpan.fromSeconds
-          ? attemptSpanOutsideForm(formsOf(target), anchorOf.cast, clusterTo)
+        intoOf.cast > formSpan.fromSeconds
+          ? attemptSpanOutsideForm(formsOf(target), intoOf.cast, clusterTo)
           : null;
       const recutHolds = (() => {
         if (!recut) return false;
@@ -1312,6 +1318,13 @@ export function extractKillAttempts(
           ) ?? 0) >= KW_BURST_MIN_DAMAGE
         );
       })();
+      // T166 (GH #221 group 1): where the re-cut does not hold the bracket
+      // keeps the cluster's span, and a line named for the later press read
+      // `[1:12–…] Avatar burst` over an Avatar pressed at 1:25. The bracket
+      // that opens with the cluster is named for the press that opened it,
+      // in the form a cluster with no press into the target already has
+      // (`X burst` / `X (cast into Y) burst`).
+      const anchorOf = recut && !recutHolds ? openerNameOf(cl) : intoOf;
       const span = recutHolds ? recut! : formSpan;
       const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;

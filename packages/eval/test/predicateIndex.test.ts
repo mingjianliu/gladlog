@@ -1511,6 +1511,12 @@ const INDEX: PredicateRow[] = [
     symbol: "burstSaysNoDamage",
     mod: burstLedger,
   },
+  // T166 (ruling R102): a school-limited wall the burst's damage never met
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "wallTouchesNoneOf",
+    mod: burstLedger,
+  },
   {
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "pressDeliveryEndSeconds",

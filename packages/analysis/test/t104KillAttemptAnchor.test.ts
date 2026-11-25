@@ -264,10 +264,15 @@ describe("T104 D12 — the bracket opens at the press it is named for", () => {
     const [a] = run([lock, mate, war(50_000)], enemies());
     expect(a!.targetUnitId).toBe("e1");
     expect(a!.fromSeconds).toBe(40);
+    // T166: the bracket that keeps the cluster's start is named for the
+    // press that opened it — `[0:40–…] Recklessness burst` put a
+    // Recklessness at 0:40 that was pressed at 0:46
+    expect(a!.anchorSpellName).toBe("Malevolence");
     // with the later damage on e1 under the floor the attempt still stands
     const [b] = run([lock, mate, war(20_000)], enemies());
     expect(b?.targetUnitId).toBe("e1");
     expect(b!.fromSeconds).toBe(40);
+    expect(b!.anchorSpellName).toBe("Malevolence");
   });
 
   it("a target tied for the most inside the re-cut keeps the re-cut, whatever the team's order (codex 85-tk-L-T104-1b)", () => {

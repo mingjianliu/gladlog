@@ -55,9 +55,11 @@ import {
   MITIGATION_AURA_MIN_PCT,
   PRESS_TO_AURA_MAX_S,
   SAVE_AURA_END_UNSEEN_IDS,
+  wallTableIdOfAura,
 } from "./enemyDefensives";
 import {
   absorbedHitSchoolMask,
+  documentRecordsAttackSpell,
   hitSchoolId,
   isDamageSentRow,
   isDamageTakenRow,
@@ -856,6 +858,40 @@ export function burstDamageBySchoolOn(
   return by;
 }
 
+const ALL_SCHOOLS_MASK = 0x7f;
+/**
+ * User ruling R102 (2026-11-20, pipeline T166: "挡不到就不印"): does the
+ * wall's school touch NONE of this damage? `bySchool` is the burst holder's
+ * ledger damage on the target over the stretch of the burst the wall
+ * covered (`burstDamageBySchoolOn`). True only for a wall with a signed
+ * school-limited `MITIGATION_TABLE` row (Blessing of Protection 0x1, Cloak
+ * of Shadows / Spellwarding / Anti-Magic Zone 0x7e) that met damage, none
+ * of it in a school the row covers — Blessing of Protection over 448k of
+ * frost and arcane (605 s0 14 r1). False — the wall stays — for an
+ * all-school row, a wall with no row (an absorb or a reflect: Anti-Magic
+ * Shell, Nether Ward — outside the ruling), a wall that met no damage of a
+ * known school at all, and one that touches any part of it. One predicate for the ledger's
+ * `defensivesHit` and every reader of it; scan5/t166 `ledgerWallSchool`
+ * imports it.
+ */
+export function wallTouchesNoneOf(
+  wallAuraSpellId: string,
+  bySchool: Readonly<Record<string, number>>,
+): boolean {
+  const mask = MITIGATION_TABLE[wallTableIdOfAura(wallAuraSpellId)]?.schoolMask;
+  if (mask === undefined || (mask & ALL_SCHOOLS_MASK) === ALL_SCHOOLS_MASK)
+    return false;
+  let total = 0;
+  let touched = 0;
+  for (const [school, amount] of Object.entries(bySchool)) {
+    // a row whose school the log did not give says nothing either way
+    if ((Number(school) & ALL_SCHOOLS_MASK) === 0) continue;
+    total += amount;
+    if ((Number(school) & mask) !== 0) touched += amount;
+  }
+  return total > 0 && touched === 0;
+}
+
 export function analyzeBurstLedger(
   player: ICombatUnit,
   allies: ICombatUnit[],
@@ -882,6 +918,12 @@ export function analyzeBurstLedgerUncached(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
 ): IBurstLedgerEntry[] {
+  // read once per call, and only when a wall asks (T166)
+  let recordsAttackSpellMemo: boolean | undefined;
+  const recordsAttackSpell = (): boolean =>
+    (recordsAttackSpellMemo ??= documentRecordsAttackSpell(
+      Object.values(combat.units ?? {}),
+    ));
   const matchStartMs = combat.startTime;
   // Work order 2026-10-14d #7: a burst ends at the ROUND's end (a Solo
   // Shuffle round ends at its first death, `roundEndMs`), not the log's —
@@ -1133,6 +1175,21 @@ export function analyzeBurstLedgerUncached(
             : iv.endMs;
         const overlapMs = Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
+        // T166 (user ruling R102): a wall whose schools touch none of the
+        // holder's damage in the stretch it covered is not this burst's
+        if (
+          wallTouchesNoneOf(
+            iv.spellId,
+            burstDamageBySchoolOn(
+              player,
+              target.id,
+              Math.max(iv.startMs, fromMs),
+              Math.min(endMs, toMs),
+              recordsAttackSpell(),
+            ),
+          )
+        )
+          continue;
         defensivesHit.push({
           ...(DEF_OR_IMMUNE_CAST_IDS.has(iv.spellId)
             ? {}
