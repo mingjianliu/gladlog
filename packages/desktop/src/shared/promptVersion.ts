@@ -1944,5 +1944,11 @@
  *  (<aura>)`), the shape enemy kicks refused on our team already print
  *  (ruling R106); roots and Ice Nova unchanged.
  *  See docs/prompt-version-history.md.
+ *
+ * v670 (2026-11-25; pipeline batch B254, T245): Spectral Illusion 1250385,
+ *  the second cast row a Fade logs with the Spectral Illusion talent, is a
+ *  talent's proc, not a press: it no longer prints a [YOU] [CAST] line
+ *  beside the Fade.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 669;
+export const PROMPT_VERSION = 670;

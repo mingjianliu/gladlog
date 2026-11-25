@@ -8701,3 +8701,13 @@ check whose count depends on the run (B250's attribution); in-total 5,488 ->
 5,486 and 8,499 -> 8,495. The wording `missed` for a beam refused on one unit
 predates T253 (21 enemy->friend lines on the 12.1.5 base) and is left to GH
 #208 (R22).
+
+v670 (pipeline batch B254, T245; scan triage 2026-11-22 #42): Spectral
+Illusion 1250385 joins PASSIVE_PROC_CAST_IDS (DB2 12.1.5.70391: triggered by
+the passive talent 1250378, no SpellCooldowns row; corpus: all 79 cast rows on
+the 605 follow the same priest's Fade 586 in its millisecond or the next).
+Measured per part (parent = the T253 tree, candidate = T245 on it): 605: 15
+[YOU] [CAST] Spectral Illusion lines removed in 8 contexts; 12.1.5: 33 removed
+in 16 contexts; sum 48. Nothing else moved; gates 0 failures; scan5
+castLineNoButton / Spectral Illusion 13 -> 0 (605) and 31 -> 0 (12.1.5), no
+kind rose; in-total 390 -> 377 and 588 -> 557.
