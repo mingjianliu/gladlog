@@ -96,7 +96,7 @@ export function emitFriendlyCheatDeathEntries(ctx: {
 /**
  * fact7 class 3 (D69, every reader): an offensive form with no button
  * (`OFFENSIVE_FORM_FACT_AURAS`) on the owner or a teammate — the `[PROC]`
- * legend's "an automatically applied effect", the enemy side's `(no press)`
+ * legend's "no press of that button paired to it", the enemy side's `(no press)`
  * [ENEMY CD] line. Nothing was pressed; the line prints no HP.
  */
 export function emitFriendlyFormEntries(ctx: {

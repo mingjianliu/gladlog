@@ -80,7 +80,7 @@ const baseTimelineParams = {
   enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ccTrinketSummaries: [] as any[],
-   
+
   dispelSummary: {
     allyCleanse: [],
     ourPurges: [],
@@ -88,7 +88,7 @@ const baseTimelineParams = {
     missedCleanseWindows: [],
     missedPurgeWindows: [],
   } as any,
-   
+
   enemyDispelSummary: {
     allyCleanse: [],
     ourPurges: [],
@@ -148,7 +148,9 @@ describe("proc-only activations render as [PROC], never as a press", () => {
     expect(lines.some((l) => /\[YOU\] \[CD\]\s+Renewing Blaze/.test(l))).toBe(
       false,
     );
-    expect(timeline).toContain("[PROC] = an automatically applied effect");
+    expect(timeline).toContain(
+      "[PROC] = an effect with no press of that button paired to it",
+    );
   });
 
   it("teammate: [TEAM] [PROC], not [TEAM] [CD]", () => {
