@@ -100,8 +100,9 @@
  *  - ownShieldNotPopped (D46): a `KILL ATTEMPTS` line `FAILED: not enough
  *    damage` on a target whose own pressed absorb shield (an aura the target
  *    put on itself, from a button — `isButtonPress` of the aura or a cast it
- *    is the effect of) absorbed ≥ 50k of our team's hits inside the
- *    attempt's rendered seconds. Kind = the shield. Counted: every such
+ *    is the effect of) absorbed ≥ 50k of our team's hits from the attempt's
+ *    own first millisecond (`extractKillAttempts`' `fromSeconds`) to the end
+ *    of its last rendered second. Kind = the shield. Counted: every such
  *    failed attempt line.
  *  - areaCarryInDefenseless (D15): a `[KILL WINDOW] … (defenseless a–b)`
  *    span on a unit that carried, strictly inside it, an aura named as an
@@ -198,6 +199,7 @@ import {
   wallStopsEveryHit,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
+import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { PRESS_ONLY_TAG } from "@gladlog/analysis/src/utils/killWindowFacts";
 import { logInstantOf } from "@gladlog/analysis/src/utils/logEra";
 import { isGuardianRowOf } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
@@ -1239,13 +1241,34 @@ function ownShieldNotPopped(ctx: IRoundCtx): void {
       .filter((u: any) => u.reaction === ctx.owner.reaction)
       .map((u: any) => u.id),
   );
+  let attempts: ReturnType<typeof extractKillAttempts> | undefined;
+  const attemptOf = (targetName: string, a: number, b: number) => {
+    attempts ??= extractKillAttempts(
+      ctx.players.filter((u: any) => u.reaction === ctx.owner.reaction),
+      ctx.players.filter((u: any) => u.reaction !== ctx.owner.reaction),
+      ctx.legacy,
+    );
+    return attempts.find(
+      (x) =>
+        x.targetName === targetName &&
+        Math.floor(x.fromSeconds) === a &&
+        Math.floor(x.toSeconds) === b,
+    );
+  };
   for (const l of ctx.lines) {
     const m = FAILED_ATTEMPT_LINE.exec(l);
     if (!m) continue;
     const target = ctx.byName.get(m[3]!);
     if (!target) continue;
     ctx.bump("ownShieldNotPopped");
-    const lo = ctx.start + secOf(m[1]!) * 1000;
+    // The attempt opens at its own millisecond, as the product brackets it
+    // (`extractKillAttempts`' `fromSeconds`), not at the top of its printed
+    // second: a Dark Pact that broke 0.22 s before the anchoring press, in
+    // the bracket's first rendered second, is no shield of the attempt
+    // (pipeline T262). The end stays the printed bracket's.
+    const attempt = attemptOf(m[3]!, secOf(m[1]!), secOf(m[2]!));
+    const lo =
+      ctx.start + (attempt ? attempt.fromSeconds : secOf(m[1]!)) * 1000;
     const hi = ctx.start + (secOf(m[2]!) + 1) * 1000;
     const bySpell = new Map<string, number>();
     for (const r of (target.absorbsIn ?? []) as any[]) {
