@@ -24,6 +24,7 @@
  *    `printed, the ledger holds none: Peaceweaver`.
  */
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
+import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx, secOf } from "./ctx";
 
@@ -35,10 +36,15 @@ const WALL_LINE =
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner as any;
-  if (!owner) return;
+  // the block is a DPS owner's: a healer's context prints none
+  // (buildMatchContext's own test)
+  if (!owner || isHealerSpec(owner.spec)) return;
   const C = "ledgerWallSchool";
   const combat = ctx.legacy as any;
-  const friends = ctx.players.filter((p: any) => p.reaction === owner.reaction);
+  // the owner's mates, as the context passes them
+  const friends = ctx.players.filter(
+    (p: any) => p.reaction === owner.reaction && p.id !== owner.id,
+  );
   const enemies = ctx.players.filter((p: any) => p.reaction !== owner.reaction);
   let entries: ReturnType<typeof analyzeBurstLedger>;
   try {

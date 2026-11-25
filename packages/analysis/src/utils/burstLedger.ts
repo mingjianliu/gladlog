@@ -18,6 +18,7 @@ import {
   resolveMitigation,
 } from "../data/mitigationComponents";
 import {
+  hasNoOwnPercentage,
   immunityMaskStopsSchool,
   MITIGATION_TABLE,
 } from "../data/mitigationData";
@@ -912,7 +913,9 @@ const ALL_SCHOOLS_MASK = 0x7f;
  * (Evasion, Feint or Fade whose caster lacks the talent the reduction is)
  * reaches nothing — 8c70dc85 r3: an untalented Evasion over 67k of
  * Shadowflame; a wall with a melee reading of its own in the verdict book
- * (`nonMeleeVerdict`: Evasion's dodge) still reaches a physical hit.
+ * (`nonMeleeVerdict`: Evasion's dodge) still reaches a physical hit, and
+ * one whose own effect is a mechanic the table prices nothing for
+ * (`hasNoOwnPercentage`: Blessing of Sacrifice's transfer) every hit.
  * One predicate for the ledger's `defensivesHit` and every
  * reader of it; what the wall REFUSED is `wallRefusedAttackOf`.
  */
@@ -925,6 +928,10 @@ export function wallTouchesNoneOf(
   // percentage) reaches a physical hit whatever its percentage
   const meleeWall =
     MITIGATION_VERDICTS[res.spellId]?.nonMeleeVerdict !== undefined;
+  // a wall whose own effect the table keeps no percentage for (Blessing of
+  // Sacrifice: a 30 % transfer) works on every hit whatever the talent's
+  // percentage resolved to
+  const mechanic = hasNoOwnPercentage(res.spellId);
   let total = 0;
   let touched = 0;
   for (const [school, amount] of Object.entries(bySchool)) {
@@ -938,7 +945,7 @@ export function wallTouchesNoneOf(
           (c.schoolMask & hit) !== 0 &&
           (c.kind === "immunity"
             ? immunityMaskStopsSchool(c.schoolMask, hit)
-            : c.pctMax > 0 || (meleeWall && (hit & 0x1) !== 0)),
+            : c.pctMax > 0 || mechanic || (meleeWall && (hit & 0x1) !== 0)),
       )
     )
       touched += amount;

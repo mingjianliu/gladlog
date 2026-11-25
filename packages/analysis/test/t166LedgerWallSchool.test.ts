@@ -95,6 +95,10 @@ describe("wallTouchesNoneOf (R102)", () => {
       false,
     );
     expect(wallTouchesNoneOf(res("1966"), { "1": 50_000 })).toBe(true);
+    // Blessing of Sacrifice without Echoing Blessings resolves 0 %, and
+    // its transfer still takes part of every hit
+    expect(res("6940")!.components.map((c) => c.pctMax)).toEqual([0]);
+    expect(wallTouchesNoneOf(res("6940"), { "1": 50_000 })).toBe(false);
     // with the talent's 20 %: any school
     const talented = {
       ...res("5277")!,
