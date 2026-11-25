@@ -4,6 +4,7 @@ import {
   effectAuraViaName,
   ownEffectAurasOfCast,
   TALENT_EFFECT_AURAS_OF_CAST,
+  triggeredEffectAurasOfCast,
 } from "../data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import { isHasteScaledCooldown } from "../data/hasteScaledCooldowns";
@@ -1052,6 +1053,54 @@ interface ResourceSnapshotParams {
   openerPrints?: boolean;
 }
 
+/** How long `[RES] enemy:` shows a press with no effect span of its own (an
+ * instant cooldown: nothing in the log to count down). */
+export const RES_ENEMY_INSTANT_WINDOW_S = 8;
+
+/**
+ * The window `[RES] enemy:` shows an enemy offensive press for: to its
+ * effect's own end (`enemyEffectOwnEndSeconds`), or — a press with no effect
+ * span — `RES_ENEMY_INSTANT_WINDOW_S` (`instant`). Undefined = no window: a
+ * press that logged no span and is known not to have run. One selection for
+ * the row and for scan5 `t260`.
+ */
+export function resEnemyEffectWindow(
+  cd: Parameters<typeof enemyEffectOwnEndSeconds>[0] & {
+    spellId: string;
+    castTimeSeconds: number;
+    refusedAtPress?: boolean;
+  },
+): { endSeconds: number; instant: boolean } | undefined {
+  const buffDuration = enemyEffectOwnEndSeconds(cd) - cd.castTimeSeconds;
+  // a press whose effect lives only on a talent's aura (Divine Toll →
+  // Divine Resonance, GH #184 part B, user ruling 2026-11-05 option A)
+  // and logged none has no span: the 8 s would state a window the log
+  // never showed
+  if (buffDuration <= 0 && TALENT_EFFECT_AURAS_OF_CAST[cd.spellId])
+    return undefined;
+  // nor has a press whose effect lives on an aura DB2 chains to it
+  // (`triggeredEffectAurasOfCast`: Champion's Spear 376079 → 376080) and
+  // that logged none — landing is read from the aura line (pipeline T260;
+  // 27f20fb3: the spear's chain MISSED a Demonic Gateway, no 376080 on any
+  // player, and `Champion's Spear(4s left)` printed after its warrior died)
+  if (!(buffDuration > 0) && triggeredEffectAurasOfCast(cd.spellId).length > 0)
+    return undefined;
+  // a channel with no length never ran (`channelRefusedAtCast`, fact11
+  // D39: Ray of Frost into a Grounding Totem, IMMUNE at the press) — no
+  // instant cooldown, nothing running
+  if (!(buffDuration > 0) && CHANNELED_SPELL_IDS.has(cd.spellId))
+    return undefined;
+  // nor did a press the game refused (`refusedAtPress`, T29: Deathmark
+  // into two IMMUNE, b74d7bf6 r1 2:45)
+  if (cd.refusedAtPress) return undefined;
+  return buffDuration > 0
+    ? { endSeconds: cd.castTimeSeconds + buffDuration, instant: false }
+    : {
+        endSeconds: cd.castTimeSeconds + RES_ENEMY_INSTANT_WINDOW_S,
+        instant: true,
+      };
+}
+
 export function buildResourceSnapshot(params: ResourceSnapshotParams): string {
   const line = buildResourceSnapshotOnce(params);
   // fact2 (2026-10-20): a first-5-s row that prints says what was ready on
@@ -1334,21 +1383,9 @@ function buildResourceSnapshotOnce({
       // "5s left" at 35 s (codex review): no cap. If duration is 0 (instant
       // cast), show it for 8 seconds to ensure AI has context.
       // …its own end when it was still up as the slice ended (T41)
-      const buffDuration = enemyEffectOwnEndSeconds(cd) - cd.castTimeSeconds;
-      // a press whose effect lives only on a talent's aura (Divine Toll →
-      // Divine Resonance, GH #184 part B, user ruling 2026-11-05 option A)
-      // and logged none has no span: the 8 s would state a window the log
-      // never showed
-      if (buffDuration <= 0 && TALENT_EFFECT_AURAS_OF_CAST[cd.spellId])
-        continue;
-      // a channel with no length never ran (`channelRefusedAtCast`, fact11
-      // D39: Ray of Frost into a Grounding Totem, IMMUNE at the press) — no
-      // instant cooldown, nothing running
-      if (!(buffDuration > 0) && CHANNELED_SPELL_IDS.has(cd.spellId)) continue;
-      // nor did a press the game refused (`refusedAtPress`, T29: Deathmark
-      // into two IMMUNE, b74d7bf6 r1 2:45)
-      if (cd.refusedAtPress) continue;
-      const end = cd.castTimeSeconds + (buffDuration > 0 ? buffDuration : 8);
+      const window = resEnemyEffectWindow(cd);
+      if (!window) continue;
+      const end = window.endSeconds;
       // F20 D25: spent by the row's second on the friendly half's predicate
       // (`pressSpentBy` — the rendered second, A45), not `ago >= 0` against
       // the floored row time, which dropped every press at s + 0.xxx.

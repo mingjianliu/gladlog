@@ -56,6 +56,7 @@ import * as peakSpikePlacement from "@gladlog/analysis/src/context/peakSpikePlac
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
 import * as resRowMod from "@gladlog/analysis/src/context/resRow";
+import * as resourceSnapshot from "@gladlog/analysis/src/context/resourceSnapshot";
 import * as spellOutcomeLines from "@gladlog/analysis/src/context/spellOutcomeLines";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
@@ -1566,6 +1567,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "pressEffectRefusedAtCast",
     mod: enemyCDs,
+  },
+  {
+    file: `${A}/context/resourceSnapshot.ts`,
+    symbol: "resEnemyEffectWindow",
+    mod: resourceSnapshot,
   },
   {
     file: `${A}/utils/enemyCDs.ts`,
