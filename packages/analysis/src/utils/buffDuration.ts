@@ -15,6 +15,7 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import {
+  type IHiddenCastEffect,
   type ITooltipPerEventDuration,
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
@@ -424,7 +425,12 @@ function perEventFor(
 function perEventExtensionSeconds(
   spellId: string,
   caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "id" | "auraEvents" | "damageOut" | "missesOut">>,
+    Partial<
+      Pick<
+        ICombatUnit,
+        "id" | "auraEvents" | "damageOut" | "healOut" | "missesOut"
+      >
+    >,
   baseSeconds: number,
   atMs: number | undefined,
   onUnitId: string | undefined,
@@ -456,7 +462,7 @@ function perEventExtensionSeconds(
   const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
   // a press in the APPLIED's own ms but logged before it is not inside the
   // run (codex B25 #2)
-  const beforeRun = (c: ICombatUnit["spellCastEvents"][number]) => {
+  const beforeRun = (c: IWalkRow) => {
     const t = c.logLine.timestamp;
     if (t !== fromMs) return t < fromMs;
     const line = c.logLine.lineIndex;
@@ -466,25 +472,182 @@ function perEventExtensionSeconds(
   };
   // a press in the REMOVED's own ms but logged after it is past the run
   // (codex 85-tk-A-T18-1c #1)
-  const afterRun = (c: ICombatUnit["spellCastEvents"][number]) => {
+  const afterRun = (c: IWalkRow) => {
     const t = c.logLine.timestamp;
     if (t !== toMs) return t > toMs;
     const line = c.logLine.lineIndex;
     return run?.toLine !== undefined && line !== undefined && line > run.toLine;
   };
+  // …and the casts the log wrote no SPELL_CAST_SUCCESS for
+  // (`hiddenCastEffects`, T246), in time order with the presses
+  const hidden =
+    "hiddenCastEffects" in p && p.hiddenCastEffects
+      ? hiddenCastRows(caster, p.hiddenCastEffects)
+      : [];
+  const walk: Array<{ c: IWalkRow; hidden: boolean }> = hidden.length
+    ? [
+        ...(caster.spellCastEvents ?? []).map((c) => ({ c, hidden: false })),
+        ...hidden.map((c) => ({ c, hidden: true })),
+      ].sort(
+        (x, y) =>
+          x.c.logLine.timestamp - y.c.logLine.timestamp ||
+          (x.c.logLine.lineIndex ?? 0) - (y.c.logLine.lineIndex ?? 0),
+      )
+    : (caster.spellCastEvents ?? []).map((c) => ({ c, hidden: false }));
   let ext = 0;
-  for (const c of caster.spellCastEvents ?? []) {
+  for (const { c, hidden: isHidden } of walk) {
     const t = c.logLine.timestamp;
     if (beforeRun(c)) continue;
     if (t > fromMs + (windowBase + ext) * 1000 || afterRun(c)) break;
-    if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
-    if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
-    if ("landedOnly" in p && p.landedOnly && !pressLanded(caster, c)) continue;
+    if (!isHidden) {
+      if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
+      if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
+      if (
+        "landedOnly" in p &&
+        p.landedOnly &&
+        !pressLanded(caster, c as ICombatUnit["spellCastEvents"][number])
+      )
+        continue;
+    }
     const cap = p.capSeconds ?? Number.POSITIVE_INFINITY;
     ext = Math.min(cap, ext + p.addSecondsPerEvent);
     if (ext >= cap) break;
   }
   return ext;
+}
+
+/** An effect row lands within this of the cast that sent it (a Lava Burst
+ * in flight; the 605 files' longest cast → own-target hit is under it). */
+export const HIDDEN_CAST_EFFECT_WINDOW_MS = 4000;
+/** An effect row can be logged this far ahead of its own cast row. */
+export const HIDDEN_CAST_ROW_LEAD_MS = 50;
+
+/**
+ * T246: the casts of a unit the log shows only by their effect. Each logged
+ * cast of an effect's own spell accounts for one direct effect row (the
+ * unit's SPELL_DAMAGE / SPELL_HEAL / SPELL_MISSED of that effect id) on the
+ * unit it was cast at, the first one inside `HIDDEN_CAST_EFFECT_WINDOW_MS`
+ * after it. Every other effect row is a cast the game made with no cast row
+ * of its own — a Lava Burst that also flew at a second enemy, Ascendance's
+ * volley, the second ally of a Healing Wave — and it was made when the
+ * press that sent it was: the latest cast of the effect's spell or of its
+ * `otherTriggerIds` inside the window before the row. A row with no such
+ * press is not read. One walk row per hidden cast, at its press's time and
+ * logged after it.
+ */
+export function hiddenCastRows(
+  caster: Pick<ICombatUnit, "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "id" | "damageOut" | "healOut" | "missesOut">>,
+  effects: Readonly<Record<string, IHiddenCastEffect>>,
+): IWalkRow[] {
+  const direct = new Set(["SPELL_DAMAGE", "SPELL_HEAL", "SPELL_MISSED"]);
+  const byLog = (
+    x: { logLine: { timestamp: number; lineIndex?: number } },
+    y: { logLine: { timestamp: number; lineIndex?: number } },
+  ) =>
+    x.logLine.timestamp - y.logLine.timestamp ||
+    (x.logLine.lineIndex ?? 0) - (y.logLine.lineIndex ?? 0);
+  const casts = (caster.spellCastEvents ?? [])
+    .filter((c) => c.logLine.event === "SPELL_CAST_SUCCESS" && !!c.spellId)
+    .sort(byLog);
+  const out: IWalkRow[] = [];
+  for (const [effectId, e] of Object.entries(effects)) {
+    const rows = [
+      ...(caster.damageOut ?? []),
+      ...(caster.healOut ?? []),
+      ...(caster.missesOut ?? []),
+    ]
+      .filter(
+        (r) =>
+          r.spellId === effectId &&
+          direct.has(String(r.logLine.event)) &&
+          (caster.id === undefined || r.srcUnitId === caster.id),
+      )
+      .sort(byLog);
+    if (rows.length === 0) continue;
+    // row index → the cast it is the own-target row of
+    const explained = new Map<number, number>();
+    // press time → the time its own row landed (a press without one: itself)
+    const landedAt = new Map<(typeof casts)[number], number>();
+    for (const c of casts) {
+      if (c.spellId !== e.castId) continue;
+      const t = c.logLine.timestamp;
+      const own = (dest: string | undefined) =>
+        rows.findIndex(
+          (r, k) =>
+            !explained.has(k) &&
+            r.destUnitId === dest &&
+            // a heal can be logged a millisecond ahead of its cast row
+            // (fc7fb5fb r1 1:14: Healing Wave's heal 1 ms before its
+            // SPELL_CAST_SUCCESS)
+            r.logLine.timestamp >= t - HIDDEN_CAST_ROW_LEAD_MS &&
+            r.logLine.timestamp - t <= HIDDEN_CAST_EFFECT_WINDOW_MS,
+        );
+      // …or on the caster itself: a reflected cast lands there (17664ae3 r3,
+      // a Lava Burst into Spell Reflection — the row on the shaman is that
+      // cast's, not a second one)
+      let i = own(c.destUnitId);
+      if (i < 0 && caster.id !== undefined) i = own(caster.id);
+      if (i >= 0) {
+        explained.set(i, t);
+        landedAt.set(c, rows[i]!.logLine.timestamp);
+      }
+    }
+    const triggers = casts.filter(
+      (c) =>
+        c.spellId === e.castId ||
+        (e.otherTriggerIds ?? []).includes(c.spellId!),
+    );
+    rows.forEach((r, k) => {
+      if (explained.has(k)) return;
+      const t = r.logLine.timestamp;
+      // of the presses that can have sent it, the one whose own row landed
+      // closest to it: the rows of one cast fly together (baf8a7df r1 0:41,
+      // a Lava Burst pressed before the aura and another 0.4 s later — the
+      // first one's second-enemy hit lands 60 ms after its own row and
+      // 265 ms before the second's)
+      let press: (typeof triggers)[number] | undefined;
+      let off = Number.POSITIVE_INFINITY;
+      for (const c of triggers) {
+        const pressed = c.logLine.timestamp;
+        // (no lead here: the lead pairs a cast with its OWN row; a press
+        // made after this row landed did not send it)
+        if (pressed > t) break;
+        if (t - pressed > HIDDEN_CAST_EFFECT_WINDOW_MS) continue;
+        const d = Math.abs(t - (landedAt.get(c) ?? pressed));
+        if (d <= off) {
+          off = d;
+          press = c;
+        }
+      }
+      if (!press) return;
+      out.push({
+        spellId: effectId,
+        logLine: {
+          timestamp: press.logLine.timestamp,
+          // a further row of a logged cast left with it: it sits where
+          // its cast row does. A volley another press fires (Ascendance)
+          // leaves after that press: in the millisecond the aura goes on
+          // it is inside the run whichever row the log wrote first
+          // (2cd6b75d r1 6:37 — Ascendance, then the two APPLIED rows, one
+          // millisecond; four hits, Aegis 8.99 s)
+          lineIndex:
+            press.spellId !== e.castId || press.logLine.lineIndex === undefined
+              ? undefined
+              : press.logLine.lineIndex + 0.5,
+          event: String(r.logLine.event),
+        },
+      });
+    });
+  }
+  return out.sort(byLog);
+}
+
+/** What the per-press walk reads of a row: a logged cast, or an effect row
+ * standing for a cast the log did not write (`hiddenCastRows`). */
+interface IWalkRow {
+  spellId?: string;
+  logLine: { timestamp: number; lineIndex?: number; event: string };
 }
 
 /** How far from the press's time its own aura row can be logged (either

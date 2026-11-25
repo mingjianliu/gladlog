@@ -691,6 +691,17 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) =>
         p.event === "press" ? [...p.qualifyingSpellIds] : [],
       ),
+      // the effect rows read as casts with no cast row, and what sends them
+      // (T246 review: a renumbered effect id would rot unseen)
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) =>
+        p.event === "press"
+          ? Object.entries(p.hiddenCastEffects ?? {}).flatMap(([id, e]) => [
+              id,
+              e.castId,
+              ...(e.otherTriggerIds ?? []),
+            ])
+          : [],
+      ),
     ],
   ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>

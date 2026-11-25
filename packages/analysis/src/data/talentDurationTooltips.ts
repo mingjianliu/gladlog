@@ -268,6 +268,17 @@ export interface ITooltipPerPressDuration extends ITooltipPerEventBase {
   /** the presses that count — 「带有施法时间的法术」: the class's spells
    * whose DB2 cast time is > 0, instant or not on that press */
   qualifyingSpellIds: ReadonlySet<string>;
+  /** qualifying casts the game makes with no SPELL_CAST_SUCCESS row, read
+   * off their effect rows (`hiddenCastRows`), by effect id */
+  hiddenCastEffects?: Readonly<Record<string, IHiddenCastEffect>>;
+}
+
+/** An effect row id whose rows can stand for casts the log did not write. */
+export interface IHiddenCastEffect {
+  /** the logged cast that sends one row of it at its own target */
+  castId: string;
+  /** other presses that send rows of it with no cast row of that spell */
+  otherTriggerIds?: readonly string[];
 }
 
 /** The event is a critical tick of the aura's own damage on the unit it is
@@ -288,6 +299,49 @@ export type ITooltipPerEventDuration =
 // Spiritwalker's Grace 131 of 159 within 0.5 s (0 presses +0 ×3, 1 → +1
 // ×12, 2 → +2 ×7, 3 → +3 ×7, 4+ → +4 ×101), non-holders 178 of 195 at 15 s;
 // Spiritwalker's Aegis 118 of 162 (the misses run LONGER, open).
+// T246 — casts with no cast row extend it too, each at the time of the
+// press that sent it (`hiddenCastRows`): a Lava Burst cast also lands on
+// other enemies (c5b55e06 r2 2:13: one cast, hits on two enemies, Aegis
+// 7.0 s), Ascendance 114050 fires a volley of them (f85431cc r1 0:34: six
+// hits, one logged Lava Burst after, Aegis 9.0 s), and under Restoration's
+// Ascendance a Healing Wave heals a second ally (7f107afb r1 2:33; the
+// 114052 tooltip names the additional ally). A volley pressed before the
+// aura went on extends nothing, though hits of it land after (c5b55e06
+// 18:45:34 log time: 8.0 s with three such rows inside); Lava Burst
+// Overload 285466 rows do not count (same run). DB2 gives Momentum the 1 s
+// and the 4 s cap with zero class masks and no spell list, so what counts
+// is read off the logs.
+// An Ascendance logged just ahead of the aura's APPLIED row in one
+// millisecond is inside the run with its whole volley (2cd6b75d r1 6:37:
+// Aegis 9.0 s; daac4802 r4 0:27).
+// Counts below are a raw-log replica of this rule (a script over the log
+// rows, without the same-millisecond ordering), not the product's own
+// output. 605 files, every closed run on a holder with no dispel or steal
+// row of that holder's aura, prediction vs logged life within 0.5 s — cast
+// rows alone → with these:
+// Spiritwalker's Aegis (162 runs) 109 → 158 exact, 50 → 1 short, 3 → 3
+// past; Spiritwalker's Grace (153) 129 → 139 exact, 11 → 1 short, 13 → 13
+// past. No run moves to "past" (an aura that ended before its printed
+// length: 11 of the 13 Grace runs ended under 14.5 s, a death (17664ae3
+// r3: PARTY_KILL in the removal's millisecond) or a cancel; 28c39eb1 r4
+// and eadf9636 r3 ran 17.6 / 17.8 s against 19 on both readings, open).
+// Still short, open: 197491d6 r5 Aegis 9.0 s against 7 (a Lava Burst cast
+// 0.1 s before the aura, its hits after) and cf909ac1 r1 Grace 24.0 s
+// against 19.
+// The 285 files of the 12.1.5 set, same replica: Aegis (250 runs) 178 →
+// 244 exact, 68 → 1 short, 4 → 5 past — the one run that moves to "past"
+// (cfe9ade3 r2, 9 against 8.2 s) ended at its shaman's death, Grace with
+// it; Grace (231) 188 → 209 exact, 21 → 0 short, 22 → 22 past. The
+// product itself, counted by the reviewer on the tree before the
+// same-millisecond fix (codex 85-tk-L1-T246-1c): Aegis 242 of 250, Grace
+// 210 of 231.
+const SHAMAN_HIDDEN_CAST_EFFECTS: Readonly<Record<string, IHiddenCastEffect>> =
+  {
+    // Lava Burst's hit; Ascendance 114050 fires it with no Lava Burst cast row
+    "285452": { castId: "51505", otherTriggerIds: ["114050"] },
+    // Healing Wave's heal
+    "77472": { castId: "77472" },
+  };
 const SHAMAN_CAST_TIME_SPELLS: ReadonlySet<string> = new Set([
   "1064",
   "2008",
@@ -330,6 +384,7 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     capSeconds: 4,
     specs: ["262", "264"],
     qualifyingSpellIds: SHAMAN_CAST_TIME_SPELLS,
+    hiddenCastEffects: SHAMAN_HIDDEN_CAST_EFFECTS,
   },
   "378078": {
     event: "press",
@@ -339,6 +394,7 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     capSeconds: 4,
     specs: ["262", "264"],
     qualifyingSpellIds: SHAMAN_CAST_TIME_SPELLS,
+    hiddenCastEffects: SHAMAN_HIDDEN_CAST_EFFECTS,
   },
   // Capacitance 1270724 (Mountain Thane): 「在天神下凡期间，雷霆轰击会使天神
   // 下凡的持续时间延长2秒」, read for Fury and Protection, no cap named. GH

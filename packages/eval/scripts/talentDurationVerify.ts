@@ -104,6 +104,8 @@ interface Acc {
   perEventErr: number[];
   /** per-event: the qualifying events counted per holder application */
   perEventHard: number[];
+  /** the observed extension of each application (life − base) */
+  perEventExt: number[];
 }
 const acc = new Map<string, Acc>();
 const accOf = (w: { e: Entry; base: number; key: string }, auraId: string) => {
@@ -118,6 +120,7 @@ const accOf = (w: { e: Entry; base: number; key: string }, auraId: string) => {
       model: [],
       perEventErr: [],
       perEventHard: [],
+      perEventExt: [],
     };
     acc.set(w.key, a);
   }
@@ -265,8 +268,15 @@ for (const f of files) {
                 }
               }
               ac.perEventHard.push(hard);
+              ac.perEventExt.push(life - w.base);
+              // the verdict is the product's own per-application reading
+              // when it has one (T246 review: counting cast rows here scored
+              // the predicate the product no longer uses); `hard` stays the
+              // logged presses, for the histogram
               const predicted =
-                w.base + Math.min(w.e.cap ?? Infinity, hard * w.e.amount);
+                qualifying && model
+                  ? model
+                  : w.base + Math.min(w.e.cap ?? Infinity, hard * w.e.amount);
               ac.perEventErr.push(Math.round((life - predicted) * 10) / 10);
             }
           }
@@ -314,7 +324,8 @@ const rows = [...acc.values()].map((a) => {
     nAtPred <= Math.max(1, 0.2 * nAtBase)
   )
     verdict = "confirmed";
-  else if (hAtBase >= 5 && hAtPred <= 0.1 * hAtBase) verdict = "holders-at-base";
+  else if (hAtBase >= 5 && hAtPred <= 0.1 * hAtBase)
+    verdict = "holders-at-base";
   else if (hAtPred + hAtBase < 5) verdict = "insufficient";
   else verdict = "mixed";
   return {
@@ -357,11 +368,9 @@ const rows = [...acc.values()].map((a) => {
                   .map((h, i) => ({
                     h,
                     ext:
-                      Math.round(
-                        (a.perEventErr[i]! +
-                          Math.min(a.e.cap ?? Infinity, h * a.e.amount)) *
-                          2,
-                      ) / 2,
+                      // the observation itself, not the model's residual
+                      // plus the logged presses (T246 review)
+                      Math.round(a.perEventExt[i]! * 2) / 2,
                   }))
                   .filter(({ h }) => (k === "4+" ? h >= 4 : h === Number(k)))
                   .map(({ ext }) => ext);
