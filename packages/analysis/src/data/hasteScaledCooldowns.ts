@@ -12,6 +12,10 @@
  * (`packages/eval/scripts/hasteScaledCooldownGen.ts`, from the talent effect
  * inventory: aura 416 rows with a rate > 0, their mask / label targets, keyed
  * by the spec of the passive that carries them) — never a hand list.
+ *
+ * Pipeline T267: charges a spec passive recovers by haste (DB2 aura 457 on
+ * the spell's charge category) are the same fact — Discipline's Penance, 9 s
+ * modelled, re-pressed on a 7.0 s median — and sit in the same set.
  */
 import raw from "./hasteScaledCooldownsGenerated.json";
 

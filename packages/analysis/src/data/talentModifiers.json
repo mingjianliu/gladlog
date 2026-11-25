@@ -712,6 +712,11 @@
         "104",
         "105"
       ]
+    },
+    {
+      "talentSpellId": "470562",
+      "effect": "reduce_cd_pct",
+      "value": 15
     }
   ],
   "19236": [

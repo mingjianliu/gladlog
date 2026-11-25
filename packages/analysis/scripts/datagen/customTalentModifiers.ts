@@ -78,6 +78,25 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
     },
   ],
 
+  // Swiftmend 18562 ← Renewing Surge 470562 (Restoration), pipeline T267.
+  // Tooltip: "Swiftmend's cooldown is reduced by $s1%, up to $s2% on a
+  // target at low health" — DB2 12.1.5.70391: two dummy auras (4), 15 and
+  // 30, no class mask, a server script. Corpus (cooldownRecastScan, 605 +
+  // 285 12.1.5 files, ranks from COMBATANT_INFO): 563 of 563 Restoration
+  // records hold it; on the modelled 14 / 15 s the longest recharge a
+  // druid's presses fit has a median of 9.7–11.2 s, and 1,094 of 2,629
+  // presses were impossible. Only the unconditional 15 % is modelled here —
+  // the direction a wrong number is safe in (the cooldown is never longer
+  // than this); the health-scaled rest, up to 30 %, has no stated curve and
+  // stays out.
+  "18562": [
+    {
+      talentSpellId: "470562", // Renewing Surge
+      effect: "reduce_cd_pct",
+      value: 15,
+    },
+  ],
+
   // --- Mage ---
   // Ice Block 45438 ← Ice Cold 414658 (`pressedAs`: Ice Cold's presses are Ice
   // Block's). Up to 12.1.0 the node carried the passive 414659, whose aura-332
