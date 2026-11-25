@@ -206,6 +206,7 @@ import {
   OVERRIDE_VARIANT_SHARES_BY_ERA,
   variantSharesCooldownAt,
 } from "@gladlog/analysis/src/utils/overrideVariantEra";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 
 import {
@@ -1678,6 +1679,11 @@ function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
     );
     if (ups.length === 0) continue;
     ctx.bump("immunityBaitedSelfBroken");
+    // the kill attempts' own round end (`roundEndMs`): a hit or an action
+    // after it ended nothing inside the round (T243: a Mass Invisibility up
+    // at the last death, its holder's next cast between the rounds; codex
+    // 85-tk-L5-T243-1 #4: both readings, on the producer's boundary)
+    const roundEnd = roundEndMs(ctx.legacy);
     const selfBroken = (a: any): boolean => {
       const id = String(a.spellId);
       // GH #195: one an aimed hit ended past its first second did not hold
@@ -1694,8 +1700,8 @@ function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
             ctx,
             target,
             tsOf(a),
-            endMs,
-            removed?.logLine?.lineIndex,
+            Math.min(endMs, roundEnd),
+            endMs <= roundEnd ? removed?.logLine?.lineIndex : undefined,
           ) !== undefined
         )
           return true;
@@ -1718,10 +1724,7 @@ function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
         id,
         ctx.units as any,
       );
-      // an action after the round's end broke nothing inside it (T243: a
-      // Mass Invisibility up at the last death, its holder's next cast
-      // between the rounds)
-      return first < Math.min(tsOf(a) + lenMs, ctx.roundEndAt);
+      return first < Math.min(tsOf(a) + lenMs, roundEnd);
     };
     if (!ups.every(selfBroken)) continue;
     ctx.violate(

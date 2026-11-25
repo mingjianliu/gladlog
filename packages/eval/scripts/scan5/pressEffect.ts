@@ -165,12 +165,18 @@ export function run(ctx: IRoundCtx): void {
         (c) => tsOf(c) >= tsOf(up) && tsOf(c) <= tsOf(up) + PRESS_AFTER_MS,
       );
       if (!press) continue;
-      // the press has a line of its own in its second: the earlier
-      // application is another one (a proc's — Exhilaration's 3 s Survival
-      // of the Fittest, Well-Honed Instincts' Frenzied Regeneration), and
-      // both lines are true (T243)
+      const refreshed = auras.some(
+        (a) => ev(a) === REFRESH && Math.abs(tsOf(a) - tsOf(press)) <= 50,
+      );
+      // the press refreshed the aura and has a line of its own in its
+      // second: the earlier application is another one (a proc's —
+      // Exhilaration's 3 s Survival of the Fittest, Well-Honed Instincts'
+      // Frenzied Regeneration), and both lines are true (T243). With no
+      // REFRESH the application is the press's own and the tag is wrong
+      // whatever else prints (codex 85-tk-L5-T243-1 #2).
       const pressSec = Math.floor((tsOf(press) - ctx.start) / 1000);
       if (
+        refreshed &&
         ctx.lines.some((o) => {
           const om = LINE.exec(o);
           return (
@@ -184,9 +190,6 @@ export function run(ctx: IRoundCtx): void {
         })
       )
         continue;
-      const refreshed = auras.some(
-        (a) => ev(a) === REFRESH && Math.abs(tsOf(a) - tsOf(press)) <= 50,
-      );
       ctx.violate(
         "noPressButPressed",
         refreshed ? "refreshed" : "noRefreshRow",

@@ -76,10 +76,9 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ),
   ...SHOWN.map((shown) => `listGapPress|control/enemy/${shown}`),
   // T243: a healer's offensive racial is no cooldown line by ruling (A16 /
-  // R55, `isHealerHeldOffensive`); the kit row keeps it
-  ...SIDES.flatMap((side) =>
-    SHOWN.map((shown) => `listGapPress|healerRacial/${side}/${shown}`),
-  ),
+  // R55, `isHealerHeldOffensive`); the kit row keeps it, and one the kit
+  // row lacks too stays a gap (codex 85-tk-L5-T243-1 #1)
+  ...SIDES.map((side) => `listGapPress|healerRacial/${side}/kitOnly`),
 ]);
 
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
@@ -189,7 +188,8 @@ export function run(ctx: IRoundCtx): void {
           ? "filled"
           : side === "enemy" && isControlCast(id)
             ? "control"
-            : OFFENSIVE_RACIAL_WINDOW_IDS.has(id) &&
+            : inKit &&
+                OFFENSIVE_RACIAL_WINDOW_IDS.has(id) &&
                 isHealerHeldOffensive(id, unit.spec)
               ? "healerRacial"
               : isRosterPressId(id)

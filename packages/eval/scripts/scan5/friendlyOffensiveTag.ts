@@ -150,11 +150,15 @@ function offensiveAurasUp(
   // effect: `offensiveCdOfAura` leaves those to their own table
   return (
     [...up]
-      .map((k) => k.split("|")[0]!)
+      .map((k) => k.split("|") as [string, string])
+      // with the caster's spec, as the reading above asked it: a cooldown
+      // only one spec's aura files under (Convoke the Spirits) is that
+      // spec's (codex 85-tk-L5-T243-1 #5)
       .map(
-        (id) =>
+        ([id, src]) =>
           castsOfTalentEffectAura(id)[0] ??
           OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId ??
+          offensiveCdOfAura(id, src === unit.id ? unit.spec : undefined) ??
           offensiveCdOfAura(id),
       )
       .filter((id): id is string => id !== undefined)

@@ -117,6 +117,11 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 const PRESS_LOOKBACK_MS = 60_000;
 /** an aura logged up to this far before its cast row is still the press's */
 const LAG_MS = 150;
+/** row x is logged before row y: by time, then by line in one millisecond */
+const rowBefore = (x: any, y: any): boolean =>
+  tsOf(x) !== tsOf(y)
+    ? tsOf(x) < tsOf(y)
+    : (x.logLine?.lineIndex ?? 0) < (y.logLine?.lineIndex ?? 0);
 const RULED_NAMES = new Set(["Power Word: Shield", "Void Shield"]);
 const EXCLUDED = new Set(["342246", "110909", "363916"]);
 const RIDER_SHARE = 0.9;
@@ -220,32 +225,37 @@ export function run(ctx: IRoundCtx): void {
     // Barrier up 2:42.2, last absorb 2:44.9, unabsorbed hits after, the next
     // press an APPLIED — not a shield up to its DB2 length inside
     // `defenseless 3:23–3:29`). One that absorbed nothing keeps the length.
-    const lastAbsorbIn = (id: string, fromMs: number, toMs: number): number =>
-      Math.max(
-        -Infinity,
-        ...((u.absorbsIn ?? []) as any[])
-          .filter(
-            (r) =>
-              (ev(r) === undefined || ev(r) === ABSORBED) &&
-              String(r.spellId) === id &&
-              r.srcUnitId === u.id &&
-              tsOf(r) >= fromMs - LAG_MS &&
-              tsOf(r) <= toMs,
-          )
-          .map((r) => tsOf(r)),
-      );
+    // (its own rows only: one logged before the application is the shield
+    // before it, and a REFRESH logged after the last absorbed row in its
+    // millisecond is still after it — codex 85-tk-L5-T243-1 #3)
+    const lastAbsorbIn = (id: string, fromMs: number, toMs: number): any =>
+      ((u.absorbsIn ?? []) as any[])
+        .filter(
+          (r) =>
+            (ev(r) === undefined || ev(r) === ABSORBED) &&
+            String(r.spellId) === id &&
+            r.srcUnitId === u.id &&
+            tsOf(r) >= fromMs &&
+            tsOf(r) <= toMs,
+        )
+        .reduce(
+          (last: any, r) => (!last || !rowBefore(r, last) ? r : last),
+          undefined,
+        );
     const close = (id: string, fromMs: number, capMs: number, inf: boolean) => {
-      const eaten = inf ? lastAbsorbIn(id, fromMs, capMs) : -Infinity;
+      const eaten = inf ? lastAbsorbIn(id, fromMs, capMs) : undefined;
       // …unless the run was refreshed after it: a new shield, still whole
-      const refreshedAfter = rows.some(
-        (a) =>
-          String(a.spellId) === id &&
-          ev(a) === REFRESH &&
-          tsOf(a) > eaten &&
-          tsOf(a) <= capMs,
-      );
+      const refreshedAfter =
+        !!eaten &&
+        rows.some(
+          (a) =>
+            String(a.spellId) === id &&
+            ev(a) === REFRESH &&
+            rowBefore(eaten, a) &&
+            tsOf(a) <= capMs,
+        );
       const toMs =
-        eaten > -Infinity && !refreshedAfter ? Math.max(fromMs, eaten) : capMs;
+        eaten && !refreshedAfter ? Math.max(fromMs, tsOf(eaten)) : capMs;
       const near = succ.find((c) => Math.abs(tsOf(c) - fromMs) <= LAG_MS);
       // a caster-side link: the same spell's press went on another unit
       const linkOnly = succ.some(
