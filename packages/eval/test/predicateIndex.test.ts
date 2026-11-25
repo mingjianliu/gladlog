@@ -1523,6 +1523,16 @@ const INDEX: PredicateRow[] = [
     mod: burstLedger,
   },
   {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "wallForSchoolTest",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "wallIsOutsideBurst",
+    mod: burstLedger,
+  },
+  {
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "pressDeliveryEndSeconds",
     mod: enemyCDs,

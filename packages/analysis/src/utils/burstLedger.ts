@@ -60,6 +60,7 @@ import {
   FULL_IMMUNITY_IDS,
   holderFirstOwnActionAfterMs,
   type IEnemyDefensiveEvent,
+  limitedImmunitySchoolMask,
   MITIGATION_AURA_MIN_PCT,
   PRESS_TO_AURA_MAX_S,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -968,6 +969,88 @@ export function wallRefusedAttackOf(
   );
 }
 
+/**
+ * The wall as R102 reads it: this application's resolved components
+ * (`resolveMitigation`), or — for an immunity with no `MITIGATION_TABLE`
+ * row whose DB2 SCHOOL_IMMUNITY covers only some schools
+ * (`limitedImmunitySchoolMask`: Peaceweaver, magic) — one immunity
+ * component over that mask (user ruling R116, 2026-11-24: Peaceweaver
+ * joins R102's school test). Undefined = outside the test (an absorb or a
+ * reflect: Anti-Magic Shell, Nether Ward; a full immunity).
+ */
+export function wallForSchoolTest(
+  wallAuraSpellId: string,
+  ctx: Parameters<typeof resolveMitigation>[1],
+): IResolvedMitigation | undefined {
+  const id = wallTableIdOfAura(wallAuraSpellId);
+  const res = resolveMitigation(id, ctx);
+  if (res) return res;
+  const mask = limitedImmunitySchoolMask(id);
+  return mask === undefined
+    ? undefined
+    : {
+        spellId: id,
+        positional: false,
+        components: [
+          { kind: "immunity", schoolMask: mask, pctMin: 100, pctMax: 100 },
+        ],
+        unresolved: [],
+      };
+}
+
+/**
+ * R102 / R116 in one call, for the ledger and the gate that checks its
+ * wall lines (scan5/spanFacts `ledgerProcImmunityMissing`): the wall
+ * reached none of `holder`'s damage on the target in [fromMs, toMs]
+ * (`wallTouchesNoneOf`) and refused none of its or its pets' attacks there
+ * (`wallRefusedAttackOf`) — it is not this burst's.
+ */
+export function wallIsOutsideBurst(
+  res: IResolvedMitigation | undefined,
+  holder: ICombatUnit,
+  pets: readonly ICombatUnit[],
+  targetId: string,
+  fromMs: number,
+  toMs: number,
+  recordsAttackSpell: boolean,
+  isDamaging: (spellId: string) => boolean,
+): boolean {
+  return (
+    wallTouchesNoneOf(
+      res,
+      burstDamageBySchoolOn(holder, targetId, fromMs, toMs, recordsAttackSpell),
+    ) &&
+    !wallRefusedAttackOf(
+      res,
+      [holder, ...pets],
+      targetId,
+      fromMs,
+      toMs,
+      isDamaging,
+    )
+  );
+}
+
+/** A unit's pets in the round (`ownerId`). */
+export function petsOf(
+  unit: Pick<ICombatUnit, "id">,
+  combat: Pick<AtomicArenaCombat, "units">,
+): ICombatUnit[] {
+  return (Object.values(combat.units ?? {}) as unknown as ICombatUnit[]).filter(
+    (u) => u.ownerId === unit.id,
+  );
+}
+
+/** Does a spell of these units have a damage row somewhere in the round —
+ * `wallRefusedAttackOf`'s "the attack deals damage". */
+export function damagingSpellIdsOf(
+  units: ReadonlyArray<Pick<ICombatUnit, "damageOut">>,
+): Set<string> {
+  return new Set(
+    units.flatMap((u) => (u.damageOut ?? []).map((d) => String(d.spellId))),
+  );
+}
+
 export function analyzeBurstLedger(
   player: ICombatUnit,
   allies: ICombatUnit[],
@@ -997,17 +1080,15 @@ export function analyzeBurstLedgerUncached(
   // read once per call, and only when a wall asks (T166)
   let petsMemo: ICombatUnit[] | undefined;
   const petsOfHolder = (): ICombatUnit[] =>
-    (petsMemo ??= (
-      Object.values(combat.units ?? {}) as unknown as ICombatUnit[]
-    ).filter((u) => u.ownerId === player.id));
+    (petsMemo ??= petsOf(player, combat));
   // spells of the holder's side with a damage row somewhere in the round
   let damagingIdsMemo: Set<string> | undefined;
   const isDamagingSpell = (spellId: string): boolean =>
-    (damagingIdsMemo ??= new Set(
-      [player, ...allies, ...petsOfHolder()].flatMap((u) =>
-        (u.damageOut ?? []).map((d) => String(d.spellId)),
-      ),
-    )).has(spellId);
+    (damagingIdsMemo ??= damagingSpellIdsOf([
+      player,
+      ...allies,
+      ...petsOfHolder(),
+    ])).has(spellId);
   let recordsAttackSpellMemo: boolean | undefined;
   const recordsAttackSpell = (): boolean =>
     (recordsAttackSpellMemo ??= documentRecordsAttackSpell(
@@ -1269,7 +1350,7 @@ export function analyzeBurstLedgerUncached(
         // attacks there, is not this burst's
         const lo = Math.max(iv.startMs, fromMs);
         const hi = Math.min(endMs, toMs);
-        const wallRes = resolveMitigation(wallTableIdOfAura(iv.spellId), {
+        const wallRes = wallForSchoolTest(iv.spellId, {
           carrierIsCaster: iv.srcUnitName === target.name,
           caster: (combat.units as Record<string, ICombatUnit> | undefined)?.[
             iv.srcUnitId ?? ""
@@ -1277,22 +1358,14 @@ export function analyzeBurstLedgerUncached(
           atMs: iv.startMs,
         });
         if (
-          wallTouchesNoneOf(
+          wallIsOutsideBurst(
             wallRes,
-            burstDamageBySchoolOn(
-              player,
-              target.id,
-              lo,
-              hi,
-              recordsAttackSpell(),
-            ),
-          ) &&
-          !wallRefusedAttackOf(
-            wallRes,
-            [player, ...petsOfHolder()],
+            player,
+            petsOfHolder(),
             target.id,
             lo,
             hi,
+            recordsAttackSpell(),
             isDamagingSpell,
           )
         )

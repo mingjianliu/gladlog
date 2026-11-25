@@ -166,6 +166,10 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
     schools: string[],
     immuneAtS?: number,
     petImmuneAtS?: number,
+    wall: { id: string; name: string } = {
+      id: BOP,
+      name: "Blessing of Protection",
+    },
   ) => {
     const mage = makeUnit("p1", {
       name: "Mage",
@@ -203,9 +207,9 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
             },
           ];
     const bop = (event: LogEvent, s: number) => ({
-      ...makeAuraEvent(event, BOP, at(s), "e3", "e1", "BUFF"),
+      ...makeAuraEvent(event, wall.id, at(s), "e3", "e1", "BUFF"),
       srcUnitName: "Holy",
-      spellName: "Blessing of Protection",
+      spellName: wall.name,
     });
     const tgt = makeUnit("e1", {
       name: "Pala",
@@ -264,6 +268,13 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
   it("its pet's swing refused under it: held (codex 85-tk-L2-T166-1 #1)", () => {
     expect(held(["0x10", "0x40"], undefined, 14)).toEqual([BOP]);
     expect(held(["0x10", "0x40"], undefined, 25)).toEqual([]);
+  });
+  it("Peaceweaver (no table row, a magic immunity) joins the test — ruling R116", () => {
+    const pw = { id: "353319", name: "Peaceweaver" };
+    // physical only under it: not the burst's
+    expect(held(["0x1", "0x1"], undefined, undefined, pw)).toEqual([]);
+    // magic under it: held
+    expect(held(["0x1", "0x10"], undefined, undefined, pw)).toEqual([pw.id]);
   });
   it("one physical hit under it: held", () => {
     expect(held(["0x10", "0x1"])).toEqual([BOP]);

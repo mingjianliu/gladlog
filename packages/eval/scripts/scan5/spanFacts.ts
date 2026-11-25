@@ -23,6 +23,10 @@
  *  - `ledgerProcImmunityMissing` (D40): a teammate's proc immunity on the burst
  *    ledger's target for ≥ 0.5 s of the burst, the burst not naming it.
  *    9121b496 Burst #2: Peaceweaver 1:18.6–1:20.6.
+ *    Not asked of one the ledger leaves out under rulings R102 / R116 —
+ *    a school-limited immunity that reached none of the holder's damage in
+ *    the overlap and refused none of its attacks (`wallIsOutsideBurst`,
+ *    the ledger's own predicate).
  *  - `troughOnStaleMaxRow` (D60): a printed `low B% at m:ss` / `[STATE]` tick
  *    that only the row of a form shift reaches: current HP already on the new
  *    scale, max HP still the old one. 4f8a5947 2:33: 151364 / 1361920 = 11 %,
@@ -41,6 +45,13 @@ import {
   hpReadingMaxHp,
   staleMaxHpRows,
 } from "@gladlog/analysis/src/utils/advancedActions";
+import {
+  analyzeBurstLedger,
+  damagingSpellIdsOf,
+  petsOf,
+  wallForSchoolTest,
+  wallIsOutsideBurst,
+} from "@gladlog/analysis/src/utils/burstLedger";
 import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import { ccLengthIsDrEvidence } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
@@ -53,6 +64,7 @@ import {
   DR_RESET_TICK_MS,
   isDiminishedLength,
 } from "@gladlog/analysis/src/utils/drAnalysis";
+import { documentRecordsAttackSpell } from "@gladlog/analysis/src/utils/incomingPressure";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -299,6 +311,59 @@ function drHalf(ctx: IRoundCtx): void {
   }
 }
 
+function procOutsideBurst(
+  ctx: IRoundCtx,
+  target: any,
+  on: any,
+  fromSec: number,
+  toSec: number,
+  onMs: number,
+  offMs: number,
+): boolean {
+  const owner = ctx.owner as any;
+  if (!owner) return false;
+  const players = ctx.players as any[];
+  const combat = ctx.legacy as any;
+  let entries: ReturnType<typeof analyzeBurstLedger>;
+  try {
+    entries = analyzeBurstLedger(
+      owner,
+      players.filter((p) => p.reaction === owner.reaction),
+      players.filter((p) => p.reaction !== owner.reaction),
+      combat,
+    );
+  } catch {
+    return false;
+  }
+  // the header prints both ends floored to the render grid
+  const e = entries.find(
+    (x) =>
+      Math.floor(x.fromSeconds) === fromSec &&
+      Math.floor(x.toSeconds) === toSec &&
+      x.dominantTarget?.unitId === target.id,
+  );
+  if (!e) return false;
+  const pets = petsOf(owner, combat);
+  const damaging = damagingSpellIdsOf([
+    ...players.filter((p) => p.reaction === owner.reaction),
+    ...pets,
+  ]);
+  return wallIsOutsideBurst(
+    wallForSchoolTest(String(on.spellId), {
+      carrierIsCaster: on.srcUnitId === target.id,
+      caster: ctx.units.find((u: any) => u.id === on.srcUnitId),
+      atMs: onMs,
+    }),
+    owner,
+    pets,
+    target.id,
+    Math.max(onMs, ctx.start + e.fromSeconds * 1000),
+    Math.min(offMs, ctx.start + e.toSeconds * 1000),
+    documentRecordsAttackSpell(Object.values(combat.units ?? {})),
+    (id) => damaging.has(id),
+  );
+}
+
 function ledger(ctx: IRoundCtx): void {
   let from = 0;
   let to = 0;
@@ -330,6 +395,21 @@ function ledger(ctx: IRoundCtx): void {
         // the burst's bounds are floored seconds: the overlap it surely had
         const overlap = Math.min(offS, to) - Math.max(onS, from + 1);
         if (overlap < 0.5) continue;
+        // rulings R102 / R116: a school-limited one that reached none of
+        // the holder's damage there and refused none of its attacks is not
+        // the burst's — the ledger's own reading, on the ledger's own burst
+        if (
+          procOutsideBurst(
+            ctx,
+            unit,
+            on,
+            from,
+            to,
+            tsOf(on),
+            ctx.start + offS * 1000,
+          )
+        )
+          continue;
         ctx.bump("ledgerProcImmunityMissing");
         const name = getEnglishSpellName(on.spellId, on.spellName ?? "");
         if (!block.some((l) => l.includes(`${name} active ON THE TARGET`)))
