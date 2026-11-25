@@ -60,6 +60,7 @@ import {
 } from "../timelineHelpers";
 import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
+import { PROC_TRIGGER_LEAD_MS } from "./enemyCd";
 import type { TimelineCtx } from "./ctx";
 import { OFF_LIST_PRESS_LEGEND, OFF_LIST_PRESS_TAG } from "./offListPress";
 import {
@@ -734,7 +735,7 @@ export function formatTimeline(
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
     ...(procLinesEmitted
       ? [
-          "[PROC] = an automatically applied effect (a passive or a talent-replaced button; `(no press)` = a cooldown's aura a talent or another spell put up, the button not spent); the [PROC] line itself is not a press of that button — when the player also pressed it in the same second, that press has its own line. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
+          `[PROC] = an automatically applied effect (a passive or a talent-replaced button; \`(no press)\` = a cooldown's aura with no press of that button logged inside the round — a talent or another spell put it up, or the press itself fell just outside the round's start or end); the [PROC] line itself is not a press of that button — when the player also pressed it in the same second, that press has its own line. \`(with X)\` = it went out together with that player's press of X (within ${PROC_TRIGGER_LEAD_MS} ms), as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. \`(cheat-death proc)\` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.`,
         ]
       : []),
     "",
