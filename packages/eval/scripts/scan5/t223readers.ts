@@ -39,6 +39,7 @@
 import {
   boundBurstWindow,
   boundedBurstSegments,
+  markRoundEndingDeathSecond,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
   CRISIS_MIN_DMG2S,
@@ -58,7 +59,10 @@ import {
   isRedistributionRow,
 } from "@gladlog/analysis/src/utils/incomingPressure";
 import { buildRosterSides } from "@gladlog/analysis/src/utils/rosterSide";
-import { playableEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  playableEndMs,
+  roundDamageEndMs,
+} from "@gladlog/analysis/src/utils/roundEnd";
 import {
   THREAT_DAMAGE_WINDOW_MS,
   unitUnderFireAt,
@@ -128,7 +132,12 @@ export function run(ctx: IRoundCtx): void {
   const units = ctx.units as any[];
   const sides = buildRosterSides(units);
   const combat = { ...ctx.legacy, startTime: ctx.start, endTime: ctx.end };
-  const sliceEndS = (ctx.end - ctx.start) / 1000;
+  // the round's end the burst readers stop at (`roundDamageEndMs`, T237)
+  const dmgEnd = roundDamageEndMs({
+    ...(ctx.legacy as any),
+    endTime: ctx.end,
+  });
+  const sliceEndS = (dmgEnd - ctx.start) / 1000;
   if (!(sliceEndS > 0)) return;
 
   const raw = new Map<string, Series>();
@@ -293,17 +302,16 @@ export function run(ctx: IRoundCtx): void {
         for (let i = 0; i < s.t.length; i++) {
           // no row after the round's end, raw or shared: the product's
           // per-second floor reads `isRoundLandedDamageRow` against
-          // `combat.endTime` (pipeline T234; B175 stack check, 0 -> 210
+          // `roundDamageEndMs` (pipeline T234, T237; B175 stack check, 0 -> 210
           // qualified segments while this map still read the rows the
           // unit arrays keep after the deciding death)
-          if (s.t[i]! > combat.endTime) continue;
+          if (s.t[i]! > dmgEnd) continue;
           const sec = Math.floor((s.t[i]! - ctx.start) / 1000);
-          out.set(
-            sec,
-            (out.get(sec) ?? 0) + (s.pre[i + 1]! - s.pre[i]!) / max,
-          );
+          out.set(sec, (out.get(sec) ?? 0) + (s.pre[i + 1]! - s.pre[i]!) / max);
         }
       }
+      // …and the round-ending death's own second, as the product marks it
+      markRoundEndingDeathSecond(out, friends, ctx.start, dmgEnd);
       return out;
     };
     const { facts, segments } = boundedBurstSegments(combat, {

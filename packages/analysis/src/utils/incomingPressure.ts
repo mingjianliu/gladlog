@@ -292,9 +292,10 @@ export function isRedistributedDamageRow(
 /**
  * Is this `damageIn` row damage the unit took IN THE ROUND: a landed hit (no
  * moved health, `isRedistributedDamageRow`) logged no later than the round's
- * end (`combat.endTime` — a Solo Shuffle round ends at its deciding death and
- * the unit arrays keep the seconds after it; those rows are the same round's
- * tail, not this round's pressure). ONE bound for the aligned burst window's
+ * end (`roundEndMs` — a Solo Shuffle round ends at its deciding death and
+ * the log and the unit arrays keep the ~2 s after it; those rows are not this
+ * round's pressure. Pipeline T237, ruling R111: the callers pass `roundEndMs`,
+ * no longer `combat.endTime`). ONE bound for the aligned burst window's
  * total, slice average and pressured-unit pick (`enemyCDs.ts`, pipeline
  * T228) and for the bounded segments' per-second damage
  * (`burstWindowDecisionPoints.ts`, pipeline T234). `roundEndAtMs` undefined

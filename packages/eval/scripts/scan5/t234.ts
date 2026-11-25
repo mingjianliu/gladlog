@@ -3,8 +3,9 @@
  * scan5/t234.ts — pipeline T234, count first: the bounded burst segments'
  * per-second damage (`damagePctPerSecond`, burstWindowDecisionPoints.ts)
  * reads every friendly `damageIn` row, the ones logged after the round's
- * end (`combat.endTime`: a Solo Shuffle round ends at its deciding death and
- * the unit arrays keep the seconds after it) among them. T228 stopped the
+ * end (`roundDamageEndMs` since pipeline T237, ruling R111 — `combat.endTime`
+ * before it: a Solo Shuffle round ends at its deciding death and the unit
+ * arrays keep the seconds after it) among them. T228 stopped the
  * aligned window's total, average and pick at the round's end; this reader
  * was left (review 85-tk-WIN-T228-1).
  *
@@ -27,7 +28,10 @@ import {
   BURST_WINDOW_MIN_JUDGED_S,
   burstWindowLongEnoughToJudge,
 } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
-import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  roundDamageEndMs,
+  roundEndMs,
+} from "@gladlog/analysis/src/utils/roundEnd";
 
 import { fmtS, type IRoundCtx } from "./ctx";
 
@@ -63,8 +67,10 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 export function run(ctx: IRoundCtx): void {
   if (!ctx.firstOwnerOfRound) return;
   const legacy = ctx.legacy as any;
-  const endMs: number = legacy.endTime;
-  if (!(endMs > 0)) return;
+  if (!(legacy.endTime > 0)) return;
+  // the round's end the reader stops at: `roundDamageEndMs` since pipeline
+  // T237 (ruling R111) — `combat.endTime` before it
+  const endMs: number = roundDamageEndMs(legacy);
   const units = Object.values(legacy.units) as any[];
   const late = (u: any) =>
     ((u.damageIn ?? []) as any[]).some(

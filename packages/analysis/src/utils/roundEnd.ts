@@ -141,6 +141,22 @@ export function roundEndMs(
   return shuffleRoundEndMs(combat, all) ?? combat.endTime;
 }
 
+/**
+ * Where the round's DAMAGE stops for the burst readers (pipeline T237, user
+ * ruling R111): `roundEndMs`, and never past the combat's own end (7 rounds
+ * of the 605 capture end their log before the deciding death's row). The
+ * one bound of the aligned burst window's total / average / pick / observed
+ * span (`enemyCDs.ts`) and of the bounded segments' per-second damage
+ * (`burstWindowDecisionPoints.ts`), through `isRoundLandedDamageRow`; the
+ * scans that sum the same damage (scan5 t91, t159, t223, t223readers, t234)
+ * import it.
+ */
+export function roundDamageEndMs(
+  combat: Parameters<typeof roundEndMs>[0],
+): number {
+  return Math.min(roundEndMs(combat), combat.endTime);
+}
+
 /** 3v3 only: the first friendly player death, epoch ms — the instant the
  * match is decided (user ruling 2026-09-30) — or undefined for other brackets
  * / a match with no friendly player death. "Friendly" is the log's own side,

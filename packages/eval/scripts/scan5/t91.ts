@@ -51,6 +51,7 @@ import {
   type RosterSides,
 } from "@gladlog/analysis/src/utils/rosterSide";
 import { dangerLabel } from "@gladlog/analysis/src/utils/spellDanger";
+import { roundDamageEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import { APPLIED, ev, fmtS, type IRoundCtx, REFRESH, tsOf } from "./ctx";
 
@@ -171,7 +172,12 @@ export function run(ctx: IRoundCtx): void {
     startTime: ctx.start,
     endTime: ctx.end,
   };
-  const sliceEndS = (ctx.end - ctx.start) / 1000;
+  // the round's end the burst readers stop at (`roundDamageEndMs`, T237)
+  const dmgEnd = roundDamageEndMs({
+    ...(ctx.legacy as any),
+    endTime: ctx.end,
+  });
+  const sliceEndS = (dmgEnd - ctx.start) / 1000;
   if (!(sliceEndS > 0)) return;
   // the product's own sides: `reconstructEnemyCDTimeline` builds them from
   // `combat.units`
@@ -191,9 +197,9 @@ export function run(ctx: IRoundCtx): void {
     const span = `window ${fmtS(w.fromSeconds)}–${fmtS(w.toSeconds)} (slice ends ${fmtS(sliceEndS)})`;
 
     // the healer's control over the seconds the slice shows
-    const shownMs = ctx.end - at;
+    const shownMs = dmgEnd - at;
     if (isHealerSpec(owner.spec) && shownMs > 0) {
-      const ccMs = controlledMs(owner, at, ctx.end);
+      const ccMs = controlledMs(owner, at, dmgEnd);
       if (ccMs > 0 && w.threatScore > 0 && w.damageRatio > 0) {
         ctx.bump("burstHealerCcPastSliceEnd");
         const logShare = ccMs / shownMs;

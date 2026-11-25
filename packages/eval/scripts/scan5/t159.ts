@@ -34,6 +34,7 @@ import {
   burstWindowRateSpanSeconds,
   reconstructEnemyCDTimeline,
 } from "@gladlog/analysis/src/utils/enemyCDs";
+import { roundDamageEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import { fmtS, type IRoundCtx, nameOf } from "./ctx";
 import { rateVerdict } from "./t91";
@@ -66,7 +67,12 @@ export function run(ctx: IRoundCtx): void {
     return friendIds.has(who) ? "own" : enemyIds.has(who) ? "enemy" : "unowned";
   };
   const combat = { ...ctx.legacy, startTime: ctx.start, endTime: ctx.end };
-  const sliceEndS = (ctx.end - ctx.start) / 1000;
+  // the round's end the burst readers stop at (`roundDamageEndMs`, T237)
+  const dmgEnd = roundDamageEndMs({
+    ...(ctx.legacy as any),
+    endTime: ctx.end,
+  });
+  const sliceEndS = (dmgEnd - ctx.start) / 1000;
   if (!(sliceEndS > 0)) return;
   const timeline = reconstructEnemyCDTimeline(
     enemies as never,
@@ -81,7 +87,7 @@ export function run(ctx: IRoundCtx): void {
     [];
   for (const u of friends)
     for (const e of (u.damageIn ?? []) as any[]) {
-      if (e.logLine.timestamp > ctx.end) continue;
+      if (e.logLine.timestamp > dmgEnd) continue;
       rows.push({
         t: (e.logLine.timestamp - ctx.start) / 1000,
         amount: Math.abs(e.effectiveAmount ?? 0),

@@ -45,6 +45,7 @@ import {
   REDISTRIBUTION_DAMAGE_IDS,
 } from "@gladlog/analysis/src/utils/incomingPressure";
 import { buildRosterSides } from "@gladlog/analysis/src/utils/rosterSide";
+import { roundDamageEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import { fmtS, type IRoundCtx, nameOf } from "./ctx";
 import { rateVerdict } from "./t91";
@@ -79,7 +80,12 @@ export function run(ctx: IRoundCtx): void {
     (p) => p.reaction !== owner.reaction,
   );
   const sides = buildRosterSides(ctx.units as any[]);
-  const sliceEndS = (ctx.end - ctx.start) / 1000;
+  // the round's end the burst readers stop at (`roundDamageEndMs`, T237)
+  const dmgEnd = roundDamageEndMs({
+    ...(ctx.legacy as any),
+    endTime: ctx.end,
+  });
+  const sliceEndS = (dmgEnd - ctx.start) / 1000;
   if (!(sliceEndS > 0)) return;
 
   // ── the tables' forward checks (every view walks the round's players;
@@ -145,7 +151,7 @@ export function run(ctx: IRoundCtx): void {
   const product: Array<Row & { redistributed: boolean; id: string }> = [];
   for (const u of friends) {
     for (const e of incomingPressureEvents(u, sides)) {
-      if (e.timestamp > ctx.end) continue;
+      if (e.timestamp > dmgEnd) continue;
       shared.push({
         t: (e.timestamp - ctx.start) / 1000,
         amount: e.amount,
@@ -154,7 +160,7 @@ export function run(ctx: IRoundCtx): void {
       });
     }
     for (const d of (u.damageIn ?? []) as any[]) {
-      if (d.logLine.timestamp > ctx.end) continue;
+      if (d.logLine.timestamp > dmgEnd) continue;
       product.push({
         t: (d.logLine.timestamp - ctx.start) / 1000,
         amount: Math.abs(d.effectiveAmount ?? 0),
@@ -180,7 +186,7 @@ export function run(ctx: IRoundCtx): void {
       .flatMap((u: any) => (u.damageIn ?? []) as any[])
       .filter(
         (d) =>
-          d.logLine.timestamp > ctx.end &&
+          d.logLine.timestamp > dmgEnd &&
           d.logLine.timestamp >= ctx.start + fromS * 1000 &&
           d.logLine.timestamp <= ctx.start + toS * 1000,
       )
@@ -288,7 +294,8 @@ export function run(ctx: IRoundCtx): void {
       const lateExplains =
         afterEnd(pTop[0], w.fromSeconds, w.toSeconds) > 0 &&
         friends.every(
-          (u: any) => u.name === pTop[0] || withLate(u.name) <= withLate(pTop[0]),
+          (u: any) =>
+            u.name === pTop[0] || withLate(u.name) <= withLate(pTop[0]),
         );
       ctx.violate(
         "burstSumRedistribution",

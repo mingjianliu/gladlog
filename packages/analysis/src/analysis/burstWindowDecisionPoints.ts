@@ -88,7 +88,7 @@ import { NO_PRESS_SUFFIX } from "../utils/offensiveAuraOccurrences";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import { buildRosterSides, type RosterSides } from "../utils/rosterSide";
-import { roundEndMs } from "../utils/roundEnd";
+import { roundDamageEndMs, roundEndMs } from "../utils/roundEnd";
 import { selfCastRedirectIsNoSave } from "../utils/selfDefensiveMechanism";
 import {
   isOffensiveSpell,
@@ -1801,7 +1801,8 @@ function damagePctPerSecond(
   friendlies: any[],
   startMs: number,
   sides: RosterSides | undefined,
-  /** `combat.endTime`: rows after it are not the round's damage */
+  /** the round's end (`roundEndMs`): rows after it are not the round's
+   * damage */
   roundEndAtMs: number | undefined,
 ): Map<number, number> {
   const out = new Map<number, number>();
@@ -1823,6 +1824,32 @@ function damagePctPerSecond(
     }
   }
   return out;
+}
+
+/**
+ * The death that ends the round is pressure of its own second (pipeline
+ * T237, ruling R111): the per-second damage stops at the round's end, so that
+ * second is cut short at the death (87.0 – 87.199 s in 605 s2 22-4), and the
+ * window the friendly died in runs up to its death whatever that fraction of
+ * a second sums to. Marks the second in `dmgPctPerSec` when a friendly's
+ * death is the round's end. Exported for scan5 `t223readers`, which bounds
+ * the same windows on its own per-second maps.
+ */
+export function markRoundEndingDeathSecond(
+  dmgPctPerSec: Map<number, number>,
+  friendlies: ReadonlyArray<{
+    deathRecords?: ReadonlyArray<{ timestamp?: number }>;
+  }>,
+  startMs: number,
+  roundEndAtMs: number | undefined,
+): void {
+  if (roundEndAtMs === undefined) return;
+  if (
+    friendlies.some((f) =>
+      (f.deathRecords ?? []).some((d) => d.timestamp === roundEndAtMs),
+    )
+  )
+    dmgPctPerSec.set(Math.floor((roundEndAtMs - startMs) / 1000), Infinity);
 }
 
 /**
@@ -1856,12 +1883,18 @@ export function boundedBurstSegments(
   const timeline = reconstructEnemyCDTimeline(enemies as ICombatUnit[], combat);
   if (!timeline.alignedBurstWindows.length) return empty;
   const facts = castFactsOf(timeline);
+  // the round's end every burst reader stops at (`roundEndMs`, pipeline
+  // T237, ruling R111): a Solo Shuffle round's deciding death, not the ~2 s
+  // of log after it
+  const roundEndAtMs =
+    typeof combat?.endTime === "number" ? roundDamageEndMs(combat) : undefined;
   const dmgPctPerSec = damagePctPerSecond(
     friendlies,
     start,
     buildRosterSides(Object.values(combat?.units ?? {}) as ICombatUnit[]),
-    typeof combat?.endTime === "number" ? combat.endTime : undefined,
+    roundEndAtMs,
   );
+  markRoundEndingDeathSecond(dmgPctPerSec, friendlies, start, roundEndAtMs);
   const segments: BoundedSegment[] = [];
   for (const w of timeline.alignedBurstWindows)
     for (const seg of boundBurstWindow(w, facts, dmgPctPerSec, opts))

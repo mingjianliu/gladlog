@@ -60,7 +60,7 @@ import { isStolenAuraAcquisition } from "./enemyDefensives";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { logInstantOf } from "./logEra";
 import { fmtTime } from "./renderGrid";
-import { roundEndMs, shuffleRoundEndMs } from "./roundEnd";
+import { roundDamageEndMs, roundEndMs, shuffleRoundEndMs } from "./roundEnd";
 import {
   AURA_NATURAL_END_JITTER_S,
   DEATH_CASCADE_MS,
@@ -1712,7 +1712,6 @@ function reconstructEnemyCDTimelineUncached(
   },
 ): IEnemyCDTimeline {
   const matchStartMs = combat.startTime;
-  const matchDurationSeconds = (combat.endTime - matchStartMs) / 1000;
 
   const players: IEnemyPlayerTimeline[] = [];
 
@@ -2446,9 +2445,16 @@ function reconstructEnemyCDTimelineUncached(
    * pressured-unit pick (pipeline T228: the pick alone read on to the
    * window's end, past the round's, and named a unit by what it took after
    * the deciding death). */
+  // …and that end is `roundEndMs` (pipeline T237, ruling R111): a Solo
+  // Shuffle round's deciding death, not the ~2 s of log after it — the one
+  // round end the control windows, uncleansed windows and healing gaps stop
+  // at. The damage, the seconds it is averaged over and a window's observed
+  // span all stop there.
+  const burstRoundEndAtMs = roundDamageEndMs(combat);
+  const roundDurationSeconds = (burstRoundEndAtMs - matchStartMs) / 1000;
   const roundDamageOf = (u: ICombatUnit) =>
     u.damageIn.filter((d) =>
-      isRoundLandedDamageRow(u, d, rosterSides, combat.endTime),
+      isRoundLandedDamageRow(u, d, rosterSides, burstRoundEndAtMs),
     );
   const allFriendlyDamage = (friendlies ?? []).flatMap(roundDamageOf);
   const totalFriendlyDamage = allFriendlyDamage.reduce(
@@ -2456,7 +2462,7 @@ function reconstructEnemyCDTimelineUncached(
     0,
   );
   const avgDamageRate =
-    matchDurationSeconds > 0 ? totalFriendlyDamage / matchDurationSeconds : 0;
+    roundDurationSeconds > 0 ? totalFriendlyDamage / roundDurationSeconds : 0;
 
   // Group casts by ACTIVE-PRESSURE OVERLAP: a cast joins the current group if it lands while any of
   // the group's buffs is still running OR within BURST_CLUSTER_SECONDS of a group cast (superset of the
@@ -2506,7 +2512,7 @@ function reconstructEnemyCDTimelineUncached(
       const windowSpan = burstWindowRateSpanSeconds(
         windowStart,
         windowEnd,
-        matchDurationSeconds,
+        roundDurationSeconds,
       );
       const damageRatio =
         avgDamageRate > 0
@@ -2554,7 +2560,7 @@ function reconstructEnemyCDTimelineUncached(
       // share of THESE seconds, as the damage rate is (codex 85-tk-G-T91-1
       // #2: a healer stunned for the 2 s the slice shows of a 20 s window
       // read 10 % covered)
-      const observedEndMs = Math.min(windowEndMs, combat.endTime);
+      const observedEndMs = Math.min(windowEndMs, burstRoundEndAtMs);
       const observedDuration = Math.max(
         (observedEndMs - windowStartMs) / 1000,
         0,
@@ -2607,7 +2613,7 @@ function reconstructEnemyCDTimelineUncached(
 
         // Active CCs at match end
         for (const ccStart of ccStartBySpell.values()) {
-          if (ccStart < observedEndMs && combat.endTime > windowStartMs) {
+          if (ccStart < observedEndMs && burstRoundEndAtMs > windowStartMs) {
             ccIntervals.push({
               start: Math.max(ccStart, windowStartMs),
               end: observedEndMs,
