@@ -1155,8 +1155,13 @@ export function extractKillAttempts(
     /** the cluster named for the press that opened it, wherever that went */
     const openerNameOf = (
       cl: (typeof clusters)[number],
+      /** where the bracket opens when a form cut its start (the target left
+       * Spirit of Redemption mid-cluster): the first press from there on —
+       * a press before the bracket opened does not name it (codex
+       * 85-tk-L2-T166-1 #3) */
+      fromSeconds = cl.from,
     ): { name: string; pressName: string; cast: number } => {
-      const first = cl.casts[0]!;
+      const first = cl.casts.find((c) => c.cast >= fromSeconds) ?? cl.casts[0]!;
       // an enemy player or any unit of theirs (a pet: 691a7f31 1:13, a Ray
       // of Frost into the hunter's pet)
       const elsewhere =
@@ -1324,7 +1329,8 @@ export function extractKillAttempts(
       // that opens with the cluster is named for the press that opened it,
       // in the form a cluster with no press into the target already has
       // (`X burst` / `X (cast into Y) burst`).
-      const anchorOf = recut && !recutHolds ? openerNameOf(cl) : intoOf;
+      const anchorOf =
+        recut && !recutHolds ? openerNameOf(cl, formSpan.fromSeconds) : intoOf;
       const span = recutHolds ? recut! : formSpan;
       const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;

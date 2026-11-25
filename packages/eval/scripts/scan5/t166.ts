@@ -18,12 +18,34 @@
  *    capture taken before the ruling landed, 0 on one taken with it),
  *    `held by the ledger, not printed: <wall>`, `no such burst in the
  *    ledger`. Counted: every wall line printed or held.
+ *  - `ledgerLimitedImmunityNoRow`: inventory, never a failure — a held wall
+ *    with no `MITIGATION_TABLE` row whose DB2 immunity is school-limited
+ *    (`limitedImmunitySchoolMask`: Peaceweaver, magic) over damage of the
+ *    holder none of which is in its schools. R102 named the table's walls;
+ *    this one stays printed (codex 85-tk-L2-T166-1 #2).
+ *    Counted: every held wall of that kind.
  */
-import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
+import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
+import {
+  analyzeBurstLedger,
+  burstDamageBySchoolOn,
+} from "@gladlog/analysis/src/utils/burstLedger";
+import {
+  limitedImmunitySchoolMask,
+  wallTableIdOfAura,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
+import { documentRecordsAttackSpell } from "@gladlog/analysis/src/utils/incomingPressure";
 
 import { type IRoundCtx, secOf } from "./ctx";
 
-export const CHECKS = ["ledgerWallSchool"] as const;
+export const CHECKS = [
+  "ledgerWallSchool",
+  "ledgerLimitedImmunityNoRow",
+] as const;
+const NO_ROW_NONE = "touches none of the holder's damage, still printed";
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  `ledgerLimitedImmunityNoRow|${NO_ROW_NONE}`,
+]);
 
 const BURST_HEAD = /^\s+Burst #\d+ — (\d+:\d\d)–(\d+:\d\d) \| /;
 const WALL_LINE =
@@ -41,6 +63,41 @@ export function run(ctx: IRoundCtx): void {
     entries = analyzeBurstLedger(owner, friends, enemies, combat);
   } catch {
     return;
+  }
+  for (const e of entries) {
+    const t = e.dominantTarget;
+    for (const d of t?.defensivesHit ?? []) {
+      const id = wallTableIdOfAura(d.spellId);
+      const mask = limitedImmunitySchoolMask(id);
+      if (MITIGATION_TABLE[id] || mask === undefined) continue;
+      ctx.bump("ledgerLimitedImmunityNoRow");
+      const fromMs = ctx.start + e.fromSeconds * 1000;
+      const by = burstDamageBySchoolOn(
+        owner,
+        t!.unitId,
+        fromMs + Math.max(0, d.startOffsetMs ?? 0),
+        Math.min(
+          fromMs + (d.endOffsetMs ?? Infinity),
+          ctx.start + e.toSeconds * 1000,
+        ),
+        documentRecordsAttackSpell(Object.values(combat.units ?? {})),
+      );
+      let total = 0;
+      let touched = 0;
+      for (const [school, amount] of Object.entries(by)) {
+        if ((Number(school) & 0x7f) === 0) continue;
+        total += amount;
+        if ((Number(school) & mask) !== 0) touched += amount;
+      }
+      if (total > 0 && touched === 0)
+        ctx.violate(
+          "ledgerLimitedImmunityNoRow",
+          NO_ROW_NONE,
+          fromMs,
+          `${ctx.roundKey}|${owner.id}|${e.fromSeconds}|${d.spellId}`,
+          `burst ${e.fromSeconds.toFixed(1)}s–${e.toSeconds.toFixed(1)}s on ${t!.unitName}: ${d.spellName} over ${Math.round(total)} of other schools`,
+        );
+    }
   }
   // the printed blocks, in order: each burst's span and its wall lines
   const blocks: Array<{ from: number; to: number; walls: string[] }> = [];

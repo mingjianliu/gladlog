@@ -919,6 +919,11 @@ export function analyzeBurstLedgerUncached(
   combat: AtomicArenaCombat,
 ): IBurstLedgerEntry[] {
   // read once per call, and only when a wall asks (T166)
+  let petsMemo: ICombatUnit[] | undefined;
+  const petsOfHolder = (): ICombatUnit[] =>
+    (petsMemo ??= (
+      Object.values(combat.units ?? {}) as unknown as ICombatUnit[]
+    ).filter((u) => u.ownerId === player.id));
   let recordsAttackSpellMemo: boolean | undefined;
   const recordsAttackSpell = (): boolean =>
     (recordsAttackSpellMemo ??= documentRecordsAttackSpell(
@@ -1182,12 +1187,17 @@ export function analyzeBurstLedgerUncached(
         // come back IMMUNE, which is the wall working, not missing
         const lo = Math.max(iv.startMs, fromMs);
         const hi = Math.min(endMs, toMs);
-        const refusedUnder = (player.missesOut ?? []).some(
-          (m) =>
-            m.destUnitId === target.id &&
-            m.missType === "IMMUNE" &&
-            m.logLine.timestamp >= lo &&
-            m.logLine.timestamp <= hi,
+        // (a pet's damage is merged into its owner's rows, its misses stay
+        // on the pet — codex 85-tk-L2-T166-1 #1: a hunter's Rapid Fire
+        // refused by Blessing of Protection, then an Arcane Shot landing)
+        const refusedUnder = [player, ...petsOfHolder()].some((u) =>
+          (u.missesOut ?? []).some(
+            (m) =>
+              m.destUnitId === target.id &&
+              m.missType === "IMMUNE" &&
+              m.logLine.timestamp >= lo &&
+              m.logLine.timestamp <= hi,
+          ),
         );
         if (
           !refusedUnder &&

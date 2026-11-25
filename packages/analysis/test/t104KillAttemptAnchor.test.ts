@@ -13,6 +13,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { castAndEffectIds } from "../src/data/castEffectAuras";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "../src/utils/combatStates";
 import { extractKillAttempts } from "../src/utils/killAttempts";
 
 const MATCH_START = Date.UTC(2026, 7, 15);
@@ -79,6 +80,7 @@ const VOIDFORM = "228260";
 const VOIDFORM_AURA = "194249";
 const MALEVOLENCE = "442726";
 const RECK = "1719";
+const SPIRIT_FORM = [...PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS][0]!;
 const BESTIAL_WRATH = "19574";
 const BESTIAL_WRATH_PET_HIT = "344572";
 
@@ -273,6 +275,40 @@ describe("T104 D12 — the bracket opens at the press it is named for", () => {
     expect(b?.targetUnitId).toBe("e1");
     expect(b!.fromSeconds).toBe(40);
     expect(b!.anchorSpellName).toBe("Malevolence");
+  });
+
+  it("a bracket a form cut is named for the first press from where it opens (codex 85-tk-L2-T166-1 #3)", () => {
+    // the priest leaves Spirit of Redemption at 42 s: the bracket opens
+    // there, and the Malevolence of 40 s is not a press of it
+    const lock = unit("f1", {
+      spec: "267",
+      spellCastEvents: [press(MALEVOLENCE, "Malevolence", 40)],
+      auraEvents: [applied(MALEVOLENCE, "f1", 40)],
+      damageOut: [dmg("e2", 40.5, 30_000, MALEVOLENCE)],
+    });
+    const mate = unit("f2", { damageOut: [dmg("e1", 42.2, 1_000_000)] });
+    const war = unit("f3", {
+      spellCastEvents: [press(RECK, "Recklessness", 42.6)],
+      damageOut: [dmg("e1", 47, 50_000), dmg("e2", 48, 300_000)],
+    });
+    const form = (event: LogEvent, atS: number): any => ({
+      ...applied(SPIRIT_FORM, "e1", atS),
+      logLine: { event, timestamp: ms(atS), parameters: [] },
+    });
+    const priest = unit("e1", {
+      reaction: 2,
+      spec: "257",
+      auraEvents: [
+        form(LogEvent.SPELL_AURA_APPLIED, 38),
+        form(LogEvent.SPELL_AURA_REMOVED, 42),
+      ],
+    });
+    const a = run(
+      [lock, mate, war],
+      [priest, unit("e2", { reaction: 2 })],
+    ).find((x) => x.targetUnitId === "e1")!;
+    expect(a.fromSeconds).toBe(42);
+    expect(a.anchorSpellName).toBe("Recklessness");
   });
 
   it("a target tied for the most inside the re-cut keeps the re-cut, whatever the team's order (codex 85-tk-L-T104-1b)", () => {

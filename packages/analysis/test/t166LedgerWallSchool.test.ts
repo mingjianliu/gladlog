@@ -68,7 +68,11 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
     spellName: "TestSpell",
     spellSchoolId: school,
   });
-  const held = (schools: string[], immuneAtS?: number) => {
+  const held = (
+    schools: string[],
+    immuneAtS?: number,
+    petImmuneAtS?: number,
+  ) => {
     const mage = makeUnit("p1", {
       name: "Mage",
       spec: CombatUnitSpec.Paladin_Retribution,
@@ -125,10 +129,28 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
       reaction: CombatUnitReaction.Hostile,
       info,
     });
+    // a pet's refused attack is on the pet, never on its owner
+    const pet = makeUnit("pet1", { name: "Pet", ownerId: "p1" });
+    (pet as unknown as { missesOut: unknown[] }).missesOut =
+      petImmuneAtS === undefined
+        ? []
+        : [
+            {
+              logLine: {
+                event: LogEvent.SWING_MISSED,
+                timestamp: at(petImmuneAtS),
+                parameters: [],
+              },
+              timestamp: at(petImmuneAtS),
+              srcUnitId: "pet1",
+              destUnitId: "e1",
+              missType: "IMMUNE",
+            },
+          ];
     const combat = {
       startTime: T,
       endTime: at(120),
-      units: Object.fromEntries([mage, tgt, pal].map((u) => [u.id, u])),
+      units: Object.fromEntries([mage, tgt, pal, pet].map((u) => [u.id, u])),
     } as unknown as Combat;
     return (
       analyzeBurstLedger(mage, [], [tgt, pal], combat)[0]!.dominantTarget
@@ -142,6 +164,10 @@ describe("analyzeBurstLedger — a wall that touches none of the burst's damage 
     expect(held(["0x10", "0x40"], 14)).toEqual([BOP]);
     // refused after the wall fell: not this wall's
     expect(held(["0x10", "0x40"], 25)).toEqual([]);
+  });
+  it("its pet's swing refused under it: held (codex 85-tk-L2-T166-1 #1)", () => {
+    expect(held(["0x10", "0x40"], undefined, 14)).toEqual([BOP]);
+    expect(held(["0x10", "0x40"], undefined, 25)).toEqual([]);
   });
   it("one physical hit under it: held", () => {
     expect(held(["0x10", "0x1"])).toEqual([BOP]);
