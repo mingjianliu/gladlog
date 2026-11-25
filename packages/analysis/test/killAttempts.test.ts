@@ -2401,6 +2401,33 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
       }),
     ).toBe("broke out (Blessing of Sanctuary)");
     expect(failed({ primary: "trinketed" })).toBe("target trinketed out");
+    // codex 85-tk-L2-T235-2 #1: an external that decided the attempt only
+    // together with the target's own wall is named alone here — `Ironbark
+    // + Barkskin together` would add the wall
+    expect(
+      failed({
+        primary: "trinketed",
+        defensivePopped: ["Barkskin"],
+        defensivePoppedAtS: [306],
+        externalReceived: ["Ironbark"],
+        externalReceivedAtS: [305],
+        externalTogether: { names: ["Ironbark"], with: ["Barkskin"] },
+      }),
+    ).toBe(
+      "target trinketed out; saved by external (Ironbark [up since 5:05])",
+    );
+    // …and the cast the immunity clause stands for is not named again
+    expect(
+      failed({
+        primary: "trinketed",
+        immunityBaited: true,
+        immunityNames: ["Blessing of Protection"],
+        externalReceived: ["Blessing of Protection", "Ironbark"],
+        externalReceivedAtS: [319, 319.4],
+      }),
+    ).toBe(
+      "target trinketed out; forced a full immunity (a win — re-open after it drops); saved by external (Ironbark)",
+    );
   });
 
   it("a wall and an external: both, the wall first (7f67e778 [5:07–5:22])", () => {

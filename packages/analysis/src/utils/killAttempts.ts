@@ -201,6 +201,11 @@ export interface IKillAttemptAttribution {
    * rule 2) — rendered `forced a full immunity [up since m:ss]`. Optional for
    * hand-built fixtures. */
   immunityUpSinceS?: number;
+  /** the auras that made `immunityBaited` true, by rendered name — what the
+   * immunity clause stands for, so the same cast is not named again as an
+   * external beside a trinket or a break (T235). Optional for hand-built
+   * fixtures. */
+  immunityNames?: string[];
   defensivePopped: string[];
   /** round seconds of each `defensivePopped` entry's aura start (parallel array) */
   defensivePoppedAtS: number[];
@@ -1653,12 +1658,17 @@ function externalClause(
   spanFromSeconds: number,
   externalUp: IKillAttemptAlreadyUp[],
   exclude: readonly string[],
+  /** beside a trinket or a break (R115: the target's own wall is not
+   * added): the externals named only together with the target's other
+   * reductions are listed as plain names — `A + own wall together` would
+   * name the wall */
+  plainNames = false,
 ): string {
   const extra = attr.externalReceived
     .map((_, i) => i)
     .filter((i) => !exclude.includes(attr.externalReceived[i]!));
   if (extra.length === 0) return "";
-  const joint = new Set(attr.externalTogether?.names ?? []);
+  const joint = new Set(plainNames ? [] : (attr.externalTogether?.names ?? []));
   const alone = extra.filter((i) => !joint.has(attr.externalReceived[i]!));
   const together = extra.filter((i) => joint.has(attr.externalReceived[i]!));
   const stampOf = (idx: number[], sep: string) =>
@@ -1711,15 +1721,22 @@ function failureText(
   // User rulings R98 + R115 (2026-11-24, T235): an external the target
   // received beside its trinket or break is named after it — and after the
   // immunity, when there is one — in the clause every other line uses. The
-  // target's own wall is not added (R115). An ally's break (`broke out
-  // (Blessing of Sanctuary)`) is not named a second time as the external.
+  // target's own wall is not added (R115). Not named a second time: an
+  // ally's break the line already names (`broke out (Blessing of
+  // Sanctuary)`), and the cast the immunity clause already stands for (an
+  // ally's Blessing of Protection against a physical go is the immunity,
+  // codex 85-tk-L2-T235-2).
   const besideBreak = (): string => {
     const up: IKillAttemptAlreadyUp[] = [];
     const clause = externalClause(
       attr,
       spanFromSeconds,
       up,
-      attr.brokeOut ?? [],
+      [
+        ...(attr.primary === "broke-out" ? (attr.brokeOut ?? []) : []),
+        ...(attr.immunityBaited ? (attr.immunityNames ?? []) : []),
+      ],
+      true,
     );
     alreadyUp?.push(...up);
     return clause;
@@ -1898,7 +1915,7 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall of its own, an external (an ally's wall on it counts here), another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external already up when the attempt began is named only when the log's damage shows the target would have died without it (its percentage put back on the hits it reduced, or what its shield absorbed, inside the attempt and the next 5 s); `X [up since m:ss] + Y together` = no one of them would have, all of them together would. An already-up external that is neither a percentage nor a shield (Guardian Spirit, Blessing of Sacrifice, Time Dilation, Rallying Cry …) is named as up. An external under the " +
       MITIGATION_AURA_MIN_PCT +
-      "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external (`target trinketed out; saved by external (Y)`), and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
+      "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
   );
   // User ruling 2026-10-11: the two words for the target's own defensive,
   // each explained only when a line of this block carries it.
@@ -2363,6 +2380,7 @@ function attributeFailure(
   /** an immunity went up inside the credit window (or a proc heal fired) */
   let immunityInside = false;
   let immunityUpSinceS: number | undefined;
+  const immunityNames = new Set<string>();
   const defensivePopped: string[] = [];
   const defensivePoppedAtS: number[] = [];
   /** a wall aura another unit of the target's side put on it */
@@ -2424,6 +2442,7 @@ function attributeFailure(
       immunityCovers(iv.spellId)
     ) {
       immunityBaited = true;
+      immunityNames.add(getEnglishSpellName(iv.spellId, iv.spellName));
       if (immunityInSpan) immunityInside = true;
       else immunityUpSinceS = Math.max(immunityUpSinceS ?? 0, iv.fromS);
     }
@@ -2862,6 +2881,7 @@ function attributeFailure(
     trinketed,
     brokeOut,
     immunityBaited,
+    ...(immunityNames.size ? { immunityNames: [...immunityNames] } : {}),
     ...(immunityBaited && !immunityInside && immunityUpSinceS !== undefined
       ? { immunityUpSinceS }
       : {}),

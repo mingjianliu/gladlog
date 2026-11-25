@@ -4,6 +4,10 @@
 // 4f59acca5 (the commit before Task 1; settings key `aiLanguage: "zh"` there,
 // `language: "zh"` here) — never regenerate them from a later commit, or the
 // test stops proving anything.
+// One sentence of the KILL ATTEMPTS legend was edited in place in two
+// goldens (findings.user, coach.user) by pipeline T235 (rulings R98 + R115:
+// "…is named beside it, and so is an external, …") — the same edit the
+// producer got, nothing regenerated.
 //
 // One fixture (real-match-sample, with one injected death so it yields
 // candidates — it is trimmed to 90 s and has no player death) feeds all three
