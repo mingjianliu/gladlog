@@ -1592,6 +1592,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...(r.triggerCastIntoChannel?.channelIds ?? []),
         ...(r.triggerOwnAuraEndIds ?? []),
         ...(r.triggerSelfAuraAppliedIds ?? []),
+        ...(r.triggerSelfAuraAppliedNoCastIds ?? []),
         ...(r.triggerEnergizeIds ?? []),
         // weekly review 2026-10-24: the id fields 5dcd31c added — a
         // renumbered Sudden Death aura silently dropped Unrelenting

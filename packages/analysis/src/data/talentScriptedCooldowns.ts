@@ -298,6 +298,10 @@ export interface IEventCooldownReduction {
      * module — the test pins the two equal) */
     interruptRowWithinMs: number;
   };
+  /** The trigger cast's own aura rising on the unit with no SUCCESS row of
+   * that id within `AURA_WITHOUT_CAST_ROW_MS` of it: the cast row the log
+   * left out. Beside `triggerCastIds`, never instead of it. */
+  triggerSelfAuraAppliedNoCastIds?: readonly string[];
   /** What one trigger gives back. Not always one number, so no reader takes
    * it from here: `eventTriggersFor` hands every trigger out with its own
    * seconds (`eventReductionSecondsAt`). `Infinity` is a RESET: the spell is
@@ -1216,6 +1220,11 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   "1277302": {
     targets: ["107428", "467307"],
     triggerCastIds: ["116680"],
+    // a tea whose cast row the log left out (codex 85-tk-L3-T240-1d #2:
+    // e7444643, kick 32.603 s, the tea's aura 33.459 s with no cast row,
+    // kicks 33.704 s and 34.671 s spending its two doses). 3 of the 616 tea
+    // applications in the 64 files.
+    triggerSelfAuraAppliedNoCastIds: ["116680"],
     seconds: Number.POSITIVE_INFINITY,
     note: "Morning Breeze — Thunder Focus Tea resets Rising Sun Kick",
   },
@@ -1688,6 +1697,10 @@ export function ownAuraEndTimesMs(
  * fade talent, each of its summons of `triggerSummonIds` `summonFadeMs` after
  * the summon.
  */
+/** How far from an aura's application a cast row of its id still is that
+ * application's (`triggerSelfAuraAppliedNoCastIds`). */
+export const AURA_WITHOUT_CAST_ROW_MS = 500;
+
 export function eventTriggerTimesMs(
   unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut"> &
     Partial<Pick<ICombatUnit, "actionOut" | "auraEvents" | "id">>,
@@ -1702,6 +1715,7 @@ export function eventTriggerTimesMs(
     | "triggerInterruptIds"
     | "triggerOwnAuraEndIds"
     | "triggerSelfAuraAppliedIds"
+    | "triggerSelfAuraAppliedNoCastIds"
     | "triggerEnergizeIds"
     | "triggerCastSchoolMask"
     | "hitsCountEachRow"
@@ -1730,6 +1744,26 @@ export function eventTriggerTimesMs(
         appliedIds.includes(String(e.spellId))
       )
         out.push(e.logLine.timestamp);
+  const uncastIds = r.triggerSelfAuraAppliedNoCastIds;
+  if (uncastIds?.length) {
+    const castMs = unit.spellCastEvents
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          uncastIds.includes(String(e.spellId)),
+      )
+      .map((e) => e.logLine.timestamp);
+    for (const e of unit.actionOut ?? [])
+      if (
+        e.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        e.destUnitId === e.srcUnitId &&
+        uncastIds.includes(String(e.spellId)) &&
+        !castMs.some(
+          (c) => Math.abs(c - e.logLine.timestamp) <= AURA_WITHOUT_CAST_ROW_MS,
+        )
+      )
+        out.push(e.logLine.timestamp);
+  }
   const energizeIds = r.triggerEnergizeIds;
   if (energizeIds?.length)
     for (const e of unit.actionOut ?? [])
@@ -2631,6 +2665,17 @@ export const TIME_SPIRAL_FREE_PRESSES: Readonly<
   "375240": {
     spellIds: ["1953", "212653"],
     note: "Mage — Blink / Shimmer",
+  },
+  // Not Time Spiral, the same shape (pipeline T240, codex 85-tk-L3-T240-1d
+  // #1): the Mistweaver set bonus's proc 1296687 — DB2 SpellEffect 1319382,
+  // aura 411, +1 charge on category 1518, the kick's — rises ~0.1 s after a
+  // kick and the next kick spends it: fa2c363c, three procs, kick rows
+  // 10–18 ms before the aura's REMOVED, 0.84–1.13 s after the kick that
+  // raised it. That kick stands on the earlier one's cooldown. None in the
+  // 64 Mistweaver files of the 605.
+  "1296687": {
+    spellIds: ["107428", "467307"],
+    note: "Monk (Mistweaver set bonus) — Rising Sun Kick / Rushing Wind Kick",
   },
   // charge category 1365
   "375252": {
