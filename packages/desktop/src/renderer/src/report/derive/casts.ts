@@ -1,16 +1,22 @@
 import {
+  ALLY_REACH_GRANTED_BY_TALENT,
+  ENEMY_TARGET_DEFENSIVE_IDS,
   isCompanionCastRow,
   isEnemyCdWindowSpell,
+  rendersOnCaster,
   SPELL_CATEGORIES,
   SPELL_ICONS_GENERATED,
 } from "@gladlog/analysis";
 
+import { sideOfUnit } from "./teamSide";
 import type { ReportSource } from "./types";
 
 export interface CastRow {
   t: number;
   spellId: number;
   spellName: string;
+  /** The unit the press was put on; "" when the cast row's destination is
+   * no target (`castRowDestinationIsNoTarget` — pipeline T239). */
   targetName: string;
   byPet: boolean;
   /** Icon base name (from the mined spellIconsGenerated table); undefined when
@@ -45,16 +51,53 @@ export function isMajorCd(spellId: number, spec?: number | string): boolean {
   return c != null && MAJOR_CD_TYPES.has(c);
 }
 
+/** A press whose cast row's destination is not a unit it was put on: the
+ * prompt renders it on its caster (`rendersOnCaster` — a personal
+ * defensive's SPELL_CAST_SUCCESS row logs the caster's current target:
+ * Survival of the Fittest "→" the enemy Discipline Priest, 69915cc5 r1,
+ * pipeline T239). Two exceptions keep the name: a defensive pressed ON an
+ * enemy (`ENEMY_TARGET_DEFENSIVE_IDS`: Touch of Karma — the prompt reads
+ * that press on its caster too, and the lane's arrow is the cast's target),
+ * and a self wall a talent can put on an ally
+ * (`ALLY_REACH_GRANTED_BY_TALENT`: Obsidian Scales with Lifecinders) when
+ * the named unit is not known to be on the other side (`destOnOtherSide`;
+ * the talent itself is not read here). All three legs are analysis's,
+ * imported; scan5 `t239` counts the same rows. */
+export function castRowDestinationIsNoTarget(
+  spellId: string,
+  destOnOtherSide: boolean,
+): boolean {
+  if (!rendersOnCaster(spellId)) return false;
+  if (ENEMY_TARGET_DEFENSIVE_IDS.has(spellId)) return false;
+  return destOnOtherSide || ALLY_REACH_GRANTED_BY_TALENT[spellId] === undefined;
+}
+
 export function deriveCasts(m: ReportSource, unitId: string): CastRow[] {
   const u = m.units[unitId];
   if (!u) return [];
+  // a destination known to be on the other side; an unknown side is no
+  // evidence (`sideOfUnit`: an import with no playerTeamId, an unowned NPC)
+  const casterSide = sideOfUnit(m, unitId);
+  const onOtherSide = (destId: string): boolean => {
+    const side = sideOfUnit(m, destId);
+    return (
+      casterSide !== "unknown" && side !== "unknown" && side !== casterSide
+    );
+  };
   const row =
     (byPet: boolean) =>
     (e: (typeof u.casts)[number]): CastRow => ({
       t: e.timestamp,
       spellId: e.spellId,
       spellName: e.spellName,
-      targetName: e.destName,
+      // analysis's own answer, imported: the prompt renders such a press
+      // on its caster (`rendersOnCaster`, the `[YOU] [CD]` / `[TEAM]` lines)
+      targetName: castRowDestinationIsNoTarget(
+        String(e.spellId),
+        onOtherSide(e.destId),
+      )
+        ? ""
+        : e.destName,
       byPet,
       icon: SPELL_ICONS_GENERATED[String(e.spellId)],
     });

@@ -6404,6 +6404,13 @@ const INDEX: PredicateRow[] = [
     symbol: "isMajorCd",
     mod: reportCasts,
   },
+  // the GCD lane's cast target: all three legs are analysis's, imported
+  // (pipeline T239)
+  {
+    file: `${D}/derive/casts.ts`,
+    symbol: "castRowDestinationIsNoTarget",
+    mod: reportCasts,
+  },
   // where a control ends for the report's control readers: the function reads
   // the round's end off the round it is handed — each reader hands the round
   // itself, as the prompt does; asserted below

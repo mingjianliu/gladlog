@@ -105,4 +105,39 @@ describe("GCD 泳道施法对象", () => {
       false,
     );
   });
+
+  // pipeline T239 (69915cc5 r1): the cast row of a personal defensive logs
+  // the caster's current target; neither the chip nor its tooltip names it
+  it("只能给自己的防御技能:chip 和悬浮提示都不写施法行里的目标", () => {
+    const s = JSON.parse(JSON.stringify(m)) as StoredMatch;
+    const units = s.units as Record<string, any>;
+    const caster = Object.values(units).find(
+      (u: any) => u.info && u.reaction === "Friendly",
+    ) as any;
+    const enemy = Object.values(units).find(
+      (u: any) => u.info && u.reaction === "Hostile",
+    ) as any;
+    caster.casts = [
+      {
+        eventName: "SPELL_CAST_SUCCESS",
+        timestamp: s.startTime + 30_000,
+        spellId: 264735,
+        spellName: "Survival of the Fittest",
+        srcId: caster.id,
+        srcName: caster.name,
+        destId: enemy.id,
+        destName: "Targetdude-SomeRealm-US",
+        params: [],
+      },
+    ];
+    const c = renderLane(s, false);
+    expect(c.textContent).not.toContain("Targetdude");
+    const titles = Array.from(c.querySelectorAll(".rpt-gcd-act")).map(
+      (el) => el.getAttribute("title") ?? "",
+    );
+    expect(titles.some((t) => t.includes("Survival of the Fittest"))).toBe(
+      true,
+    );
+    expect(titles.some((t) => t.includes("Targetdude"))).toBe(false);
+  });
 });
