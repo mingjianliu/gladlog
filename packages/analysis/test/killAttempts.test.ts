@@ -1212,6 +1212,44 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
     expect(a.attribution?.primary).toBe("immunity-baited");
   });
 
+  // T235 (codex 85-tk-L2-T235-2b #2): the cast the immunity stands for is
+  // not named again as the external beside a trinket
+  it("a trinket beside an ally's Guardian of the Forgotten Queen: the immunity, not also an external", async () => {
+    await ensureAnalysisData();
+    const TRINKET_ID = "336126";
+    const cast = (id: string, dest: string, atS: number): any => ({
+      spellId: id,
+      spellName: `S${id}`,
+      destUnitId: dest,
+      destUnitName: dest,
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: ms(atS),
+        parameters: [],
+      },
+    });
+    const e1 = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 2),
+        auraOn("228050", "guardian", 12.6),
+      ],
+      spellCastEvents: [cast(TRINKET_ID, "0000000000000000", 12)],
+    });
+    const e2 = unit("e2", { spellCastEvents: [cast("228049", "e1", 12.5)] });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 50_000)],
+    });
+    const a = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]))[0];
+    expect(a.attribution?.primary).toBe("trinketed");
+    expect(a.attribution?.immunityBaited).toBe(true);
+    const line = formatKillAttemptsForContext([a]).find((l) =>
+      l.includes("| FAILED: "),
+    )!;
+    expect(line).toContain("target trinketed out; forced a full immunity");
+    expect(line).not.toContain("saved by external");
+  });
+
   const heal = (atS: number): any => ({
     spellId: "31616",
     srcUnitId: "e1",

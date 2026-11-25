@@ -2381,6 +2381,7 @@ function attributeFailure(
   let immunityInside = false;
   let immunityUpSinceS: number | undefined;
   const immunityNames = new Set<string>();
+  const immunityIvs = new Set<ISaveAuraInterval>();
   const defensivePopped: string[] = [];
   const defensivePoppedAtS: number[] = [];
   /** a wall aura another unit of the target's side put on it */
@@ -2443,6 +2444,7 @@ function attributeFailure(
     ) {
       immunityBaited = true;
       immunityNames.add(getEnglishSpellName(iv.spellId, iv.spellName));
+      immunityIvs.add(iv);
       if (immunityInSpan) immunityInside = true;
       else immunityUpSinceS = Math.max(immunityUpSinceS ?? 0, iv.fromS);
     }
@@ -2586,6 +2588,16 @@ function attributeFailure(
     if (isBelowWallFloorExternal(d)) continue;
     const castMs = matchStartMs + d.atSeconds * 1000;
     let upAura: ISaveAuraInterval | undefined;
+    // T235: the cast whose aura the immunity clause stands for carries
+    // its own name here (Guardian of the Forgotten Queen 228049 → aura
+    // 228050 "Divine Shield", codex 85-tk-L2-T235-2b #2)
+    const paired = externalAuraOf(
+      d.spellId,
+      d.atSeconds,
+      targetIntervals,
+      d.casterId,
+    );
+    if (paired && immunityIvs.has(paired)) immunityNames.add(d.spellName);
     if (!inSave(castMs)) {
       // Rule 2, as for a wall and a self-save: thrown before the attempt
       // and its aura still on the target when the attempt began (an
