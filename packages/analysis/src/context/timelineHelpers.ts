@@ -2198,11 +2198,12 @@ export function summonLifetimeAtKillS(
 /** Self → self periodic damage that is damage DELAYED from earlier hits —
  * the ids the deferral shields' delayed damage lands as
  * (`DEFERRAL_SHIELD_DAMAGE_IDS`, the one table: Time Dilation 361029 — b12b:
- * 255k in the last 10 s of a death — and Stretch Time 413924).
+ * 255k in the last 10 s of a death — Stretch Time 413924, Fel Armor 387846
+ * and Refraction 1309786, each with its evidence at the table).
  * selfDamageScan.ts (every 60th of the 12.1 archive, 303 files, 2026-09-26):
- * 2,642 and 1,005 ticks; Refraction / Tempered in Battle / Blessing of Dawn /
- * Fel Armor and reflected own spells are the unit's own damage too, but not
- * deferred. Registered in curatedIdRegistry. */
+ * 2,642 and 1,005 ticks; Tempered in Battle / Blessing of Dawn and reflected
+ * own spells are the unit's own damage too, but not deferred. Registered in
+ * curatedIdRegistry. */
 export const DEFERRED_DAMAGE_SPELL_IDS: ReadonlySet<string> = new Set(
   Object.values(DEFERRAL_SHIELD_DAMAGE_IDS),
 );

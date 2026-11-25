@@ -113,7 +113,10 @@ import {
   drWallMissesSpellSchool,
   immunityStopsSpellSchool,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
-import { isAttackerSideAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  isAttackerSideAbsorb,
+} from "@gladlog/analysis/src/utils/incomingPressure";
 import { withoutDeferralTag } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { isAutomaticCastRow } from "@gladlog/analysis/src/utils/pressRow";
 import { toRenderSecond } from "@gladlog/analysis/src/utils/renderGrid";
@@ -146,7 +149,11 @@ export const CHECKS = [
   "duringEndRow",
 ] as const;
 
-export const DEFERRAL_SHIELDS = new Set(["357170", "410355", "386124"]);
+/** the product's one table (pipeline T251: the hand copy here would have
+ * missed Refractive Images when it joined, as corpusFactScan's did Fel Armor) */
+export const DEFERRAL_SHIELDS = new Set(
+  Object.keys(DEFERRAL_SHIELD_DAMAGE_IDS),
+);
 const REDISTRIBUTION_IDS = new Set(["98021", "451963", "469704"]);
 const REDISTRIBUTION_NAMES = [
   "Spirit Link",

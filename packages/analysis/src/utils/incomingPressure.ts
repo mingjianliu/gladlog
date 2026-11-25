@@ -1,5 +1,6 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { SCHOOL_PHYSICAL, spellSchoolMask } from "../data/spellSchools";
 import { isSameSideSource, type RosterSides } from "./rosterSide";
 
@@ -101,11 +102,46 @@ export const DEFERRAL_SHIELD_DAMAGE_IDS: Readonly<Record<string, string>> = {
   // two above. Read as absorbed, it counted the held damage once as a shield
   // and again as the tick, and every negative row as a positive one.
   "386124": "387846", // Fel Armor → its deferred damage
+  // Refractive Images (Arcane Mage talent; pipeline T251). Tooltip, live
+  // 12.1.5.70391: "$<base>% of damage you would take is instead dealt over
+  // $1309787d. Casting Mirror Image increases this effect to …% for
+  // $1309793d." DB2: 1309497 carries an absorb aura (aura 69, all schools)
+  // beside two dummies (10 and 50); 1309786 Refraction is a periodic damage
+  // aura on the mage itself (aura 3, 1 s). A passive: 1309497 has no cast
+  // and no aura application row — the log shows it in the round-start
+  // COMBATANT_INFO aura list and as the shield of SPELL_ABSORBED rows.
+  // Corpus (605 files, 139 unit-rounds with either row, 33
+  // archives): 86,573 absorb rows held back 112,023,781, none negative;
+  // 17,181 Refraction tick rows carry 79,911,340 in their amount field (the
+  // raw amount, 41,861 of it overkill) and 24,746,675 in their absorbed
+  // field or as fully absorbed ticks (SPELL_PERIODIC_MISSED ABSORB) — a real
+  // shield's absorb, another deferral shield holding the tick back again
+  // (b74d7bf6 0:36, Time Dilation) or a split onto a teammate (2202981c r1
+  // 0:29, Blessing of Sacrifice). Together 93.4 % of what was held (per
+  // unit-round median 0.94, 5th–95th percentile 0.67–1.07). No unit-round
+  // has one row kind without the other. What the remainder is — pending at
+  // a death, an Ice Block or the round's end — and why a few unit-rounds
+  // give back more than they held is not resolved here; the pairing is.
+  // The timelineHelpers note of 2026-09-26 ("Refraction … not deferred",
+  // selfDamageScan) read the tick alone, without the absorb rows that hold
+  // it.
+  "1309497": "1309786", // Refractive Images → Refraction, its deferred damage
 };
 
 const DEFERRED_TICK_IDS: ReadonlySet<string> = new Set(
   Object.values(DEFERRAL_SHIELD_DAMAGE_IDS),
 );
+
+/** The table's shields by name, as a legend lists them (`Time Dilation /
+ * Stretch Time / …`): the legend names what the table holds (T251 review —
+ * `+66k deferred` under Ironbark was a mage's Refractive Images, 0284fcd9 r2
+ * 0:16, and the legend said Time Dilation / Stretch Time). */
+export function deferralShieldNames(): string {
+  return Object.keys(DEFERRAL_SHIELD_DAMAGE_IDS)
+    .map((id) => getEnglishSpellName(id, ""))
+    .filter((n) => n !== "")
+    .join(" / ");
+}
 
 /** An absorb event (its `spellId` is the shield) that only delayed the hit —
  * the damage is the tick that lands later, not this. */

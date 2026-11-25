@@ -250,12 +250,14 @@ describe("incomingPressure — a deferral shield delays damage, it does not abso
       srcUnitId: "enemy-1",
     }) as never;
 
-  it("表:Time Dilation 357170 → 361029,Stretch Time 410355 → 413924,Fel Armor 386124 → 387846", () => {
+  it("表:Time Dilation 357170 → 361029,Stretch Time 410355 → 413924,Fel Armor 386124 → 387846,Refractive Images 1309497 → 1309786", () => {
     expect(DEFERRAL_SHIELD_DAMAGE_IDS).toEqual({
       "357170": "361029",
       "410355": "413924",
       "386124": "387846",
+      "1309497": "1309786",
     });
+    expect(isDeferralAbsorb({ spellId: "1309497" })).toBe(true);
     expect(isDeferralAbsorb({ spellId: "357170" })).toBe(true);
     expect(isDeferralAbsorb({ spellId: "17" })).toBe(false);
   });
@@ -292,7 +294,10 @@ describe("incomingPressure — a deferral shield delays damage, it does not abso
         spellId: "386124",
         spellName: "Fel Armor",
       }) as never;
-    const darkPact = { ...(abs(1000, 24_279) as object), spellId: "108416" } as never;
+    const darkPact = {
+      ...(abs(1000, 24_279) as object),
+      spellId: "108416",
+    } as never;
     const unit = makeUnit("victim", {
       damageIn: [],
       // dfb06d44 0:48: Fel Armor −18,090 + Dark Pact 24,279 on one hit

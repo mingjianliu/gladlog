@@ -61,6 +61,11 @@ export interface ShieldTally {
   delayed: number;
   ticksLanded: number;
   ticksAbsorbed: number;
+  /** the part of its ticks ANOTHER deferral shield held back again — not a
+   * real shield's absorb: it lands later as that shield's own tick (T251
+   * review: b74d7bf6 0:36, Time Dilation holding back part of a Refraction
+   * tick) */
+  ticksRedeferred?: number;
   rounds: number;
 }
 
@@ -95,6 +100,8 @@ export function addDeferredTally(into: DeferredTally, t: DeferredTally): void {
     cur.delayed += s.delayed;
     cur.ticksLanded += s.ticksLanded;
     cur.ticksAbsorbed += s.ticksAbsorbed;
+    if (s.ticksRedeferred)
+      cur.ticksRedeferred = (cur.ticksRedeferred ?? 0) + s.ticksRedeferred;
     cur.rounds += s.rounds;
     into.byShield.set(shield, cur);
   }
@@ -103,7 +110,9 @@ export function addDeferredTally(into: DeferredTally, t: DeferredTally): void {
 /** The RECONCILE reading of one shield: came-back ÷ delayed (1 with nothing
  * delayed), and whether it is flagged. */
 export function reconcile(s: ShieldTally): { ratio: number; flag: boolean } {
-  const back = s.ticksLanded + s.ticksAbsorbed;
+  // what another deferral shield took over is accounted for: it is that
+  // shield's delayed damage from there on
+  const back = s.ticksLanded + s.ticksAbsorbed + (s.ticksRedeferred ?? 0);
   const ratio = s.delayed > 0 ? back / s.delayed : 1;
   return { ratio, flag: ratio < RECONCILE_FLAG_BELOW };
 }
@@ -137,7 +146,11 @@ export function scanLegacy(
         seen.add(a.spellId);
       }
       const shield = SHIELD_OF_TICK.get(a.attackSpellId ?? "");
-      if (shield) tally(shield).ticksAbsorbed += amount;
+      if (!shield) continue;
+      const s = tally(shield);
+      if (a.spellId && a.spellId in TABLE)
+        s.ticksRedeferred = (s.ticksRedeferred ?? 0) + amount;
+      else s.ticksAbsorbed += amount;
     }
     for (const d of u.damageIn ?? []) {
       const shield = SHIELD_OF_TICK.get(d.spellId ?? "");
@@ -205,11 +218,11 @@ async function main(): Promise<void> {
     `\n=== ${files} files, ${total.rounds} matches / rounds (${total.roundsWithDeferral} with a deferral shield) ===`,
   );
   for (const [shield, s] of total.byShield) {
-    const back = s.ticksLanded + s.ticksAbsorbed;
+    const back = s.ticksLanded + s.ticksAbsorbed + (s.ticksRedeferred ?? 0);
     const { ratio, flag } = reconcile(s);
     console.log(
       `RECONCILE shield ${shield} → tick ${TABLE[shield]}: delayed ${Math.round(s.delayed)} · came back ${Math.round(back)} ` +
-        `(landed ${Math.round(s.ticksLanded)} + absorbed by a real shield ${Math.round(s.ticksAbsorbed)}) = ${(ratio * 100).toFixed(1)}% ` +
+        `(landed ${Math.round(s.ticksLanded)} + absorbed by a real shield ${Math.round(s.ticksAbsorbed)} + held back again by another deferral shield ${Math.round(s.ticksRedeferred ?? 0)}) = ${(ratio * 100).toFixed(1)}% ` +
         `over ${s.rounds} rounds${flag ? "  FLAG" : ""}`,
     );
   }

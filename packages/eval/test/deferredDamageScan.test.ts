@@ -80,9 +80,9 @@ describe("scanLegacy — RECONCILE and DOUBLE", () => {
 
   it("delayed vs came back, per shield; a unit without COMBATANT_INFO is not read; DOUBLE 0 with the product predicate", () => {
     const t = scanLegacy(legacy);
-    expect([t.rounds, t.roundsWithDeferral, t.double, t.doubleEvents]).toEqual(
-      [1, 1, 0, 0],
-    );
+    expect([t.rounds, t.roundsWithDeferral, t.double, t.doubleEvents]).toEqual([
+      1, 1, 0, 0,
+    ]);
     const s = t.byShield.get(TIME_DILATION)!;
     expect(s).toEqual({
       delayed: 5_000,
@@ -93,6 +93,32 @@ describe("scanLegacy — RECONCILE and DOUBLE", () => {
     // 4,000 of 5,000 came back: 0.8, under the flag line
     expect(reconcile(s)).toEqual({ ratio: 0.8, flag: true });
     expect(RECONCILE_FLAG_BELOW).toBe(0.9);
+  });
+
+  it("a tick another deferral shield holds back again is not a real shield's absorb (T251: b74d7bf6 0:36)", () => {
+    const REFRACTIVE_IMAGES = "1309497";
+    const mage = {
+      ...unit,
+      absorbsIn: [
+        absorb(REFRACTIVE_IMAGES, 5_000, "133", 1_000),
+        // Time Dilation holds back 1,000 of the Refraction tick
+        absorb(TIME_DILATION, 1_000, TABLE[REFRACTIVE_IMAGES]!, 3_000),
+      ],
+      damageIn: [damage(TABLE[REFRACTIVE_IMAGES]!, -3_000, 3_000)],
+    } as unknown as ICombatUnit;
+    const t = scanLegacy({ units: { p1: mage } });
+    expect(t.byShield.get(REFRACTIVE_IMAGES)).toEqual({
+      delayed: 5_000,
+      ticksLanded: 3_000,
+      ticksAbsorbed: 0,
+      ticksRedeferred: 1_000,
+      rounds: 1,
+    });
+    // all 5,000 accounted for: 3,000 landed, 1,000 handed on (the comment's
+    // pending 1,000 aside) — the handoff counts in the ratio
+    expect(reconcile(t.byShield.get(REFRACTIVE_IMAGES)!).ratio).toBe(0.8);
+    // …and it is Time Dilation's delayed damage from there on
+    expect(t.byShield.get(TIME_DILATION)!.delayed).toBe(1_000);
   });
 
   it("DOUBLE: a pressure predicate that still returns the deferral absorb", () => {

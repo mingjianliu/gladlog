@@ -52,6 +52,14 @@ for (const f of files) {
     for (const u of Object.values(m.units))
       for (const arr of [u.casts, u.castStarts, u.petCasts, u.auraEvents, u.actionsOut, u.damageOut, u.healOut] as const)
         for (const e of arr) if (e.spellId) ids.add(Number(e.spellId));
+  // the shield of an absorb row: a passive shield has no cast and no aura row
+  // (pipeline T251: Refractive Images 1309497 read "never observed" beside
+  // 86,573 absorb rows on the 605)
+  for (const m of items)
+    for (const u of Object.values(m.units))
+      for (const arr of ["absorbsIn", "absorbsOut"] as const)
+        for (const e of (u as Partial<Record<typeof arr, { spellId?: number | string }[]>>)[arr] ?? [])
+          if (e.spellId) ids.add(Number(e.spellId));
 }
 const sIdx = argv.indexOf("--store");
 if (sIdx >= 0) {
@@ -66,7 +74,7 @@ if (sIdx >= 0) {
         for (const u of Object.values(src?.units ?? {}) as {
           [k: string]: { spellId?: number | string }[];
         }[])
-          for (const arr of ["casts", "castStarts", "petCasts", "auraEvents", "actionsOut", "damageOut", "healOut"])
+          for (const arr of ["casts", "castStarts", "petCasts", "auraEvents", "actionsOut", "damageOut", "healOut", "absorbsIn", "absorbsOut"])
             for (const e of (u[arr] ?? []) as { spellId?: number | string }[])
               if (e.spellId) ids.add(Number(e.spellId));
     } catch {
