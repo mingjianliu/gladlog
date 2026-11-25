@@ -39,8 +39,7 @@
  */
 import {
   BURST_EXTRA_ANSWER_IDS,
-  BURST_RESPONSE_PRE_MS,
-  BURST_RESPONSE_WINDOW_SEC,
+  burstResponseSpanMs,
   burstWindowDecisionPoints,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
@@ -183,10 +182,12 @@ export function run(ctx: IRoundCtx): void {
     if (p.pressured === null) continue;
     ctx.bump(C);
     for (const x of presses) {
-      // the engine's own span: [tSec − BURST_RESPONSE_PRE_MS, tSec + 8 s]
+      // the engine's own span (`burstResponseSpanMs`: its start from the
+      // opener's ms, R113), in round seconds
+      const span = burstResponseSpanMs(p.tMs, p.leadMs);
       if (
-        x.s < p.tSec - BURST_RESPONSE_PRE_MS / 1000 ||
-        x.s > p.tSec + BURST_RESPONSE_WINDOW_SEC
+        x.s < p.tSec + (span.w0 - p.tMs) / 1000 ||
+        x.s > p.tSec + (span.w1 - p.tMs) / 1000
       )
         continue;
       if (

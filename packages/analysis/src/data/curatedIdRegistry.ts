@@ -19,6 +19,7 @@
  * index, and the rule has never been the missing piece (CLAUDE.md).
  */
 import {
+  ANTI_MAGIC_SHELL_ANSWER_IDS,
   SELF_SAVE_ANSWER_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
   TEAM_HEAL_WALL_ANSWER_IDS,
@@ -1667,6 +1668,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "analysis/burstWindowDecisionPoints.ts",
     "cast",
     () => [...SELF_SAVE_ANSWER_IDS],
+  ),
+  // T258 (user ruling R112): Anti-Magic Shell answers a burst for the unit
+  // it is pressed by or on
+  t(
+    "ANTI_MAGIC_SHELL_ANSWER_IDS",
+    "analysis/burstWindowDecisionPoints.ts",
+    "cast",
+    () => [...ANTI_MAGIC_SHELL_ANSWER_IDS],
   ),
   t(
     "CRISIS_PROTECTIVE_ANSWER_IDS",

@@ -34,6 +34,7 @@ const point = (
 ): BurstWindowDecisionPoint =>
   ({
     tMs: 0,
+    leadMs: 0,
     tSec: 40,
     endSec: 55,
     outcomeEndSec: 55,

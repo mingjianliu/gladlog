@@ -8,8 +8,7 @@
  *
  *  - `slowResponseOverSelfSave`: a slow-defensive-response row the builder
  *    emits for a healer owner whose pressured unit has a SUCCESS cast of
- *    the set inside [t − `BURST_RESPONSE_PRE_MS`, t +
- *    `BURST_RESPONSE_WINDOW_MS`]. Kind = the spell. Counted: every row the
+ *    the set inside the engine's response span (`burstResponseSpanMs`). Kind = the spell. Counted: every row the
  *    builder emits.
  *  - `cdHoardedOverOwnReturn`: a cd-hoarded menu row about the owner's OWN
  *    crisis whose owner has a SUCCESS cast of the set inside [t −
@@ -17,8 +16,7 @@
  *    Counted: every own-crisis cd-hoarded row of the menu.
  */
 import {
-  BURST_RESPONSE_PRE_MS,
-  BURST_RESPONSE_WINDOW_MS,
+  burstResponseSpanMs,
   burstWindowDecisionPoints,
   SELF_SAVE_ANSWER_IDS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
@@ -71,11 +69,9 @@ export function run(ctx: IRoundCtx): void {
       if (!p?.pressured) continue;
       const unit = ctx.units.find((u: any) => u.id === p.pressured!.unitId);
       const tMs = ctx.start + t * 1000;
-      const saves = savesOf(
-        unit,
-        tMs - BURST_RESPONSE_PRE_MS,
-        tMs + BURST_RESPONSE_WINDOW_MS,
-      );
+      // the engine's own span (its start from the opener's ms, R113)
+      const span = burstResponseSpanMs(p.tMs, p.leadMs);
+      const saves = savesOf(unit, span.w0, span.w1);
       if (saves.length === 0) continue;
       const first = saves[0];
       ctx.violate(

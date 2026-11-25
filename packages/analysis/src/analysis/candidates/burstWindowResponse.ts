@@ -35,10 +35,10 @@ import {
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import type { BurstWindowDecisionPoint } from "../burstWindowDecisionPoints";
 import {
-  BURST_RESPONSE_PRE_MS,
   BURST_RESPONSE_WINDOW_MS,
   BURST_RESPONSE_WINDOW_SEC,
   burstExtrasLabel,
+  burstResponseSpanMs,
 } from "../burstWindowDecisionPoints";
 import { fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
@@ -110,8 +110,9 @@ export function burstWindowResponseEvents(
   overrides?: { cap?: number },
   /** Intent guard (triage 2026-09-29 S1, BACKLOG #26's "pressed but rejected
    * ≠ never pressed"): the owner's ally-reaching save tools and their
-   * rejected presses inside the judged window [tSec − BURST_RESPONSE_PRE_MS,
-   * tSec + BURST_RESPONSE_WINDOW_MS] become `facts.attempted`, through the
+   * rejected presses inside the judged window (`burstResponseSpanMs`: from
+   * BURST_RESPONSE_PRE_MS before the opener's ms to tSec +
+   * BURST_RESPONSE_WINDOW_MS) become `facts.attempted`, through the
    * same `castFailedInWindow` + `filterIntentGuardEvidence` cd-hoarded uses.
    * The verdict (`responded`) is untouched. Absent ⇒ no fact. */
   ownerAttempts?: {
@@ -235,8 +236,10 @@ export function burstWindowResponseEvents(
     // Only the CDs inside the 8 s this sentence judges, each offset from the
     // opener — one helper with the [BURST ANSWERED] line.
     const extras = burstExtrasLabel(p);
-    // Read off the decision point's own (floored) second, never the raw lead
-    // cast — the window the sentence judges.
+    // The window the sentence judges: the engine's own response span
+    // (`burstResponseSpanMs` — its start from the opener's own ms, ruling
+    // R113; its end from the decision point's floored second).
+    const span = burstResponseSpanMs(p.tMs, p.leadMs);
     const attempted = ownerAttempts
       ? formatAttemptedFact(
           ownerAttempts.tools.flatMap((tool) =>
@@ -244,8 +247,8 @@ export function burstWindowResponseEvents(
               castFailedInWindow(
                 ownerAttempts.rawStreams,
                 ownerAttempts.ownerId,
-                p.tSec - BURST_RESPONSE_PRE_MS / 1000,
-                p.tSec + BURST_RESPONSE_WINDOW_MS / 1000,
+                p.tSec + (span.w0 - p.tMs) / 1000,
+                p.tSec + (span.w1 - p.tMs) / 1000,
                 Number(tool.spellId),
               ),
               tool.casts.map((c) => c.timeSeconds),

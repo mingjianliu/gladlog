@@ -4280,6 +4280,12 @@ const INDEX: PredicateRow[] = [
     symbol: "burstResponseSpanMs",
     mod: burstWindowDecisionPoints,
   },
+  // T258 (ruling R112): Anti-Magic Shell as a burst answer
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "ANTI_MAGIC_SHELL_ANSWER_IDS",
+    mod: burstWindowDecisionPoints,
+  },
   // T183 (ruling R73): the span a burst window's pressured trough is read
   // over past its horizon, and the suffix that states it
   {

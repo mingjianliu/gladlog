@@ -1,50 +1,52 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- the legacy parse objects are untyped */
 /**
- * scan5/t258.ts — ticket T258: three counts taken BEFORE a ruling is asked
- * (GH #225-A10, #226-16, #226-17). Inventories only: every kind is out of
- * the total and nothing here is a failure.
+ * scan5/t258.ts — ticket T258, three rulings of 2026-11-24 (GH #225-A10,
+ * #226-16, #226-17).
  *
  * THIS SCAN RE-RUNS THE ENGINE: its numbers are the checkout's. Windows,
- * the pressured unit, `responded` and the response list are the engine's
- * (`burstWindowDecisionPoints`); "judged" is the candidate's own door
- * (`burstWindowLongEnoughToJudge`, a healer owner, `feasible`, `triaged`);
- * the death cut is the producer's `casterAuraOutlives`.
+ * the pressured unit, the response list and the span are the engine's
+ * (`burstWindowDecisionPoints`, `burstResponseSpanMs`); the menu rows are
+ * the candidate pass's own (`extractCandidateFindings`); the death cut is the
+ * producer's `casterAuraOutlives`.
  *
- *  - `amsInBurstWindow` (#225-A10): an Anti-Magic Shell press — 48707 by
- *    the pressured unit, or Spellwarden's 410358 by the pressured unit or
- *    on it — inside a burst window's response span. Kind: what the window
- *    reads today (the press already in the response list / answered by
- *    something else / unanswered and judged by the candidate / unanswered,
- *    not judged) | whether at least `SCHOOL_SAVE_MIN_SHARE` of the damage
- *    the pressured unit took in the span is of the schools the shell
- *    covers (`saveSchoolMask`). Counted: every such press in a window.
- *  - `preWallBeforeOpenerMs` (#226-16): a response of an engine window
- *    pressed more than `BURST_RESPONSE_PRE_MS` before the opener's own
- *    millisecond (the span is anchored on the opener's whole second, so
- *    such a press is inside it). Kind: the window's credited answer / the
- *    only answer the window has (judged by the candidate or not) / beside
- *    another answer. A landed control is left out: it answers by its
- *    landing and prints its press or its totem's drop (R90 / R109).
+ *  - `amsInBurstWindow` (R112): an Anti-Magic Shell press — 48707 by the
+ *    pressured unit, or Spellwarden's 410358 by the pressured unit or on
+ *    it — inside a burst window's response span is in the window's
+ *    response list. Kind `not in the response list` is the failure; the
+ *    presses that are in it are counted by whether the schools the shell
+ *    covers (`saveSchoolMask`) are at least `SCHOOL_SAVE_MIN_SHARE` of the
+ *    damage the pressured unit took in the span (inventory: the ruling set
+ *    no school gate). Counted: every such press in a window.
+ *  - `preWallBeforeOpenerMs` (R113): no response of a window was pressed
+ *    more than `BURST_RESPONSE_PRE_MS` before the opener's own
+ *    millisecond. A landed control is left out: it answers by its landing
+ *    and prints its press or its totem's drop (R90 / R109).
  *    Counted: every other response of a window.
- *  - `petCopyKeepsEffectAfterDeath` (#226-17): an enemy cooldown whose
+ *  - `slowResponseRowDiffers` (both rulings, read on the capture): a
+ *    healer owner's `slow-defensive-response` menu rows against the rows
+ *    the checkout's builder emits. Kinds: `printed, the builder emits
+ *    none` / `not printed, the pass emits it`. Non-zero on a capture
+ *    taken before the fix, 0 on one taken with it.
+ *    Counted: every row printed or emitted.
+ *  - `petCopyKeepsEffectAfterDeath` (R114, inventory — the split stays and
+ *    is registered as deliberately not shared): an enemy cooldown whose
  *    caster died while its effect ran, where `casterAuraOutlives` says the
  *    effect outlives the death and says it does not once the copies on
- *    pets / guardians / totems are left out (`isEffectHolderUnit`). Kind:
- *    the cooldown. Counted: every enemy cooldown press of a caster that
- *    died before the press's effect was due to end.
+ *    pets / guardians / totems are left out (`isEffectHolderUnit`).
+ *    Counted: every enemy cooldown press of a caster that died before the
+ *    press's effect was due to end.
  */
 import {
+  ANTI_MAGIC_SHELL_ANSWER_IDS,
   BURST_RESPONSE_PRE_MS,
-  BURST_RESPONSE_WINDOW_SEC,
+  burstResponseSpanMs,
   burstWindowDecisionPoints,
-  pressDidNotReachPressured,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
+import { extractCandidateFindings } from "@gladlog/analysis/src/analysis/candidateFindings";
 import {
   saveSchoolMask,
   SCHOOL_SAVE_MIN_SHARE,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import { creditedAnswer } from "@gladlog/analysis/src/context/burstAnswered";
 import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import { isEffectHolderUnit } from "@gladlog/analysis/src/utils/effectHolder";
@@ -64,44 +66,25 @@ import { ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 export const CHECKS = [
   "amsInBurstWindow",
   "preWallBeforeOpenerMs",
+  "slowResponseRowDiffers",
   "petCopyKeepsEffectAfterDeath",
 ] as const;
 
-const AMS = "48707";
-const AMS_SPELLWARDEN = "410358";
-const AMS_STATES = [
-  "already in the response list",
-  "window answered by something else",
-  "window unanswered, judged by the candidate",
-  "window unanswered, not judged",
-] as const;
 const AMS_SHARES = [
-  "covered schools are most of the damage",
-  "covered schools are under half of the damage",
-  "no damage on the pressured unit in the span",
+  "in the list; covered schools are most of the damage",
+  "in the list; covered schools are under half of the damage",
+  "in the list; no damage on the pressured unit in the span",
 ] as const;
-const PRE_KINDS = [
-  "the credited answer",
-  "the window's only answer, judged by the candidate",
-  "the window's only answer, not judged",
-  "beside another answer",
-  "not an answer for the pressured unit",
-] as const;
-const PET_COPY = "kept alive by a pet's / guardian's copy alone";
-const PET_OTHER = [
+const PET_KINDS = [
+  "kept alive by a pet's / guardian's copy alone",
   "a holder's copy outlives the death",
   "over at the death",
   "no aura of the effect",
 ] as const;
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
-  ...AMS_STATES.flatMap((s) =>
-    AMS_SHARES.map((h) => `amsInBurstWindow|${s} | ${h}`),
-  ),
-  ...PRE_KINDS.map((k) => `preWallBeforeOpenerMs|${k}`),
-  ...PET_OTHER.map((k) => `petCopyKeepsEffectAfterDeath|${k}`),
+  ...AMS_SHARES.map((h) => `amsInBurstWindow|${h}`),
+  ...PET_KINDS.map((k) => `petCopyKeepsEffectAfterDeath|${k}`),
 ]);
-// `PET_COPY`, the one kind #226-17 asks about, stays in the total: it is
-// the report's headline number
 
 const PHYS = 1;
 function rowSchool(r: any): number | undefined {
@@ -111,6 +94,8 @@ function rowSchool(r: any): number | undefined {
   if (typeof p === "string" && /^0x/i.test(p)) return parseInt(p, 16);
   return spellSchoolMask(String(r.spellId));
 }
+
+const MENU_ROW = /id=slow-defensive-response:\S+?:(\d+) type=/g;
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -123,28 +108,24 @@ export function run(ctx: IRoundCtx): void {
   } catch {
     return;
   }
-  const healer = isHealerSpec(owner.spec);
   const at = (ms: number): string => ((ms - ctx.start) / 1000).toFixed(1);
   const friendlies = (ctx.players as any[]).filter(
     (u) => u.reaction === owner.reaction,
   );
-  const amsMask = saveSchoolMask(AMS) ?? 0x7e;
+  // one shell, two ids: both carry the same DB2 absorb mask
+  const amsMask = saveSchoolMask([...ANTI_MAGIC_SHELL_ANSWER_IDS][0]!) ?? 0x7e;
   for (const p of points) {
     const pr = p.pressured;
     if (!pr) continue;
-    const tMs = ctx.start + p.tSec * 1000;
-    const w0 = tMs - BURST_RESPONSE_PRE_MS;
-    const w1 = tMs + BURST_RESPONSE_WINDOW_SEC * 1000;
-    const judged =
-      healer && p.feasible && p.triaged && burstWindowLongEnoughToJudge(p);
+    const { w0, w1 } = burstResponseSpanMs(p.tMs, p.leadMs);
     const fact = `${ctx.roundKey}|${owner.reaction}|${p.tSec}`;
 
-    // ── #225-A10: Anti-Magic Shell inside the span ────────────────────────
+    // ── R112: Anti-Magic Shell inside the span ────────────────────────────
     const prUnit = ctx.units.find((u: any) => u.id === pr.unitId);
     for (const f of friendlies)
       for (const c of successesOf(f)) {
         const id = String(c.spellId);
-        if (id !== AMS && id !== AMS_SPELLWARDEN) continue;
+        if (!ANTI_MAGIC_SHELL_ANSWER_IDS.has(id)) continue;
         const ms = tsOf(c);
         if (ms < w0 || ms > w1) continue;
         const dest: string | undefined = c.destUnitId;
@@ -165,66 +146,76 @@ export function run(ctx: IRoundCtx): void {
           if (s !== undefined && s !== 0 && (s & ~amsMask) === 0)
             covered += amount;
         }
-        const share =
-          total === 0
-            ? AMS_SHARES[2]
-            : covered / total >= SCHOOL_SAVE_MIN_SHARE
-              ? AMS_SHARES[0]
-              : AMS_SHARES[1];
-        const state = p.responseCasts.some(
+        const inList = p.responseCasts.some(
           (r) => r.spellId === id && r.casterId === f.id,
-        )
-          ? AMS_STATES[0]
-          : p.responded
-            ? AMS_STATES[1]
-            : judged
-              ? AMS_STATES[2]
-              : AMS_STATES[3];
+        );
         ctx.violate(
           "amsInBurstWindow",
-          `${state} | ${share}`,
+          !inList
+            ? "not in the response list"
+            : total === 0
+              ? AMS_SHARES[2]
+              : covered / total >= SCHOOL_SAVE_MIN_SHARE
+                ? AMS_SHARES[0]
+                : AMS_SHARES[1],
           ms,
           `${fact}|${f.id}|${id}|${ms}`,
           `window at ${p.tSec}s (${p.leadCd.spellName}): ${f.name} Anti-Magic Shell ${id} at ${at(ms)}s${dest === pr.unitId && f.id !== pr.unitId ? ` on ${pr.name}` : ""}; pressured ${pr.name} low ${pr.minHpPct ?? "?"}%${pr.died ? " (died)" : ""}; covered share ${total === 0 ? "-" : `${Math.round((100 * covered) / total)}%`}; responded ${p.responded}`,
         );
       }
 
-    // ── #226-16: a response pressed more than PRE before the opener's ms ──
-    const credited = creditedAnswer(p);
-    const reaches = p.responseCasts.filter(
-      (r) => !pressDidNotReachPressured(pr, r),
-    );
-    const moved = p.responses.kite || p.responses.attackerMoved;
-    const early = (r: (typeof p.responseCasts)[number]): boolean =>
-      r.latencySec < -(BURST_RESPONSE_PRE_MS / 1000) - 0.05;
+    // ── R113: no response pressed more than PRE before the opener's ms ────
     for (const r of p.responseCasts) {
       // a landed control answers by its landing and prints its press or
-      // its totem's drop however early (rulings R90 / R109): not a press
-      // the allowance admitted
+      // its totem's drop however early (rulings R90 / R109)
       if (r.category === "control" && r.landed === undefined) continue;
       ctx.bump("preWallBeforeOpenerMs");
-      if (!early(r)) continue;
-      const others = reaches.filter((x) => !early(x));
-      const kind = !reaches.includes(r)
-        ? PRE_KINDS[4]
-        : others.length === 0 && !moved
-          ? judged
-            ? PRE_KINDS[1]
-            : PRE_KINDS[2]
-          : r === credited
-            ? PRE_KINDS[0]
-            : PRE_KINDS[3];
+      if (!(r.latencySec < -(BURST_RESPONSE_PRE_MS / 1000) - 0.05)) continue;
       ctx.violate(
         "preWallBeforeOpenerMs",
-        kind,
-        tMs,
+        `a ${r.category} pressed before the allowance`,
+        p.tMs,
         `${fact}|${r.casterName}|${r.spellId}|${r.tSec}`,
-        `window at ${p.tSec}s (${p.leadCd.spellName}): ${r.casterName} ${r.spellName} (${r.category}) ${r.latencySec}s; pressured ${pr.name} low ${pr.minHpPct ?? "?"}%${pr.died ? " (died)" : ""}; other answers ${others.map((x) => `${x.spellName} ${x.latencySec}s`).join(", ") || "-"}`,
+        `window at ${p.tSec}s (${p.leadCd.spellName}): ${r.casterName} ${r.spellName} (${r.category}) ${r.latencySec}s; pressured ${pr.name} low ${pr.minHpPct ?? "?"}%${pr.died ? " (died)" : ""}`,
       );
     }
   }
 
-  // ── #226-17: a pet's copy alone keeps a dead caster's effect alive ──────
+  // ── both rulings on the capture: the owner's slow-defensive-response rows
+  if (isHealerSpec(owner.spec)) {
+    // the producer's own selection: the whole candidate pass (the builder's
+    // rows less whatever the pass drops after it), not the builder alone
+    let rows: ReturnType<typeof extractCandidateFindings> = [];
+    try {
+      rows = extractCandidateFindings(ctx.legacy, owner.id);
+    } catch {
+      return;
+    }
+    const emitted = new Set(
+      rows
+        .filter((row) => row.type === "slow-defensive-response")
+        .map((row) => Number(row.id.split(":").pop())),
+    );
+    const printed = new Set(
+      [...ctx.menu.matchAll(MENU_ROW)].map((m) => Number(m[1])),
+    );
+    for (const t of new Set([...emitted, ...printed])) {
+      ctx.bump("slowResponseRowDiffers");
+      if (emitted.has(t) === printed.has(t)) continue;
+      const p = points.find((x) => x.tSec === t);
+      ctx.violate(
+        "slowResponseRowDiffers",
+        printed.has(t)
+          ? "printed, the pass emits none"
+          : "not printed, the pass emits it",
+        ctx.start + t * 1000,
+        `${ctx.roundKey}|${owner.reaction}|${t}`,
+        `window at ${t}s${p ? ` (${p.leadCd.spellName}); responded ${p.responded}; responses ${p.responseCasts.map((r) => `${r.spellName} ${r.latencySec}s`).join(", ") || "-"}` : ": the engine has no window"}`,
+      );
+    }
+  }
+
+  // ── R114 (inventory): a pet's copy alone keeps a dead caster's effect alive ──────
   if (!ctx.firstOwnerOfRound) return;
   const combat = { ...ctx.legacy, startTime: ctx.start, endTime: ctx.end };
   const holdersOnly = {
@@ -259,12 +250,12 @@ export function run(ctx: IRoundCtx): void {
       const all = casterAuraOutlives(u, effect, untilMs, combat as never);
       const held = casterAuraOutlives(u, effect, untilMs, holdersOnly as never);
       const kind = !all.any
-        ? PET_OTHER[2]
+        ? PET_KINDS[3]
         : !all.outlives
-          ? PET_OTHER[1]
+          ? PET_KINDS[2]
           : held.outlives
-            ? PET_OTHER[0]
-            : PET_COPY;
+            ? PET_KINDS[1]
+            : PET_KINDS[0];
       ctx.violate(
         "petCopyKeepsEffectAfterDeath",
         kind,

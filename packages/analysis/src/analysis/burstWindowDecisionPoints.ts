@@ -690,6 +690,9 @@ export interface BurstFriendlyOutcome {
 export interface BurstWindowDecisionPoint {
   /** window start re-anchored on the render grid: `startTime + tSec * 1000` */
   tMs: number;
+  /** the opener's own instant, epoch ms — the response span's start is
+   * measured from it (`burstResponseSpanMs`, ruling R113) */
+  leadMs: number;
   /** WHOLE seconds since round start — what `fmtTime` displays */
   tSec: number;
   /** last whole second of the bounded window */
@@ -797,7 +800,7 @@ export interface BurstWindowDecisionPoint {
   /**
    * PROBE-ONLY, present only when `BurstWindowOptions.collectSpend` is set
    * (the product never sets it): every major defensive a friendly pressed
-   * inside `[tSec - BURST_RESPONSE_PRE_MS, outcomeEndSec]`. See
+   * inside `[the opener's ms - BURST_RESPONSE_PRE_MS, outcomeEndSec]`. See
    * `BurstSpendCast`.
    */
   spend?: BurstSpendCast[];
@@ -918,6 +921,22 @@ export const SELF_SAVE_ANSWER_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * User ruling R112 (2026-11-24, T258; GH #225-A10): Anti-Magic Shell —
+ * 48707, and Spellwarden's 410358 that goes on self or an ally — pressed by
+ * the pressured unit, or 410358 pressed ON it, answers the burst. Neither
+ * id sat in an answer list (605: 63 such presses inside a window's span, 6
+ * slow-defensive-response rows said "no friendly answered" over one). No
+ * school gate (the user chose "answers" over the >= 50 % magic option).
+ * Answers only, never on the accusation side. A press on another friendly
+ * is an `external`, any other a `wall` of its presser — never a group heal
+ * (`extraAnswerCategory`). Registered in curatedIdRegistry.
+ */
+export const ANTI_MAGIC_SHELL_ANSWER_IDS: ReadonlySet<string> = new Set([
+  "48707", // Anti-Magic Shell, self only
+  "410358", // Anti-Magic Shell (Spellwarden): self or an ally
+]);
+
+/**
  * F16 retest (2026-10-21, idx 51): presses that answer a crisis on the
  * crisis side but sat in none of the three lists above, so
  * slow-defensive-response said "no friendly answered within 8 s" over a
@@ -943,6 +962,7 @@ export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
   ).map((f) => f.id),
   ...ENEMY_REDIRECT_SAVE_IDS,
   ...SELF_SAVE_ANSWER_IDS,
+  ...ANTI_MAGIC_SHELL_ANSWER_IDS,
 ]);
 
 /**
@@ -1254,12 +1274,24 @@ export function landedControlMemberAtMs(x: {
 }
 
 /**
- * The response span of a burst window opened at the whole second `tMs`:
- * `[tMs − BURST_RESPONSE_PRE_MS, tMs + BURST_RESPONSE_WINDOW_MS]`.
+ * The response span of a burst window: from `BURST_RESPONSE_PRE_MS` before
+ * the opener's OWN millisecond (`leadMs`) to `BURST_RESPONSE_WINDOW_MS`
+ * after the whole second the window opens on (`tMs`).
+ *
+ * User ruling R113 (2026-11-24, T258; GH #226-16): the "pressed just
+ * before the burst" allowance is measured from the opener's cast itself.
+ * Anchored on the whole second it admitted a press up to 2.5 s early and
+ * the line then read "1.7s before it opened" (d86164f1 r1: Alter Time
+ * 1.710 s before Army of the Dead). The end keeps the whole-second anchor
+ * — not asked. One definition for the engine, the candidate's attempted
+ * presses and the scans.
  */
-export function burstResponseSpanMs(tMs: number): { w0: number; w1: number } {
+export function burstResponseSpanMs(
+  tMs: number,
+  leadMs: number,
+): { w0: number; w1: number } {
   return {
-    w0: tMs - BURST_RESPONSE_PRE_MS,
+    w0: leadMs - BURST_RESPONSE_PRE_MS,
     w1: tMs + BURST_RESPONSE_WINDOW_MS,
   };
 }
@@ -2159,7 +2191,7 @@ export function burstWindowDecisionPoints(
       ];
 
       // ── responses: any friendly, [tMs - pre, tMs + 8s] ──────────────────
-      const { w0, w1 } = burstResponseSpanMs(tMs);
+      const { w0, w1 } = burstResponseSpanMs(tMs, leadRawMs);
       const casterIdSet = new Set(casterIds);
       // whose control answers THIS burst: a caster of the lead or of an extra
       // inside the 8 s the sentence judges — the CDs `burstExtrasLabel`
@@ -2199,7 +2231,11 @@ export function burstWindowDecisionPoints(
               c.dest !== c.unitId &&
               friendlies.some((f) => f.id === c.dest)
             ? "external"
-            : isNoDest(c.dest) && canHelpAnotherUnit(c.spellId)
+            : isNoDest(c.dest) &&
+                canHelpAnotherUnit(c.spellId) &&
+                // R112: an Anti-Magic Shell with no ally target is its
+                // presser's own shell, whatever the id can reach
+                !ANTI_MAGIC_SHELL_ANSWER_IDS.has(c.spellId)
               ? "healCd"
               : "wall";
       for (const c of friendlyCasts) {
@@ -2798,6 +2834,7 @@ export function burstWindowDecisionPoints(
 
       out.push({
         tMs,
+        leadMs: leadRawMs,
         tSec,
         endSec,
         buffRunEndSec,

@@ -127,7 +127,7 @@ export function run(ctx: IRoundCtx): void {
   printedLines(ctx, points);
   const at = (ms: number): string => ((ms - ctx.start) / 1000).toFixed(1);
   for (const p of points) {
-    const { w0, w1 } = burstResponseSpanMs(ctx.start + p.tSec * 1000);
+    const { w0, w1 } = burstResponseSpanMs(p.tMs, p.leadMs);
     for (const r of p.responseCasts) {
       if (r.category !== "control" || !r.controlOn) continue;
       const auras = r.controlOn.auras;

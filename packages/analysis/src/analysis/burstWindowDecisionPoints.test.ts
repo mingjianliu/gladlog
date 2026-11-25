@@ -24,6 +24,7 @@ import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
 import {
   aimedControlUpAt,
+  ANTI_MAGIC_SHELL_ANSWER_IDS,
   BURST_HEAL_CD_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
   BURST_OUTCOME_FIELDS,
@@ -31,6 +32,7 @@ import {
   BURST_TRIAGE_MIN_HP_DROP_PP,
   burstExtrasLabel,
   type BurstResponseCast,
+  burstResponseSpanMs,
   burstTroughReadEnd,
   burstWindowDecisionPoints,
   canBeWallResponse,
@@ -739,6 +741,81 @@ describe("burstWindowDecisionPoints — response classification", () => {
     );
     expect(pts[0]!.responses.wall).toBe(true);
     expect(pts[0]!.firstResponseSec).toBe(-1);
+  });
+
+  // User ruling R113 (2026-11-24, T258): the 1.5 s is measured from the
+  // opener's own millisecond. Anchored on the window's whole second, a
+  // Barkskin 2.2 s before an opener pressed at 10.7 s (window second 10)
+  // was inside it.
+  it("the pre-wall allowance is measured from the opener's own ms (R113)", () => {
+    const openedAt = (wallSec: number) =>
+      burstWindowDecisionPoints(
+        combat([
+          pressuredFriend({ spellCastEvents: [cast(BARKSKIN, wallSec)] }),
+          hostile({ spellCastEvents: [cast(AR, 10.7)] }),
+        ]),
+      )[0]!;
+    // 2.2 s before the opener, 1.5 s before its whole second: no answer
+    const early = openedAt(8.5);
+    expect(early.leadMs).toBe(T0 + 10_700);
+    expect(early.tMs).toBe(T0 + 10_000);
+    expect(early.responseCasts).toEqual([]);
+    expect(early.responded).toBe(false);
+    // 1.4 s before the opener: an answer, read "1.4s before it opened"
+    const inside = openedAt(9.3);
+    expect(inside.responses.wall).toBe(true);
+    expect(inside.responseCasts[0]!.latencySec).toBe(-1.4);
+    expect(burstResponseSpanMs(inside.tMs, inside.leadMs)).toEqual({
+      w0: T0 + 9_200,
+      w1: T0 + 18_000,
+    });
+  });
+
+  // User ruling R112 (2026-11-24, T258): Anti-Magic Shell pressed by the
+  // pressured unit, or Spellwarden's on it, answers the burst.
+  describe("Anti-Magic Shell answers the burst (R112)", () => {
+    const mate = (over: Record<string, unknown> = {}) =>
+      friendly({ id: "F2", name: "Mate-R", ...over });
+    it("the pressured unit's own shell is its wall, either id", () => {
+      for (const id of ANTI_MAGIC_SHELL_ANSWER_IDS) {
+        const [p] = burstWindowDecisionPoints(
+          combat([
+            pressuredFriend({
+              spellCastEvents: [cast(id, 12, "0000000000000000")],
+            }),
+            enemyWithBurst(),
+          ]),
+        );
+        expect(p!.responded, id).toBe(true);
+        expect(p!.responseCasts, id).toMatchObject([
+          { spellId: id, category: "wall", casterId: "F1" },
+        ]);
+      }
+    });
+    it("Spellwarden's shell on the pressured ally is an external; a teammate's own shell answers nothing", () => {
+      const onMate = burstWindowDecisionPoints(
+        combat([
+          pressuredFriend(),
+          mate({ spellCastEvents: [cast("410358", 12, "F1")] }),
+          enemyWithBurst(),
+        ]),
+      )[0]!;
+      expect(onMate.responseCasts).toMatchObject([
+        { spellId: "410358", category: "external", destId: "F1" },
+      ]);
+      expect(onMate.responded).toBe(true);
+      const own = burstWindowDecisionPoints(
+        combat([
+          pressuredFriend(),
+          mate({ spellCastEvents: [cast("410358", 12, "0000000000000000")] }),
+          enemyWithBurst(),
+        ]),
+      )[0]!;
+      expect(own.responseCasts).toMatchObject([
+        { spellId: "410358", category: "wall", casterId: "F2" },
+      ]);
+      expect(own.responded).toBe(false);
+    });
   });
 });
 

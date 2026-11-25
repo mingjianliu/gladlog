@@ -1068,7 +1068,8 @@ const BURST_INTO_MITIGATION_CAP = 2;
  * p50 21.6 s), asks whether ANY friendly answered (not just the owner), gates
  * on the pressured friendly's own feasibility, and triages on that friendly's
  * HP. `PRE_WALL_SECONDS`' second consumer left with it; the engine's
- * `BURST_RESPONSE_PRE_MS` is the pre-wall grace now.
+ * `BURST_RESPONSE_PRE_MS` is the pre-wall grace now (measured from the opener's
+ * own ms, `burstResponseSpanMs`).
  */
 
 /** missed-cleanse mapping (pure function, unit-testable with hand-built
