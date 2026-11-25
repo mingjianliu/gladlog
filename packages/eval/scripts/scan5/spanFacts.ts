@@ -48,8 +48,8 @@ import {
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   analyzeBurstLedger,
-  damagingSpellIdsOf,
   petsOf,
+  roundDamageEvidenceOf,
   wallForSchoolTest,
   wallIsOutsideBurst,
 } from "@gladlog/analysis/src/utils/burstLedger";
@@ -358,10 +358,10 @@ function procOutsideBurst(
   const ivToMs = iv ? ctx.start + iv.toS * 1000 : offMs;
   const hi = Math.min(ivToMs, ctx.start + e.toSeconds * 1000);
   const pets = petsOf(owner, combat);
-  const damaging = damagingSpellIdsOf([
-    ...players.filter((p) => p.reaction === owner.reaction),
-    ...pets,
-  ]);
+  const damaging = roundDamageEvidenceOf(
+    [...players.filter((p) => p.reaction === owner.reaction), ...pets],
+    Object.values(combat.units ?? {}),
+  );
   return wallIsOutsideBurst(
     wallForSchoolTest(String(on.spellId), {
       carrierIsCaster: on.srcUnitId === target.id,
@@ -374,7 +374,7 @@ function procOutsideBurst(
     Math.max(ivFromMs, ctx.start + e.fromSeconds * 1000),
     hi,
     documentRecordsAttackSpell(Object.values(combat.units ?? {})),
-    (id) => damaging.has(id),
+    damaging,
     iv && hi === ivToMs ? iv.toRow : undefined,
   );
 }

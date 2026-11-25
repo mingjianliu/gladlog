@@ -959,27 +959,33 @@ export function wallTouchesNoneOf(
  *    Anti-Magic Zone refuses nothing),
  *  - it is IMMUNE, or a spell's MISS (Cloak turns spells into misses —
  *    2de375dc 1:05; a swing's MISS is an ordinary miss), and
- *  - the attack deals damage (a swing, a spell with a damage row
- *    somewhere in the round — `isDamaging` — or one whose DB2 profile
- *    deals damage: 17664ae3 r1 1:22, a Shattering Throw refused by the
- *    Blessing of Protection it then removed, its only cast of the round)
- *    — a control refused is no burst damage stopped.
+ *  - the attack deals damage — a control refused is no burst damage
+ *    stopped. A swing does; a spell by what the round shows of it
+ *    (`isDamaging`, `roundDamageEvidenceOf`), and one the round shows
+ *    nothing of by its DB2 profile (17664ae3 r1 1:22: a Shattering Throw
+ *    refused by the Blessing of Protection it then removed, its only
+ *    cast of the round).
+ * A wall with a melee reading of its own in the verdict book (Evasion)
+ * also refused an attack it made the target DODGE (8c70dc85 r3 2:47).
  * A row of the aura's closing millisecond logged after its close
  * (`closeRow`) met no wall.
  */
 export function wallRefusedAttackOf(
-  res: Pick<IResolvedMitigation, "components"> | undefined,
+  res: Pick<IResolvedMitigation, "components" | "spellId"> | undefined,
   attackers: ReadonlyArray<Pick<ICombatUnit, "missesOut">>,
   targetId: string,
   fromMs: number,
   toMs: number,
-  isDamaging: (spellId: string) => boolean,
+  isDamaging: (spellId: string) => boolean | undefined,
   closeRow?: IAuraCloseRow,
 ): boolean {
   const immunities = (res?.components ?? []).filter(
     (c) => c.kind === "immunity",
   );
-  if (immunities.length === 0) return false;
+  const meleeWall =
+    res !== undefined &&
+    MITIGATION_VERDICTS[res.spellId]?.nonMeleeVerdict !== undefined;
+  if (immunities.length === 0 && !meleeWall) return false;
   return attackers.some((u) =>
     (u.missesOut ?? []).some((m) => {
       if (
@@ -991,6 +997,8 @@ export function wallRefusedAttackOf(
         return false;
       const swing = (m.logLine.event as string).startsWith("SWING");
       const type = (m as { missType?: string }).missType;
+      // the dodge of a wall with a melee reading of its own (Evasion)
+      if (meleeWall && type === "DODGE") return true;
       if (type !== "IMMUNE" && !(type === "MISS" && !swing)) return false;
       const school = swing
         ? 0x1
@@ -1003,8 +1011,10 @@ export function wallRefusedAttackOf(
       if ((school & ALL_SCHOOLS_MASK) === 0) return false;
       if (
         !swing &&
-        !isDamaging(String(m.spellId)) &&
-        !abilityProfile(String(m.spellId)).dealsDamage
+        !(
+          isDamaging(String(m.spellId)) ??
+          abilityProfile(String(m.spellId)).dealsDamage
+        )
       )
         return false;
       return immunities.some((c) =>
@@ -1058,7 +1068,7 @@ export function wallIsOutsideBurst(
   fromMs: number,
   toMs: number,
   recordsAttackSpell: boolean,
-  isDamaging: (spellId: string) => boolean,
+  isDamaging: (spellId: string) => boolean | undefined,
   /** the wall's closing row when [fromMs, toMs] ends on it */
   closeRow?: IAuraCloseRow,
 ): boolean {
@@ -1096,14 +1106,31 @@ export function petsOf(
   );
 }
 
-/** Does a spell of these units have a damage row somewhere in the round —
- * `wallRefusedAttackOf`'s "the attack deals damage". */
-export function damagingSpellIdsOf(
-  units: ReadonlyArray<Pick<ICombatUnit, "damageOut">>,
-): Set<string> {
-  return new Set(
-    units.flatMap((u) => (u.damageOut ?? []).map((d) => String(d.spellId))),
+/** What the round shows of a spell of `sources` — `wallRefusedAttackOf`'s
+ * "the attack deals damage": true with a damage row of it somewhere in the
+ * round; false when it landed as an aura on another unit and dealt nothing
+ * (1627f7f8 r1: Entangling Roots landed 15 times, no damage row — its DB2
+ * profile carries a damage effect); undefined when the round shows
+ * neither. */
+export function roundDamageEvidenceOf(
+  sources: ReadonlyArray<Pick<ICombatUnit, "id" | "damageOut">>,
+  units: ReadonlyArray<Pick<ICombatUnit, "id" | "auraEvents">>,
+): (spellId: string) => boolean | undefined {
+  const damaging = new Set(
+    sources.flatMap((u) => (u.damageOut ?? []).map((d) => String(d.spellId))),
   );
+  const ids = new Set(sources.map((u) => u.id));
+  const landed = new Set<string>();
+  for (const u of units)
+    for (const a of u.auraEvents ?? [])
+      if (
+        (a.logLine.event as string) === LogEvent.SPELL_AURA_APPLIED &&
+        ids.has(a.srcUnitId) &&
+        a.srcUnitId !== u.id
+      )
+        landed.add(String(a.spellId));
+  return (spellId) =>
+    damaging.has(spellId) ? true : landed.has(spellId) ? false : undefined;
 }
 
 export function analyzeBurstLedger(
@@ -1136,14 +1163,13 @@ export function analyzeBurstLedgerUncached(
   let petsMemo: ICombatUnit[] | undefined;
   const petsOfHolder = (): ICombatUnit[] =>
     (petsMemo ??= petsOf(player, combat));
-  // spells of the holder's side with a damage row somewhere in the round
-  let damagingIdsMemo: Set<string> | undefined;
-  const isDamagingSpell = (spellId: string): boolean =>
-    (damagingIdsMemo ??= damagingSpellIdsOf([
-      player,
-      ...allies,
-      ...petsOfHolder(),
-    ])).has(spellId);
+  // what the round shows of a spell of the holder's side
+  let damageEvidenceMemo: ReturnType<typeof roundDamageEvidenceOf> | undefined;
+  const isDamagingSpell = (spellId: string): boolean | undefined =>
+    (damageEvidenceMemo ??= roundDamageEvidenceOf(
+      [player, ...allies, ...petsOfHolder()],
+      Object.values(combat.units ?? {}) as unknown as ICombatUnit[],
+    ))(spellId);
   let recordsAttackSpellMemo: boolean | undefined;
   const recordsAttackSpell = (): boolean =>
     (recordsAttackSpellMemo ??= documentRecordsAttackSpell(

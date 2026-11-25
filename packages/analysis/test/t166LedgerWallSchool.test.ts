@@ -13,6 +13,7 @@ import { resolveMitigation } from "../src/data/mitigationComponents";
 import {
   analyzeBurstLedger,
   burstDamageBySchoolOn,
+  roundDamageEvidenceOf,
   wallRefusedAttackOf,
   wallTouchesNoneOf,
 } from "../src/utils/burstLedger";
@@ -125,7 +126,11 @@ describe("wallRefusedAttackOf (R102)", () => {
     missType,
     ...(school ? { spellSchoolId: school } : {}),
   });
-  const refused = (id: string, m: ReturnType<typeof miss>, damaging = true) =>
+  const refused = (
+    id: string,
+    m: ReturnType<typeof miss>,
+    damaging: boolean | undefined = true,
+  ) =>
     wallRefusedAttackOf(
       res(id),
       [{ missesOut: [m] } as never],
@@ -159,19 +164,77 @@ describe("wallRefusedAttackOf (R102)", () => {
         false,
       ),
     ).toBe(false);
-    // a damaging spell with no damage row in the round: its DB2 profile
-    // says so (Shattering Throw, codex 85-tk-L2-T166-1c #1)
+    // a spell the round shows nothing of: its DB2 profile says it deals
+    // damage (Shattering Throw, codex 85-tk-L2-T166-1c #1)
     expect(
       refused(
         BOP,
         miss(LogEvent.SPELL_MISSED, "IMMUNE", "394352", "0x1"),
-        false,
+        undefined,
       ),
     ).toBe(true);
+    // one the round shows landing and dealing nothing is a control,
+    // whatever its profile (Entangling Roots, codex 85-tk-L2-T166-1e #2)
+    expect(
+      refused(
+        CLOAK,
+        miss(LogEvent.SPELL_MISSED, "IMMUNE", "339", "0x8"),
+        false,
+      ),
+    ).toBe(false);
     // Anti-Magic Zone is a percentage: it refuses nothing
     expect(
       refused("145629", miss(LogEvent.SPELL_MISSED, "IMMUNE", "133", "0x4")),
     ).toBe(false);
+  });
+});
+
+describe("what the round shows of a spell, and Evasion's dodge (codex 85-tk-L2-T166-1e)", () => {
+  it("a damage row, a landing with none, neither", () => {
+    const src = makeUnit("p1", {
+      name: "Druid",
+      damageOut: [{ spellId: "8921" }] as never,
+    });
+    const tgt = makeUnit("e1", {
+      name: "Rogue",
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "339",
+          at(5),
+          "p1",
+          "e1",
+          "DEBUFF",
+        ),
+      ],
+    });
+    const shows = roundDamageEvidenceOf([src], [src, tgt]);
+    expect(shows("8921")).toBe(true);
+    expect(shows("339")).toBe(false);
+    expect(shows("394352")).toBeUndefined();
+  });
+  it("a swing Evasion made the target dodge is its refusal; another wall's is not", () => {
+    const dodge = {
+      logLine: {
+        event: LogEvent.SWING_MISSED,
+        timestamp: at(14),
+        parameters: [],
+      },
+      destUnitId: "e1",
+      missType: "DODGE",
+    };
+    const refusedBy = (id: string) =>
+      wallRefusedAttackOf(
+        res(id),
+        [{ missesOut: [dodge] } as never],
+        "e1",
+        at(11),
+        at(19),
+        () => true,
+      );
+    expect(refusedBy("5277")).toBe(true);
+    expect(refusedBy(BOP)).toBe(false);
+    expect(refusedBy("1966")).toBe(false);
   });
 });
 
