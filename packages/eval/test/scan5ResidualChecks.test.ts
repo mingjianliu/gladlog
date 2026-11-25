@@ -3218,9 +3218,11 @@ describe("T28 — a Solo Shuffle round's end ends the effects it ended, a 3v3's 
         info: {},
         startInfo: { bracket },
         deathRecords: [{ timestamp: at(14_644) }],
+        damageIn: [],
       });
       const warr = unit("Warr", "4", 2, {
         info: {},
+        damageIn: [],
         spellCastEvents: [pressRow],
         auraEvents: [
           rowOf(LogEvent.SPELL_AURA_APPLIED, 14_589, {
