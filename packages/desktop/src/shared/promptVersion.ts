@@ -1913,5 +1913,14 @@
  *  walk into chunks and rerun only its join (eval tooling, T263). The
  *  number moves because every batch carries one.
  *  See docs/prompt-version-history.md.
+ *
+ * v666 (2026-11-24; pipeline batch B250, T161): The burst ledger reads a
+ *  press's end on its caster: a press that put copies of its aura on its
+ *  caster and a teammate (or an opponent that stole it) is cut where the
+ *  caster's own copy ended, while the threat readers keep the copy that
+ *  ended last; an effect on the enemy target (a DoT, a root) keeps the
+ *  span. A burst with no ally offensive cooldown on the player says so: `No
+ *  ally offensive CD on you during this burst.` (was `Solo burst`).
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 665;
+export const PROMPT_VERSION = 666;

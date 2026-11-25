@@ -8621,3 +8621,27 @@ next stage is made. Third review fix: the runner marks each stage it makes
 files of the walk's own chunks and selected scans (another walk's w27.bin or
 an unselected scan's part stays); and a missing capture argument, or a flag in
 its place, exits 2 before anything under --out is touched.
+
+v666 (pipeline batch B250, T161; rulings R83, R89, R94): the burst ledger cuts
+a press at its caster's own copy of the aura (casterCopyEndSeconds) when a
+teammate's or a stolen copy of the same aura ran on; an effect the press put
+on its enemy target keeps the span. Measured on the 605 (parent 2ce4285ad,
+whose 605 contexts equal those of e479d06d8 and of 78fec2955 (T261 moved 0 605
+contexts; T263 touches no analysis code), vs candidate 005dd9a6, the same two
+T161 patches before their rebase onto 78fec2955, 3,519 contexts, 1,437
+changed): the no-ally sentence `Solo burst — no ally offensive CD overlapped.`
+-> `No ally offensive CD on you during this burst.` in 3,080 lines (+42 of the
+healer variant; 3,090 new, 10 of them where an ally line went); burst ledger
+content: Ally CDs overlapping 99 -> 94 lines, Burst headers 27 -> 32, Target
+lines 16 -> 20 (spans cut at the caster's copy split or shortened bursts); no
+other line kind moved. Review 1's fix (The Hunt's DoT on 842247a0 r6 had been
+cut at its caster aura) moved 21 lines in 11 contexts, every one back to the
+parent's own line. Gates 0 failures. scan5: 640 violation kinds, 11 rose, all
+inventory kinds of the new t161 checks (ledgerSpanReadsAnotherUnitsCopy 0 ->
+2,717 over 5 kinds, spanReadsAnotherUnitsCopy 0 -> 3), 1 fell:
+allyOnlySelfSave/spanCutAtReturn 205 -> 189 with 12 fewer checked rows, not
+this batch -- its four archives give identical counts at 2ce4285ad, e479d06d8
+and 005dd9a6 when scanned alone (279 checked / 50 flagged each), so the full-
+run count depends on the run's other archives (scan nondeterminism); in-total
+20,693 -> 20,677. The 12.1.5 part was not measured for this batch (B251 onward
+report it).
