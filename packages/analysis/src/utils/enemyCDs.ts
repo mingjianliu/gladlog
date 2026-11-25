@@ -1067,17 +1067,45 @@ export function lastPeriodicTriggerEndS(
     ? getEnglishSpellName(auraId, "")
     : "";
   if (!ids && !scriptedName) return endS;
-  const fires = (d: { spellId?: string; spellName?: string }) =>
+  // a tick a shield took whole is a SPELL_ABSORBED row: `spellId` the
+  // shield, `attackSpellId` the tick (4da68e83 r4 0:31: Disintegrate's last
+  // tick into an Anti-Magic Shell 1 ms after the REMOVED; codex
+  // 85-tk-L6-T248-1 #2)
+  const fires = (d: {
+    spellId?: string;
+    spellName?: string;
+    attackSpellId?: string;
+  }) =>
     !!d.spellId &&
     (ids
-      ? ids.includes(d.spellId)
+      ? ids.includes(d.spellId) ||
+        (!!d.attackSpellId && ids.includes(d.attackSpellId))
       : getEnglishSpellName(d.spellId, d.spellName ?? "") === scriptedName);
   const endMs = combat.startTime + endS * 1000;
+  // a channel chained into its next one is back up at once (REMOVED and
+  // APPLIED in one millisecond, or a few ms apart): the rows from that
+  // APPLIED on are the next channel's (4da68e83 r2: off at 48.899 s, its
+  // last tick at 48.909 s, up again at 48.930 s with a first tick at
+  // 48.931 s; codex 85-tk-L6-T248-1 #1)
+  let backUpMs = Infinity;
+  if (isOwnTickChannelAura(auraId))
+    for (const a of caster.auraEvents ?? []) {
+      const t = a.logLine.timestamp;
+      if (
+        a.spellId === auraId &&
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.srcUnitId === caster.id &&
+        a.destUnitId === caster.id &&
+        t >= Math.round(endMs) &&
+        t < backUpMs
+      )
+        backUpMs = t;
+    }
   const upTo = Math.min(endMs + PERIODIC_LAST_TRIGGER_SLACK_MS, combat.endTime);
   let last = endMs;
   for (const d of [...(caster.damageOut ?? []), ...(caster.healOut ?? [])]) {
     const t = d.logLine.timestamp;
-    if (t > last && t <= upTo && fires(d)) last = t;
+    if (t > last && t <= upTo && t < backUpMs && fires(d)) last = t;
   }
   return (last - combat.startTime) / 1000;
 }

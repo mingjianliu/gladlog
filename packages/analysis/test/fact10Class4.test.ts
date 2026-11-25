@@ -202,6 +202,7 @@ describe("pipeline T248 — the burst ledger's damage reads on to a trailing las
     capS = 300,
     removedS = 121.766,
     backUpS?: number,
+    absorbedBy?: string,
   ) => {
     const { unit, combat } = combatWith(120.3);
     const evoker = unit as any;
@@ -217,9 +218,22 @@ describe("pipeline T248 — the burst ledger's damage reads on to a trailing las
             },
           ]),
     ];
-    evoker.damageOut = [hit(120.3, DISINTEGRATE), hit(tickS, DISINTEGRATE)];
+    evoker.damageOut = [
+      hit(120.3, DISINTEGRATE),
+      absorbedBy ? absorbed(tickS, absorbedBy) : hit(tickS, DISINTEGRATE),
+    ];
     return burstDamageEndMs(evoker, at(119), at(121.766), at(capS), combat);
   };
+  // a SPELL_ABSORBED row: `spellId` the shield, `attackSpellId` the tick
+  const absorbed = (s: number, shieldId: string) => ({
+    ...hit(s, shieldId),
+    spellName: "Anti-Magic Shell",
+    attackSpellId: DISINTEGRATE,
+    logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: at(s) },
+  });
+  it("4da68e83 r4: a last tick a shield took whole (SPELL_ABSORBED) is the channel's too", () => {
+    expect(endMs(121.767, 300, 121.766, undefined, "48707")).toBe(at(121.767));
+  });
   it("605 s2 201-1: the tick 4 ms after the channel's REMOVED is inside", () => {
     expect(endMs(121.77)).toBe(at(121.77));
   });

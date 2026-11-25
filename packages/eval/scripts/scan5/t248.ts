@@ -67,7 +67,10 @@ export function run(ctx: IRoundCtx): void {
         .filter(
           (d) =>
             d.srcUnitId === u.id &&
-            String(d.spellId) === id &&
+            // a tick a shield took whole: `attackSpellId` on its
+            // SPELL_ABSORBED row
+            (String(d.spellId) === id ||
+              String(d.attackSpellId ?? "") === id) &&
             tsOf(d) > at &&
             tsOf(d) <= at + LOOK_MS &&
             tsOf(d) < before,

@@ -1064,7 +1064,8 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
           tsOf(d) <= tsOf(rem) + 100 &&
           tsOf(d) <= roundEnd &&
           (!backUp || tsOf(d) < tsOf(backUp)) &&
-          nameOf(d.spellId, d.spellName) === name,
+          (nameOf(d.spellId, d.spellName) === name ||
+            String(d.attackSpellId ?? "") === id),
       );
       if (tick.length === 0) continue;
       tickEnd = Math.max(...tick.map(tsOf));

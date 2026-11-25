@@ -585,8 +585,7 @@ export function burstDamageEndMs(
   combat: Parameters<typeof lastPeriodicTriggerEndS>[3],
 ): number {
   let end = toMs;
-  const auras = player.auraEvents ?? [];
-  auras.forEach((a, i) => {
+  (player.auraEvents ?? []).forEach((a) => {
     if (a.logLine.event !== LogEvent.SPELL_AURA_REMOVED) return;
     if (a.srcUnitId !== player.id || a.destUnitId !== player.id) return;
     const t = a.logLine.timestamp;
@@ -601,20 +600,7 @@ export function burstDamageEndMs(
         ) *
           1000,
     );
-    if (tickMs <= end) return;
-    // the aura back up by that row (a channel chained into its next one:
-    // REMOVED and APPLIED in one millisecond, 605 s2 27-1 1:39.574) — the
-    // row is the next channel's
-    const reapplied = auras.some(
-      (b, j) =>
-        j > i &&
-        b.spellId === a.spellId &&
-        b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-        b.srcUnitId === player.id &&
-        b.destUnitId === player.id &&
-        b.logLine.timestamp <= tickMs,
-    );
-    if (!reapplied) end = tickMs;
+    if (tickMs > end) end = tickMs;
   });
   return Math.max(toMs, Math.min(end, capMs));
 }
