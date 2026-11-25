@@ -1319,10 +1319,6 @@ export function offensiveCdOfAura(
 /** Two presses of a multi-charge spell closer than this are one press logged
  *  twice, not two charges (extractMajorCooldowns' 2 s dedupe; W1e). */
 const MULTI_CHARGE_MIN_GAP_S = 0.05;
-/** How far before a press a trigger cast of its own millisecond is dated
- * when the log has it first (`buildCooldownEntry`): under any clock
- * resolution, enough to order the two. */
-const TRIGGER_BEFORE_PRESS_S = 1e-6;
 
 export const GUARDIAN_SPIRIT_SPELL_ID = "47788";
 /** Guardian Angel — the talent that makes Guardian Spirit's recovery depend on
@@ -3586,7 +3582,13 @@ export function applyEventReductions(
     >
   >,
   cooldownSeconds: number,
-  triggers: ReadonlyArray<{ atSeconds: number; seconds: number }>,
+  triggers: ReadonlyArray<{
+    atSeconds: number;
+    seconds: number;
+    /** happened before the press of its own millisecond: acts on the
+     * cooldown running then, never on the one that press starts */
+    beforeOwnMsPress?: true;
+  }>,
   idleCapSeconds = 0,
   /** the entry's rate windows' clock (`warpClock`): the reductions act on
    * the warped clock the override is read on (`readyAfter`, `cdAvailableAt`);
@@ -3601,6 +3603,15 @@ export function applyEventReductions(
     seconds: g.seconds,
     real: g,
   }));
+  // a press's own triggers: all but one that preceded it in its millisecond
+  const forPress = (c: { timeSeconds: number }) =>
+    warped.filter(
+      (g) =>
+        !(
+          g.real.beforeOwnMsPress &&
+          Math.abs(g.real.atSeconds - c.timeSeconds) < 1e-9
+        ),
+    );
   // ready since the preparation phase: the first press gets the whole cap
   let prevReady = Number.NEGATIVE_INFINITY;
   for (const c of casts) {
@@ -3613,7 +3624,7 @@ export function applyEventReductions(
     const eff = eventReducedCooldownSeconds(
       at,
       (c.baseCooldownSeconds ?? cooldownSeconds) - credit,
-      warped,
+      forPress(c),
     );
     prevReady = at + eff;
     if (eff < cooldownSeconds) {
@@ -3622,9 +3633,12 @@ export function applyEventReductions(
       // the same window `eventReducedCooldownSeconds` counts, the press's
       // own ms included (codex 20-F17-06 #2, 711dfd7b r0 19.057 s:
       // Stormkeeper's same-ms 3 s reduction left out — `(35–59s)` for 56)
-      const pulledIn = warped
+      const pulledIn = forPress(c)
         .filter((g) => g.atSeconds >= at && g.atSeconds < at + eff + 1e-9)
-        .map((g) => g.real);
+        .map(({ real }) => ({
+          atSeconds: real.atSeconds,
+          seconds: real.seconds,
+        }));
       if (pulledIn.length) c.reductions = pulledIn;
     }
   }
@@ -7063,33 +7077,29 @@ function buildCooldownEntry(
   }
   let chargeEffects: IChargeEffects | undefined;
   if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
-    // A trigger cast logged BEFORE a press of this spell in the press's own
-    // millisecond happened before it: it acts on the cooldown that was
-    // running, not on the one that press starts (pipeline T240, codex
-    // 85-tk-L3-T240-1b #4, d0c5a35d: Thunder Focus Tea then Rushing Wind
-    // Kick, both 54.923 s — the reset read as the new kick's and the kick
-    // was "back" the instant it was pressed). A trigger in the press's
-    // millisecond logged after it still counts (`eventReducedCooldownSeconds`).
-    const triggerCastIds = new Set(reductions.flatMap((r) => r.triggerCastIds));
-    const successRows = triggerCastIds.size
-      ? unit.spellCastEvents.filter(
-          (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-        )
-      : [];
-    const pressLineAtMs = new Map<number, number>();
-    for (const e of successRows)
-      if (String(e.spellId) === spell.spellId)
-        pressLineAtMs.set(e.logLine.timestamp, e.logLine.lineIndex ?? 0);
-    const beforeItsPressMs = new Set(
-      successRows
-        .filter(
-          (e) =>
-            triggerCastIds.has(String(e.spellId)) &&
-            (e.logLine.lineIndex ?? 0) <
-              (pressLineAtMs.get(e.logLine.timestamp) ?? -1),
-        )
-        .map((e) => e.logLine.timestamp),
+    // The Thunder Focus Tea that a tea-empowered kick spent was pressed
+    // before that kick, also when the two share a millisecond: the kick could
+    // not have spent a stack of it otherwise. Its reset is the old
+    // cooldown's, not the one this kick starts (pipeline T240, codex
+    // 85-tk-L3-T240-1b #4, d0c5a35d: tea and kick both 54.923 s, the kick
+    // read as back the instant it was pressed). Scoped to the buff's own
+    // cast and the press that spent it — the mechanism gives the order, no
+    // row order is read (1c #1: as a rule for every trigger cast it turned
+    // two real Grounding Totem recasts of 18703d63 into impossible ones).
+    const buffOwnerCastMs = new Set(
+      buffPressCd
+        ? unit.spellCastEvents
+            .filter(
+              (e) =>
+                e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                String(e.spellId) === buffPressCd.ownerSpellId,
+            )
+            .map((e) => e.logLine.timestamp)
+        : [],
     );
+    const precededItsPress = (atMs: number) =>
+      buffOwnerCastMs.has(atMs) &&
+      buffPressMs.some((ms) => Math.abs(ms - atMs) < 1);
     applyEventReductions(
       casts.filter((c) => !spiralFree.has(c)),
       cooldownSeconds,
@@ -7101,10 +7111,11 @@ function buildCooldownEntry(
         roundEndAtMs,
         otherUnitById,
       ).map((g) => ({
-        atSeconds:
-          (g.atMs - matchStartMs) / 1000 -
-          (beforeItsPressMs.has(g.atMs) ? TRIGGER_BEFORE_PRESS_S : 0),
+        atSeconds: (g.atMs - matchStartMs) / 1000,
         seconds: g.seconds,
+        ...(precededItsPress(g.atMs)
+          ? { beforeOwnMsPress: true as const }
+          : {}),
       })),
       idleCap,
       rateWindows ? warpClock(rateWindows) : undefined,

@@ -396,9 +396,25 @@ function healSpentAcross(
   const entry = combat ? unitCooldownEntry(unit, combat, spellId) : undefined;
   if (entry && (entry.charges ?? 1) > 1) return false;
   const readyAgainMs = (pressMs: number): number => {
+    const pressS = combat ? (pressMs - combat.startTime) / 1000 : 0;
+    // the entry as it stood at that press: a later press must not lend its
+    // own ready instant to this one (codex 85-tk-L3-T240-1c #2, 2452abe0:
+    // kick 38.04 s, tea 38.60 s, kick 38.88 s — the first read back at
+    // 41.5 s, the second kick's)
+    const upTo = <C extends { timeSeconds: number }>(cs: readonly C[]) =>
+      cs.filter((c) => c.timeSeconds < pressS + 0.05);
     const modelled =
       entry && combat
-        ? pressReadyAgainAtSeconds(entry, (pressMs - combat.startTime) / 1000)
+        ? pressReadyAgainAtSeconds(
+            {
+              ...entry,
+              casts: upTo(entry.casts),
+              ...(entry.sharedCasts
+                ? { sharedCasts: upTo(entry.sharedCasts) }
+                : {}),
+            },
+            pressS,
+          )
         : null;
     return modelled === null || !combat
       ? pressMs + cd.cooldownSeconds * 1000

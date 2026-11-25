@@ -206,6 +206,26 @@ describe("T240 the healer lock reads the shared model for a spent heal", () => {
     expect(healerLockIntervals(u, [at(9, 13.5)], combatOf(u))).toHaveLength(1);
     expect(healerLockIntervals(u, [at(9, 14.5)], combatOf(u))).toHaveLength(0);
   });
+  it("a later kick does not lend its ready instant to the one before it (codex 85-tk-L3-T240-1c #2, 2452abe0)", () => {
+    // kick 38.038 s, tea 38.601 s (reset), kick 38.880 s
+    const u = makeUnit("m", {
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      info: {
+        talents: [{ id1: 101125, id2: 124909, count: 1 }],
+        pvpTalents: [],
+      },
+      spellCastEvents: [
+        makeSpellCastEvent(KICK, T0 + 38_038, ""),
+        makeSpellCastEvent(TEA, T0 + 38_601, ""),
+        makeSpellCastEvent(KICK, T0 + 38_880, ""),
+      ],
+      healOut: [{ spellId: KICK, destUnitId: "mate" }],
+      absorbsOut: [],
+    } as unknown as Parameters<typeof makeUnit>[1]);
+    const between = { ...lock, from: T0 + 38_630, to: T0 + 38_820 };
+    expect(healerLockIntervals(u, [between], combatOf(u))).toHaveLength(0);
+  });
   it("kick 1 s, tea 5 s: the kick was back before the lock — a heal was left, the lock is dropped", () => {
     const u = mw(1, 5);
     expect(healerLockIntervals(u, [lock], combatOf(u))).toHaveLength(0);
