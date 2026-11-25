@@ -1937,5 +1937,12 @@
  *  heal logged a millisecond before its cast row is the cut (signed
  *  exception 1), so the line no longer reads the healed HP.
  *  See docs/prompt-version-history.md.
+ *
+ * v669 (2026-11-25; pipeline batch B253, T253): A teammate's or their
+ *  pet's kick that the log refused IMMUNE on an enemy player prints the
+ *  existing [KICK] missed line (`X's <kick> on <unit> missed — IMMUNE
+ *  (<aura>)`), the shape enemy kicks refused on our team already print
+ *  (ruling R106); roots and Ice Nova unchanged.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 668;
+export const PROMPT_VERSION = 669;

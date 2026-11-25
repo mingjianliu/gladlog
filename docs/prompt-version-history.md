@@ -8682,3 +8682,22 @@ change their HP (39 lower, 3 higher, median -3). Sum 73 lines. No other line
 kind moved; no menu row. Gates 0 failures on both parts; scan5 on the changed
 archives identical (605 556 -> 556, 12.1.5 1,084 -> 1,084, 0 rose / 0 fell);
 the new t189 check (enemyDefTriggerPressHp) flags nothing.
+
+v669 (pipeline batch B253, T253; ruling R106): teammates' and pets' kicks
+refused IMMUNE on an enemy print the [KICK] missed line; the selection is the
+exported immuneKickRows, read in both directions. Measured per part (parent =
+the T189 tree, candidate = T253 on it): 605: +173 [KICK] lines in 161
+contexts, and 2 teammate [PRESS] Solar Beam lines dropped by the existing
+lineStatesPress rule (the same second's [KICK] line states that press; a
+landed beam already followed it); 12.1.5: +188 [KICK] lines in 168 contexts,
+24 [PRESS] Solar Beam lines dropped the same way. Sum +361 / -26. The immunity
+auras come from DB2 (Obsidian Scales 363916 immune to silence and interrupt;
+Cyclone immune to all); of the 19 IMMUNE Solar Beam rows (18 12.1.5, 1 605)
+none has an interrupt by the same druid on anyone within 8.5 s, and the beam's
+silence logs no aura. Gates 0 failures on both parts; scan5 on the changed
+archives: 0 rose; allyOnlySelfSave/spanCutAtReturn 66 -> 64 (605) and 72 -> 68
+(12.1.5) with its checked rows moving (3,121 -> 3,125, 3,680 -> 3,662), the
+check whose count depends on the run (B250's attribution); in-total 5,488 ->
+5,486 and 8,499 -> 8,495. The wording `missed` for a beam refused on one unit
+predates T253 (21 enemy->friend lines on the 12.1.5 base) and is left to GH
+#208 (R22).
