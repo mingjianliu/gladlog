@@ -21,6 +21,7 @@ import {
   immunityMaskStopsSchool,
   MITIGATION_TABLE,
 } from "../data/mitigationData";
+import { MITIGATION_VERDICTS } from "../data/mitigationVerdicts";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_IMMUNITY_TEAM_PROC_AURAS } from "../data/spellIdLists";
@@ -849,11 +850,15 @@ export function burstDamageBySchoolOn(
   /** `documentRecordsAttackSpell` over the round's units: an absorb with no
    * attack spell is then a swing */
   recordsAttackSpell: boolean,
+  /** the row that closed the aura the span ends on (`IAuraInterval.toRow`):
+   * a hit of that millisecond logged after it landed with the aura gone */
+  closeRow?: IAuraCloseRow,
 ): Record<string, number> {
   const by: Record<string, number> = {};
   for (const d of player.damageOut) {
     if (d.destUnitId !== targetId || !isLedgerDamageRow(d, fromMs, toMs))
       continue;
+    if (isLoggedAfterClose(d, closeRow)) continue;
     const mask =
       (d.logLine.event as string) === LogEvent.SPELL_ABSORBED
         ? absorbedHitSchoolMask(
@@ -865,6 +870,24 @@ export function burstDamageBySchoolOn(
     by[String(mask)] = (by[String(mask)] ?? 0) + Math.abs(d.effectiveAmount);
   }
   return by;
+}
+
+/** The row that closed an aura (`IAuraInterval.toRow`). */
+export type IAuraCloseRow = { ms: number; lineIndex: number };
+/** Was this row logged in the aura's closing millisecond, after the row
+ * that closed it (e0e45175 r5 1:19: Anti-Magic Zone removed, then a
+ * Wildfire Bomb tick of the same millisecond)? */
+function isLoggedAfterClose(
+  row: { logLine: { timestamp: number; lineIndex?: number } },
+  closeRow: IAuraCloseRow | undefined,
+): boolean {
+  const li = row.logLine.lineIndex;
+  return (
+    closeRow !== undefined &&
+    li !== undefined &&
+    row.logLine.timestamp === closeRow.ms &&
+    li >= closeRow.lineIndex
+  );
 }
 
 const ALL_SCHOOLS_MASK = 0x7f;
@@ -884,7 +907,12 @@ const ALL_SCHOOLS_MASK = 0x7f;
  * with no table row (an absorb or a reflect: Anti-Magic Shell, Nether Ward
  * — outside the ruling), one whose talents could not be settled, one that
  * met no damage of a known school, and one any component of which reaches
- * any part of it. One predicate for the ledger's `defensivesHit` and every
+ * any part of it. A percentage component priced 0 for this application
+ * (Evasion, Feint or Fade whose caster lacks the talent the reduction is)
+ * reaches nothing — 8c70dc85 r3: an untalented Evasion over 67k of
+ * Shadowflame; a wall with a melee reading of its own in the verdict book
+ * (`nonMeleeVerdict`: Evasion's dodge) still reaches a physical hit.
+ * One predicate for the ledger's `defensivesHit` and every
  * reader of it; what the wall REFUSED is `wallRefusedAttackOf`.
  */
 export function wallTouchesNoneOf(
@@ -892,6 +920,10 @@ export function wallTouchesNoneOf(
   bySchool: Readonly<Record<string, number>>,
 ): boolean {
   if (!res || res.unresolved.length > 0) return false;
+  // a wall the verdict book reads apart for melee (Evasion: its dodge is no
+  // percentage) reaches a physical hit whatever its percentage
+  const meleeWall =
+    MITIGATION_VERDICTS[res.spellId]?.nonMeleeVerdict !== undefined;
   let total = 0;
   let touched = 0;
   for (const [school, amount] of Object.entries(bySchool)) {
@@ -903,7 +935,9 @@ export function wallTouchesNoneOf(
       res.components.some(
         (c) =>
           (c.schoolMask & hit) !== 0 &&
-          (c.kind !== "immunity" || immunityMaskStopsSchool(c.schoolMask, hit)),
+          (c.kind === "immunity"
+            ? immunityMaskStopsSchool(c.schoolMask, hit)
+            : c.pctMax > 0 || (meleeWall && (hit & 0x1) !== 0)),
       )
     )
       touched += amount;
@@ -925,9 +959,13 @@ export function wallTouchesNoneOf(
  *    Anti-Magic Zone refuses nothing),
  *  - it is IMMUNE, or a spell's MISS (Cloak turns spells into misses —
  *    2de375dc 1:05; a swing's MISS is an ordinary miss), and
- *  - the attack deals damage (`isDamaging`: a swing, or a spell with a
- *    damage row somewhere in the round) — a control refused is no burst
- *    damage stopped.
+ *  - the attack deals damage (a swing, a spell with a damage row
+ *    somewhere in the round — `isDamaging` — or one whose DB2 profile
+ *    deals damage: 17664ae3 r1 1:22, a Shattering Throw refused by the
+ *    Blessing of Protection it then removed, its only cast of the round)
+ *    — a control refused is no burst damage stopped.
+ * A row of the aura's closing millisecond logged after its close
+ * (`closeRow`) met no wall.
  */
 export function wallRefusedAttackOf(
   res: Pick<IResolvedMitigation, "components"> | undefined,
@@ -936,6 +974,7 @@ export function wallRefusedAttackOf(
   fromMs: number,
   toMs: number,
   isDamaging: (spellId: string) => boolean,
+  closeRow?: IAuraCloseRow,
 ): boolean {
   const immunities = (res?.components ?? []).filter(
     (c) => c.kind === "immunity",
@@ -946,7 +985,8 @@ export function wallRefusedAttackOf(
       if (
         m.destUnitId !== targetId ||
         m.logLine.timestamp < fromMs ||
-        m.logLine.timestamp > toMs
+        m.logLine.timestamp > toMs ||
+        isLoggedAfterClose(m, closeRow)
       )
         return false;
       const swing = (m.logLine.event as string).startsWith("SWING");
@@ -961,7 +1001,12 @@ export function wallRefusedAttackOf(
           ) ||
           (spellSchoolMask(String(m.spellId)) ?? 0);
       if ((school & ALL_SCHOOLS_MASK) === 0) return false;
-      if (!swing && !isDamaging(String(m.spellId))) return false;
+      if (
+        !swing &&
+        !isDamaging(String(m.spellId)) &&
+        !abilityProfile(String(m.spellId)).dealsDamage
+      )
+        return false;
       return immunities.some((c) =>
         immunityMaskStopsSchool(c.schoolMask, school),
       );
@@ -1014,11 +1059,20 @@ export function wallIsOutsideBurst(
   toMs: number,
   recordsAttackSpell: boolean,
   isDamaging: (spellId: string) => boolean,
+  /** the wall's closing row when [fromMs, toMs] ends on it */
+  closeRow?: IAuraCloseRow,
 ): boolean {
   return (
     wallTouchesNoneOf(
       res,
-      burstDamageBySchoolOn(holder, targetId, fromMs, toMs, recordsAttackSpell),
+      burstDamageBySchoolOn(
+        holder,
+        targetId,
+        fromMs,
+        toMs,
+        recordsAttackSpell,
+        closeRow,
+      ),
     ) &&
     !wallRefusedAttackOf(
       res,
@@ -1027,6 +1081,7 @@ export function wallIsOutsideBurst(
       fromMs,
       toMs,
       isDamaging,
+      closeRow,
     )
   );
 }
@@ -1309,6 +1364,7 @@ export function analyzeBurstLedgerUncached(
           startMs: combat.startTime + x.fromS * 1000,
           endMs: combat.startTime + x.toS * 1000,
           inferredEnd: x.inferredEnd,
+          toRow: x.toRow,
         }))
         .sort((x, y) => x.startMs - y.startMs)) {
         // An aura OUR side put on the target is not the target's defensive —
@@ -1367,6 +1423,8 @@ export function analyzeBurstLedgerUncached(
             hi,
             recordsAttackSpell(),
             isDamagingSpell,
+            // the stretch ends on the aura's own logged close
+            hi === iv.endMs ? iv.toRow : undefined,
           )
         )
           continue;

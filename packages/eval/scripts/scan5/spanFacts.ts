@@ -45,6 +45,7 @@ import {
   hpReadingMaxHp,
   staleMaxHpRows,
 } from "@gladlog/analysis/src/utils/advancedActions";
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   analyzeBurstLedger,
   damagingSpellIdsOf,
@@ -343,6 +344,19 @@ function procOutsideBurst(
       x.dominantTarget?.unitId === target.id,
   );
   if (!e) return false;
+  // the ledger's own interval of this application (`buildAuraIntervals`
+  // joins a re-announced aura into one — dda874ae r2: two Peaceweaver
+  // applications 1.1 s apart are one wall, read once over its whole length)
+  const onS = (onMs - ctx.start) / 1000;
+  const iv = buildAuraIntervals(target, combat).find(
+    (x) =>
+      x.spellId === String(on.spellId) &&
+      x.fromS <= onS + 0.001 &&
+      x.toS >= onS - 0.001,
+  );
+  const ivFromMs = iv ? ctx.start + iv.fromS * 1000 : onMs;
+  const ivToMs = iv ? ctx.start + iv.toS * 1000 : offMs;
+  const hi = Math.min(ivToMs, ctx.start + e.toSeconds * 1000);
   const pets = petsOf(owner, combat);
   const damaging = damagingSpellIdsOf([
     ...players.filter((p) => p.reaction === owner.reaction),
@@ -352,15 +366,16 @@ function procOutsideBurst(
     wallForSchoolTest(String(on.spellId), {
       carrierIsCaster: on.srcUnitId === target.id,
       caster: ctx.units.find((u: any) => u.id === on.srcUnitId),
-      atMs: onMs,
+      atMs: ivFromMs,
     }),
     owner,
     pets,
     target.id,
-    Math.max(onMs, ctx.start + e.fromSeconds * 1000),
-    Math.min(offMs, ctx.start + e.toSeconds * 1000),
+    Math.max(ivFromMs, ctx.start + e.fromSeconds * 1000),
+    hi,
     documentRecordsAttackSpell(Object.values(combat.units ?? {})),
     (id) => damaging.has(id),
+    iv && hi === ivToMs ? iv.toRow : undefined,
   );
 }
 

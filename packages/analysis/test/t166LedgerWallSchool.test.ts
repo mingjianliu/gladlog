@@ -12,6 +12,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { resolveMitigation } from "../src/data/mitigationComponents";
 import {
   analyzeBurstLedger,
+  burstDamageBySchoolOn,
   wallRefusedAttackOf,
   wallTouchesNoneOf,
 } from "../src/utils/burstLedger";
@@ -85,6 +86,23 @@ describe("wallTouchesNoneOf (R102)", () => {
       ),
     ).toBe(false);
   });
+  it("a percentage priced 0 for this application reaches nothing; Evasion still reaches a physical hit (codex 85-tk-L2-T166-1c #3)", () => {
+    // Evasion and Feint of a caster without Elusiveness: 0 %
+    expect(res("5277")!.components.map((c) => c.pctMax)).toEqual([0]);
+    expect(wallTouchesNoneOf(res("5277"), { "36": 67_699 })).toBe(true);
+    expect(wallTouchesNoneOf(res("5277"), { "1": 1, "36": 67_699 })).toBe(
+      false,
+    );
+    expect(wallTouchesNoneOf(res("1966"), { "1": 50_000 })).toBe(true);
+    // with the talent's 20 %: any school
+    const talented = {
+      ...res("5277")!,
+      components: [
+        { kind: "pct" as const, schoolMask: 0x7f, pctMin: 20, pctMax: 20 },
+      ],
+    };
+    expect(wallTouchesNoneOf(talented, { "36": 67_699 })).toBe(false);
+  });
   it("no claim: an all-school wall, a wall with no table row (an absorb), no damage, an unknown school", () => {
     expect(wallTouchesNoneOf(res(IRONBARK), { "1": 100_000 })).toBe(false);
     expect(wallTouchesNoneOf(res(AMS), { "1": 100_000 })).toBe(false);
@@ -133,18 +151,82 @@ describe("wallRefusedAttackOf (R102)", () => {
     expect(
       refused(CLOAK, miss(LogEvent.SPELL_MISSED, "IMMUNE", "46968", "0x1")),
     ).toBe(false);
-    // a spell with no damage row in the round
+    // a control: no damage row in the round, none in its DB2 profile
     expect(
       refused(
         CLOAK,
-        miss(LogEvent.SPELL_MISSED, "IMMUNE", "853", "0x2"),
+        miss(LogEvent.SPELL_MISSED, "IMMUNE", "118", "0x40"),
         false,
       ),
     ).toBe(false);
+    // a damaging spell with no damage row in the round: its DB2 profile
+    // says so (Shattering Throw, codex 85-tk-L2-T166-1c #1)
+    expect(
+      refused(
+        BOP,
+        miss(LogEvent.SPELL_MISSED, "IMMUNE", "394352", "0x1"),
+        false,
+      ),
+    ).toBe(true);
     // Anti-Magic Zone is a percentage: it refuses nothing
     expect(
       refused("145629", miss(LogEvent.SPELL_MISSED, "IMMUNE", "133", "0x4")),
     ).toBe(false);
+  });
+});
+
+describe("a row of the wall's closing millisecond logged after its close met no wall (codex 85-tk-L2-T166-1c #2)", () => {
+  const row = (lineIndex: number, school: string) => ({
+    logLine: {
+      event: LogEvent.SPELL_DAMAGE,
+      timestamp: at(19),
+      lineIndex,
+      parameters: [],
+    },
+    timestamp: at(19),
+    effectiveAmount: -7_714,
+    amount: -7_714,
+    destUnitId: "e1",
+    spellId: "1",
+    spellSchoolId: school,
+  });
+  const holder = makeUnit("p1", {
+    name: "Hunter",
+    damageOut: [row(22, "0x1"), row(24, "0x4")] as never,
+  });
+  const close = { ms: at(19), lineIndex: 23 };
+  it("the damage reader leaves the later row out", () => {
+    expect(burstDamageBySchoolOn(holder, "e1", at(11), at(19), true)).toEqual({
+      "1": 7_714,
+      "4": 7_714,
+    });
+    expect(
+      burstDamageBySchoolOn(holder, "e1", at(11), at(19), true, close),
+    ).toEqual({ "1": 7_714 });
+  });
+  it("and so does the refusal reader", () => {
+    const m = (lineIndex: number) => ({
+      logLine: {
+        event: LogEvent.SWING_MISSED,
+        timestamp: at(19),
+        lineIndex,
+        parameters: [],
+      },
+      destUnitId: "e1",
+      missType: "IMMUNE",
+    });
+    const refusedAt = (lineIndex: number) =>
+      wallRefusedAttackOf(
+        res(BOP),
+        [{ missesOut: [m(lineIndex)] } as never],
+        "e1",
+        at(11),
+        at(19),
+        () => true,
+        close,
+      );
+    expect(refusedAt(22)).toBe(true);
+    expect(refusedAt(24)).toBe(false);
   });
 });
 
