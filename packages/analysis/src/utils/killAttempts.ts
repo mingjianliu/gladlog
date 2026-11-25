@@ -1640,6 +1640,47 @@ function stampNames(
     .join("/");
 }
 
+/**
+ * The `saved by external (Y)` clause of a FAILED text: the externals the
+ * target received in the attempt, less `exclude` (names another clause of
+ * the same text already carries); "" when none is left. GH #146 item 2: the
+ * already-up externals named only together with the other already-up
+ * reductions close the list, `A + B together`. One wording for every
+ * `primary` that names an external (user ruling R115).
+ */
+function externalClause(
+  attr: IKillAttemptAttribution,
+  spanFromSeconds: number,
+  externalUp: IKillAttemptAlreadyUp[],
+  exclude: readonly string[],
+): string {
+  const extra = attr.externalReceived
+    .map((_, i) => i)
+    .filter((i) => !exclude.includes(attr.externalReceived[i]!));
+  if (extra.length === 0) return "";
+  const joint = new Set(attr.externalTogether?.names ?? []);
+  const alone = extra.filter((i) => !joint.has(attr.externalReceived[i]!));
+  const together = extra.filter((i) => joint.has(attr.externalReceived[i]!));
+  const stampOf = (idx: number[], sep: string) =>
+    stampNames(
+      idx.map((i) => attr.externalReceived[i]!),
+      idx.map((i) => attr.externalReceivedAtS[i]!),
+      spanFromSeconds,
+      externalUp,
+    )
+      .split("/")
+      .join(sep);
+  const externalNames = [
+    alone.length ? stampOf(alone, "/") : "",
+    together.length
+      ? `${[stampOf(together, " + "), ...(attr.externalTogether?.with ?? [])].join(" + ")} together`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("/");
+  return `saved by external (${externalNames})`;
+}
+
 /** Short English cause for prompt/facts rendering. immunity-baited is worded
  * as a win per the user ruling — never a reproach. */
 function failureText(
@@ -1667,17 +1708,43 @@ function failureText(
       });
     return immunityText;
   };
+  // User rulings R98 + R115 (2026-11-24, T235): an external the target
+  // received beside its trinket or break is named after it — and after the
+  // immunity, when there is one — in the clause every other line uses. The
+  // target's own wall is not added (R115). An ally's break (`broke out
+  // (Blessing of Sanctuary)`) is not named a second time as the external.
+  const besideBreak = (): string => {
+    const up: IKillAttemptAlreadyUp[] = [];
+    const clause = externalClause(
+      attr,
+      spanFromSeconds,
+      up,
+      attr.brokeOut ?? [],
+    );
+    alreadyUp?.push(...up);
+    return clause;
+  };
   switch (attr.primary) {
     case "trinketed":
       // User ruling A29 (2026-09-30, "两个都写"): an attempt that met both a
       // trinket bound to one of its stuns and an immunity names both.
-      return attr.immunityBaited
-        ? `target trinketed out; ${immunity()}`
-        : "target trinketed out";
+      return [
+        "target trinketed out",
+        attr.immunityBaited ? immunity() : "",
+        besideBreak(),
+      ]
+        .filter(Boolean)
+        .join("; ");
     case "broke-out":
       // Named like the trinket's cause; an immunity in the same attempt is
       // listed with it, as for the trinket (A29).
-      return `broke out (${(attr.brokeOut ?? []).join("/")})${attr.immunityBaited ? `; ${immunity()}` : ""}`;
+      return [
+        `broke out (${(attr.brokeOut ?? []).join("/")})`,
+        attr.immunityBaited ? immunity() : "",
+        besideBreak(),
+      ]
+        .filter(Boolean)
+        .join("; ");
     case "immunity-baited":
       return immunity();
     case "defensive":
@@ -1692,40 +1759,14 @@ function failureText(
       const popped = attr.defensivePopped.length
         ? `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds, poppedUp)}`
         : "";
-      // One spell the target also put on itself (two Barkskins are one name)
-      // is not named a second time as the external beside it.
-      const extra = attr.externalReceived
-        .map((_, i) => i)
-        .filter(
-          (i) => !attr.defensivePopped.includes(attr.externalReceived[i]!),
-        );
-      // GH #146 item 2: the already-up externals named only together with
-      // the other already-up reductions close the list, `A + B together`
-      const joint = new Set(attr.externalTogether?.names ?? []);
-      const alone = extra.filter((i) => !joint.has(attr.externalReceived[i]!));
-      const together = extra.filter((i) =>
-        joint.has(attr.externalReceived[i]!),
+      const external = externalClause(
+        attr,
+        spanFromSeconds,
+        externalUp,
+        // One spell the target also put on itself (two Barkskins are one
+        // name) is not named a second time as the external beside it.
+        attr.defensivePopped,
       );
-      const stampOf = (idx: number[], sep: string) =>
-        stampNames(
-          idx.map((i) => attr.externalReceived[i]!),
-          idx.map((i) => attr.externalReceivedAtS[i]!),
-          spanFromSeconds,
-          externalUp,
-        )
-          .split("/")
-          .join(sep);
-      const externalNames = [
-        alone.length ? stampOf(alone, "/") : "",
-        together.length
-          ? `${[stampOf(together, " + "), ...(attr.externalTogether?.with ?? [])].join(" + ")} together`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("/");
-      const external = extra.length
-        ? `saved by external (${externalNames})`
-        : "";
       // The target's own defensive outside the wall table is worded
       // `popped X`, as a wall is (user ruling 2026-10-11): the log shows the
       // press, not that it was pressed to survive — `self-saved (X)` stated
@@ -1857,7 +1898,7 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall of its own, an external (an ally's wall on it counts here), another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external already up when the attempt began is named only when the log's damage shows the target would have died without it (its percentage put back on the hits it reduced, or what its shield absorbed, inside the attempt and the next 5 s); `X [up since m:ss] + Y together` = no one of them would have, all of them together would. An already-up external that is neither a percentage nor a shield (Guardian Spirit, Blessing of Sacrifice, Time Dilation, Rallying Cry …) is named as up. An external under the " +
       MITIGATION_AURA_MIN_PCT +
-      "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
+      "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external (`target trinketed out; saved by external (Y)`), and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
   );
   // User ruling 2026-10-11: the two words for the target's own defensive,
   // each explained only when a line of this block carries it.

@@ -14,7 +14,8 @@
  *  - `breakWithExternalUnnamed`: a FAILED attempt of the owner's side whose
  *    `primary` is the trinket or a break and whose attribution holds at
  *    least one external, and whose printed line does not say `saved by
- *    external (`. Kind = trinketed / broke out. Counted: every FAILED
+ *    external (`. Kind = trinketed / broke out. Non-zero on a capture taken
+ *    before rulings R98 + R115 landed, 0 on one taken with them. Counted: every FAILED
  *    attempt of the owner's side whose `primary` is the trinket or a break.
  *  - `breakWithOwnWallUnnamed`: inventory, never a failure — the same
  *    attempts with a wall of the target's own (`defensivePopped`) that the

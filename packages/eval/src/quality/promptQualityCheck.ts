@@ -4994,9 +4994,12 @@ const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
  * joined with "; " (`popped A; saved by external (B)`): the line regex takes
  * the whole cause and `KILL_ATTEMPT_SAVE_CLAUSE` reads each clause. The
  * FAILED clause is the line's last, or (I10, 2026-10-11) is followed by the
- * `| target in your team's …` fact clause, which is not part of the cause. */
+ * `| target in your team's …` fact clause, which is not part of the cause.
+ * Since T235 (rulings R98 + R115, 2026-11-24) an external is also named after
+ * a trinket or a break (`target trinketed out; [forced a full immunity …; ]
+ * saved by external (B)`): that lead is skipped and the save clause read. */
 const KILL_ATTEMPT_DEFENSIVE = new RegExp(
-  String.raw`^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: ((?:popped |saved by external \(|self-saved \()[^|]+?)(?: \| ${KILL_ATTEMPT_OWN_CONTROL_LEAD}[^|]+)?\s*$`,
+  String.raw`^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: (?:(?:target trinketed out|broke out \([^()|]+\)); (?:forced a full immunity[^;|]*; )?)?((?:popped |saved by external \(|self-saved \()[^|]+?)(?: \| ${KILL_ATTEMPT_OWN_CONTROL_LEAD}[^|]+)?\s*$`,
 );
 const KILL_ATTEMPT_SAVE_CLAUSE =
   /^(?:popped ([^()]+?)|saved by external \(([^()]+)\)|self-saved \(([^()]+)\))$/;

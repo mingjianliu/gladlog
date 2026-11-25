@@ -2365,6 +2365,44 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
       .find((l) => l.includes("| FAILED: "))!
       .split("| FAILED: ")[1];
 
+  // User rulings R98 + R115 (2026-11-24, T235): the external is named
+  // after the trinket / break and after the immunity; the target's own wall
+  // is not added; an ally's break is not named again as the external.
+  it("a trinket or a break beside an external names the external last (R115)", () => {
+    const ext = {
+      defensivePopped: ["Barkskin"],
+      defensivePoppedAtS: [318],
+      externalReceived: ["Guardian Spirit"],
+      externalReceivedAtS: [319.4],
+    };
+    expect(failed({ primary: "trinketed", ...ext })).toBe(
+      "target trinketed out; saved by external (Guardian Spirit)",
+    );
+    expect(failed({ primary: "trinketed", immunityBaited: true, ...ext })).toBe(
+      "target trinketed out; forced a full immunity (a win — re-open after it drops); saved by external (Guardian Spirit)",
+    );
+    expect(
+      failed({
+        primary: "broke-out",
+        brokeOut: ["Will of the Forsaken"],
+        ...ext,
+        externalReceived: ["Guardian Spirit", "Pain Suppression"],
+        externalReceivedAtS: [300, 319.4],
+      }),
+    ).toBe(
+      "broke out (Will of the Forsaken); saved by external (Guardian Spirit [up since 5:00]/Pain Suppression)",
+    );
+    expect(
+      failed({
+        primary: "broke-out",
+        brokeOut: ["Blessing of Sanctuary"],
+        externalReceived: ["Blessing of Sanctuary"],
+        externalReceivedAtS: [319.4],
+      }),
+    ).toBe("broke out (Blessing of Sanctuary)");
+    expect(failed({ primary: "trinketed" })).toBe("target trinketed out");
+  });
+
   it("a wall and an external: both, the wall first (7f67e778 [5:07–5:22])", () => {
     expect(
       failed({

@@ -59,6 +59,31 @@ describe("checkEnemyDefRefConsistency", () => {
     expect(checkEnemyDefRefConsistency(lines("1:20"))).toHaveLength(1);
   });
 
+  it("reads the external named after a trinket or a break (pipeline T235, rulings R98 + R115)", () => {
+    const lines = (lead: string, ironbark: boolean) => [
+      LEGEND,
+      ...ROSTER,
+      ...(ironbark
+        ? [
+            "1:33  [ENEMY DEF]   5(RDruid) (Restoration Druid): Ironbark → 4(ORogue) (20%, 12.0s)",
+          ]
+        : []),
+      ATTEMPT("1:31–1:45", `${lead}; saved by external (Ironbark)`),
+    ];
+    for (const lead of [
+      "target trinketed out",
+      "broke out (Will of the Forsaken)",
+      "target trinketed out; forced a full immunity (a win — re-open after it drops)",
+    ]) {
+      expect(checkEnemyDefRefConsistency(lines(lead, true)), lead).toEqual([]);
+      // HAS TEETH: the external needs its own [ENEMY DEF] line
+      expect(
+        checkEnemyDefRefConsistency(lines(lead, false)),
+        lead,
+      ).toHaveLength(1);
+    }
+  });
+
   it("a wall an Aura Mastery switch opened: `[up since]` the switch resolves through the press line inside the button's lifetime (pipeline T213, 80-PIPE-170b-B156 note 3)", () => {
     // the product prints no line at the switch (`isAuraMasterySwitchWallEvent`):
     // the press at 0:20 is the line, the wall is up since 0:24
