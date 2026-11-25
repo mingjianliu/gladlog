@@ -5,7 +5,9 @@
  *
  *  - `noPressButPressed` (D27): a line tagged `[no press logged]` for an aura
  *    the unit's own SPELL_CAST_SUCCESS of the same name landed on — within
- *    `PRESS_AFTER_MS` after the aura went up, a REFRESH beside it. 163de8f1
+ *    `PRESS_AFTER_MS` after the aura went up, a REFRESH beside it — and no
+ *    line of its own for that press in the press's second (with one, the
+ *    tagged line is the earlier application's and both are true). 163de8f1
  *    1:00: Exhilaration's Survival of the Fittest at .584, the hunter's own
  *    press at .932 refreshing it.
  *  - `saveThatMissed` (D36): a line for a press whose own cast logged a
@@ -163,6 +165,25 @@ export function run(ctx: IRoundCtx): void {
         (c) => tsOf(c) >= tsOf(up) && tsOf(c) <= tsOf(up) + PRESS_AFTER_MS,
       );
       if (!press) continue;
+      // the press has a line of its own in its second: the earlier
+      // application is another one (a proc's — Exhilaration's 3 s Survival
+      // of the Fittest, Well-Honed Instincts' Frenzied Regeneration), and
+      // both lines are true (T243)
+      const pressSec = Math.floor((tsOf(press) - ctx.start) / 1000);
+      if (
+        ctx.lines.some((o) => {
+          const om = LINE.exec(o);
+          return (
+            !!om &&
+            o !== line &&
+            om[3] === m[3] &&
+            +om[1]! * 60 + +om[2]! === pressSec &&
+            spellOf(om[4]!) === name &&
+            !o.includes("[no press logged]")
+          );
+        })
+      )
+        continue;
       const refreshed = auras.some(
         (a) => ev(a) === REFRESH && Math.abs(tsOf(a) - tsOf(press)) <= 50,
       );

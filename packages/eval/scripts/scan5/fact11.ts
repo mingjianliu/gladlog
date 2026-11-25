@@ -76,7 +76,9 @@
  *    owner SPELL_CAST_SUCCESS row of the name in that second is no button —
  *    no DB2 SpellCooldowns row (`isButtonPress`): a row a passive writes
  *    (Sanctified Ground 289655 after each Holy Word: Serenity). The forward
- *    check of `PASSIVE_PROC_CAST_IDS`; kind = the spell id. Counted: every
+ *    check of `PASSIVE_PROC_CAST_IDS`; kind = the spell id, or `reviewed
+ *    button` (out of the total) for a real button with no such row
+ *    (`REVIEWED_BUTTON_IDS`). Counted: every
  *    `[YOU] [CAST]` line with an owner row of its name in its second.
  *  - pressedInsideNeverBack (D14): a `team offensive CDs ready at M:SS: …`
  *    clause set listing a cooldown under `pressed inside` that is on none of
@@ -1016,6 +1018,24 @@ function answeredByOldSummonPulse(ctx: IRoundCtx): void {
 const YOU_CAST_LINE =
   /^(\d+:\d{2})\s+\[YOU\] \[CAST\]\s+(.+?)(?: \(x\d+(?: over \d+s)?\))?(?: →| \[|$)/;
 
+/** Buttons DB2 gives no SpellCooldowns row: the missing row does not make a
+ * passive of them, and no product table tells the two apart, so the ones
+ * read on raw rows are listed here and counted out of the total (T243,
+ * scan triage 2026-11-22; rows on the 605): Rejuvenation (Germination) —
+ * the press beside its 774 companion (`COMPANION_CAST_ROWS`), 1,084; Chi
+ * Torpedo — Roll's charge-based replacement, 211; Typhoon — a pressed
+ * knockback, 64; Hand of Reckoning — a pressed taunt, 20. */
+const REVIEWED_BUTTON_IDS: ReadonlySet<string> = new Set([
+  "155777",
+  "115008",
+  "61391",
+  "62124",
+]);
+const REVIEWED_BUTTON_KIND = "reviewed button";
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  `castLineNoButton|${REVIEWED_BUTTON_KIND}`,
+]);
+
 function castLineNoButton(ctx: IRoundCtx): void {
   const owner = ctx.owner;
   for (const l of ctx.lines) {
@@ -1034,7 +1054,7 @@ function castLineNoButton(ctx: IRoundCtx): void {
     const id = String(rows[0].spellId);
     ctx.violate(
       "castLineNoButton",
-      `${name} ${id}`,
+      REVIEWED_BUTTON_IDS.has(id) ? REVIEWED_BUTTON_KIND : `${name} ${id}`,
       tsOf(rows[0]),
       `${owner.name}:${id}:${tsOf(rows[0])}`,
       `${name} ${id} at ${m[1]}: no SpellCooldowns row`,
@@ -1698,7 +1718,10 @@ function immunityBaitedSelfBroken(ctx: IRoundCtx): void {
         id,
         ctx.units as any,
       );
-      return first < tsOf(a) + lenMs;
+      // an action after the round's end broke nothing inside it (T243: a
+      // Mass Invisibility up at the last death, its holder's next cast
+      // between the rounds)
+      return first < Math.min(tsOf(a) + lenMs, ctx.roundEndAt);
     };
     if (!ups.every(selfBroken)) continue;
     ctx.violate(

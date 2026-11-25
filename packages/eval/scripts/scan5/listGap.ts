@@ -15,7 +15,9 @@
  *    line of the same spell is no line of this press);
  *  - `kit`: the caster's `<cooldowns>` row names it.
  *
- * Kinds: `<filled|control|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
+ * Kinds: `<filled|control|healerRacial|listed|offList|offListUnder45>/<side>/<noLine|kitOnly>`.
+ * `healerRacial` (out of the total) is a healer's offensive racial window
+ * (`isHealerHeldOffensive`): no line by ruling R55.
  * `control` (out of the total) is an enemy's control press
  * (`isControlCast`): its lines are the landing's, not a press tag's, and a
  * control that touched nobody has none. `offListUnder45` is out of the
@@ -35,6 +37,8 @@
  * The rosters, the tags and the caster reading are the renderer's own
  * (`utils/offListPress.ts`: `isRosterPressId`, `lineStatesPress`).
  */
+import { isHealerHeldOffensive } from "@gladlog/analysis/src/data/healerHeldOffensive";
+import { OFFENSIVE_RACIAL_WINDOW_IDS } from "@gladlog/analysis/src/data/racialAbilities";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
@@ -71,6 +75,11 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
     SHOWN.map((shown) => `listGapPress|offListUnder45/${side}/${shown}`),
   ),
   ...SHOWN.map((shown) => `listGapPress|control/enemy/${shown}`),
+  // T243: a healer's offensive racial is no cooldown line by ruling (A16 /
+  // R55, `isHealerHeldOffensive`); the kit row keeps it
+  ...SIDES.flatMap((side) =>
+    SHOWN.map((shown) => `listGapPress|healerRacial/${side}/${shown}`),
+  ),
 ]);
 
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
@@ -180,11 +189,14 @@ export function run(ctx: IRoundCtx): void {
           ? "filled"
           : side === "enemy" && isControlCast(id)
             ? "control"
-            : isRosterPressId(id)
-              ? "listed"
-              : isOffListPressId(id)
-                ? "offList"
-                : "offListUnder45";
+            : OFFENSIVE_RACIAL_WINDOW_IDS.has(id) &&
+                isHealerHeldOffensive(id, unit.spec)
+              ? "healerRacial"
+              : isRosterPressId(id)
+                ? "listed"
+                : isOffListPressId(id)
+                  ? "offList"
+                  : "offListUnder45";
       const kind = `${off}/${side}/${inKit ? "kitOnly" : "noLine"}`;
       ctx.violate(
         "listGapPress",

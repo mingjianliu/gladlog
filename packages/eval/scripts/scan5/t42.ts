@@ -23,6 +23,7 @@ import { SAVE_CAST_AURA_PAIR_S } from "@gladlog/analysis/src/utils/auraIntervals
 import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
 import { anchorsKillAttempt } from "@gladlog/analysis/src/utils/killAttempts";
+import { castRowActivationMs } from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 
 import {
   APPLIED,
@@ -60,18 +61,28 @@ export function run(ctx: IRoundCtx): void {
       ctx.start + (secOf(m[2]!) + KILL_CREDIT_SLACK_S) * 1000,
       ctx.roundEndAt,
     );
+    // a press is dated where the product dates it (`castRowActivationMs`: a
+    // Metamorphosis landing row at the form row it went up with — T243,
+    // 605 s2/180-1: the landing logged 0.9 s after a Power Infusion the
+    // form's own row preceded by 3 ms)
     const presses = team
-      .flatMap((u: any) => successesOf(u).map((c) => ({ u, c })))
-      .filter(({ c }) => tsOf(c) >= lo && tsOf(c) < hi)
-      .sort((a, b) => tsOf(a.c) - tsOf(b.c));
+      .flatMap((u: any) =>
+        successesOf(u).map((c) => ({
+          u,
+          c,
+          at: castRowActivationMs(u, String(c.spellId), tsOf(c)),
+        })),
+      )
+      .filter(({ at }) => at >= lo && at < hi)
+      .sort((a, b) => a.at - b.at);
     const named = presses.filter(
       ({ c }) => nameOf(c.spellId, c.spellName) === m[4],
     );
     if (named.length === 0) continue;
     ctx.bump("attemptNamedLaterPress");
-    if (tsOf(named[0]!.c) < lo + 1000) continue;
-    const opener = presses.find(({ u, c }) => {
-      if (tsOf(c) >= lo + 1000) return false;
+    if (named[0]!.at < lo + 1000) continue;
+    const opener = presses.find(({ u, c, at }) => {
+      if (at >= lo + 1000) return false;
       const id = String(c.spellId);
       if (
         !isEnemyCdWindowSpell(id, u.spec) ||
@@ -110,7 +121,7 @@ export function run(ctx: IRoundCtx): void {
       name,
       lo,
       `${m[3]}:${m[1]}`,
-      `${name} (cast on a teammate) opened the bracket at ${((tsOf(opener.c) - ctx.start) / 1000).toFixed(1)}s; the line is named for ${m[4]}, first pressed at ${((tsOf(named[0]!.c) - ctx.start) / 1000).toFixed(1)}s`,
+      `${name} (cast on a teammate) opened the bracket at ${((opener.at - ctx.start) / 1000).toFixed(1)}s; the line is named for ${m[4]}, first pressed at ${((named[0]!.at - ctx.start) / 1000).toFixed(1)}s`,
       l,
     );
   }

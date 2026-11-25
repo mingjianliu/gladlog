@@ -15,7 +15,8 @@
  *    so the span certainly holds [a+1, b] (s since the round start). From the
  *    log, per shield id X the unit T put on itself:
  *      · aura — a run of X (APPLIED, or a REFRESH with no open run → REMOVED;
- *        an unclosed run lasts DB2's duration + 1 s) with src = dest = T, X a
+ *        an unclosed run ends at its last absorbed row, and lasts DB2's
+ *        duration + 1 s when it absorbed nothing) with src = dest = T, X a
  *        DB2 absorb (`abilityEffectsGenerated[X].absorbs`), covering a whole
  *        interior second [s, s+1), s ∈ a+1 … b−1;
  *      · absorbed — a SPELL_ABSORBED row with T the absorber and the shield's
@@ -214,7 +215,37 @@ export function run(ctx: IRoundCtx): void {
       )
       .sort((x, y) => tsOf(x) - tsOf(y));
     const succ = succOf(u);
-    const close = (id: string, fromMs: number, toMs: number, inf: boolean) => {
+    // an unclosed run that absorbed is over at its last absorbed row: the
+    // shield was eaten and the log wrote no REMOVED (T243, 605 s0/59-1: Ice
+    // Barrier up 2:42.2, last absorb 2:44.9, unabsorbed hits after, the next
+    // press an APPLIED — not a shield up to its DB2 length inside
+    // `defenseless 3:23–3:29`). One that absorbed nothing keeps the length.
+    const lastAbsorbIn = (id: string, fromMs: number, toMs: number): number =>
+      Math.max(
+        -Infinity,
+        ...((u.absorbsIn ?? []) as any[])
+          .filter(
+            (r) =>
+              (ev(r) === undefined || ev(r) === ABSORBED) &&
+              String(r.spellId) === id &&
+              r.srcUnitId === u.id &&
+              tsOf(r) >= fromMs - LAG_MS &&
+              tsOf(r) <= toMs,
+          )
+          .map((r) => tsOf(r)),
+      );
+    const close = (id: string, fromMs: number, capMs: number, inf: boolean) => {
+      const eaten = inf ? lastAbsorbIn(id, fromMs, capMs) : -Infinity;
+      // …unless the run was refreshed after it: a new shield, still whole
+      const refreshedAfter = rows.some(
+        (a) =>
+          String(a.spellId) === id &&
+          ev(a) === REFRESH &&
+          tsOf(a) > eaten &&
+          tsOf(a) <= capMs,
+      );
+      const toMs =
+        eaten > -Infinity && !refreshedAfter ? Math.max(fromMs, eaten) : capMs;
       const near = succ.find((c) => Math.abs(tsOf(c) - fromMs) <= LAG_MS);
       // a caster-side link: the same spell's press went on another unit
       const linkOnly = succ.some(

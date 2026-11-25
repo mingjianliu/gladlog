@@ -57,6 +57,7 @@ import {
   isFormReshiftCast,
   isNoPressRow,
 } from "@gladlog/analysis/src/utils/castPress";
+import { hpReadingMaxHp } from "@gladlog/analysis/src/utils/advancedActions";
 import { SELF_SAVE_IDS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { logInstantOf } from "@gladlog/analysis/src/utils/logEra";
 import { MEDALLION_SPELL_ID } from "@gladlog/analysis/src/utils/pvpTrinketUses";
@@ -262,8 +263,12 @@ function staleDip(ctx: IRoundCtx): void {
       const last = rows[rows.length - 1];
       if (!last || tsOf(last) < endMs - 2000) continue;
       ctx.bump("staleDipWithDamage");
+      // a row's percentage is over the max the product reads it on
+      // (`hpReadingMaxHp`: a stale-max row over its new max — T243, 605
+      // s0/134-6: 475,786 / 1,020,030 logged, the max 927,300 by the next
+      // row, `[STATE] 51` = 475,786 / 927,300)
       const pct = (a: any) =>
-        (100 * a.advancedActorCurrentHp) / a.advancedActorMaxHp;
+        (100 * a.advancedActorCurrentHp) / hpReadingMaxHp(unit, a);
       if (printed - pct(last) <= STATE_SLACK_PCT) continue;
       // the fall off the highest row of the last 2 s, in the unit's own damage
       const fromMs = endMs - 2000;

@@ -32,6 +32,7 @@
  *  printed second 1:35 — the scan's own whole-second rule read it gone and
  *  filed the tag as Archangel's, 44333434 r1).
  */
+import { castsOfTalentEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { isHealerHeldOffensive } from "@gladlog/analysis/src/data/healerHeldOffensive";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -92,6 +93,27 @@ function offensiveAurasUp(
     // evidence aura's, or `offensiveCdOfAura`'s with the caster's spec:
     // 383410's generic occurrence is 194223's, codex 85-tk-D-T30-1c)
     const spec = src === unit.id ? unit.spec : undefined;
+    // a talent aura a press's effect runs on (Divine Resonance) is that
+    // press's span in the product (`talentEffectAuraAtPress` → the cast's
+    // occurrence), never an aura occurrence of its own: up while the
+    // product reads its cast's cooldown running on the unit (T243, 605
+    // s0/92-5 3:00: a tag the scan filed as Ignite's under a Divine Toll)
+    const talentCasts = castsOfTalentEffectAura(id);
+    if (talentCasts.length > 0) {
+      if (
+        src !== unit.id ||
+        !hasOffensiveSpellActive(
+          unit,
+          ms,
+          new Set([src]),
+          (s: string) =>
+            talentCasts.includes(s) && isEnemyCdWindowSpell(s, unit.spec),
+          round,
+        )
+      )
+        up.delete(key);
+      continue;
+    }
     // an aura neither the product nor the mapping below files under an
     // offensive cooldown is never one (and asking costs a pass over the
     // unit's rows: 605 files 210 s → 3597 s of module time without this)
@@ -131,7 +153,9 @@ function offensiveAurasUp(
       .map((k) => k.split("|")[0]!)
       .map(
         (id) =>
-          OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId ?? offensiveCdOfAura(id),
+          castsOfTalentEffectAura(id)[0] ??
+          OFFENSIVE_AURA_EVIDENCE.get(id)?.cooldownId ??
+          offensiveCdOfAura(id),
       )
       .filter((id): id is string => id !== undefined)
       // a healer's own healing wings or racial is no offensive cooldown for
