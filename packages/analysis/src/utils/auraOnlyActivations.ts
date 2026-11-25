@@ -44,6 +44,15 @@ export interface IAuraOnlyActivation {
    * not write, on this log's date (`AURA_PRESS_BY_ERA`: Doom Winds before
    * 12.1.5) — a press, the button spent (GH #193) */
   family: "save" | "offensive" | "heal" | "unlogged-press";
+  /** the producer's own reading (`enemyDefensiveEvents`' `procOwned`: Well-
+   * Honed Instincts' Frenzied Regeneration) — a talent cast it, and a press
+   * of the same button beside it is the player's own on top, with its own
+   * line (T259 B194 review: 85a6cad9 r4, the proc 56.791 s, the press
+   * 57.778 s — the friendly timeline kept the press alone) */
+  procOwned?: true;
+  /** beside a `procOwned` activation: the logged presses of the same button
+   * the producer states as their own events (a cast row, never an aura) */
+  pressesBesideSeconds?: readonly number[];
 }
 
 /** The suffix of an `unlogged-press` line: a press the log shows only as its
@@ -118,7 +127,8 @@ export function auraOnlyActivations(
 ): IAuraOnlyActivation[] {
   const out = castlessHealCdAuras(unit, matchStartMs, endMs);
   const bounds = { startTime: matchStartMs, endTime: endMs };
-  for (const e of enemyDefensiveEvents(unit, [...units], bounds)) {
+  const saves = enemyDefensiveEvents(unit, [...units], bounds);
+  for (const e of saves) {
     // a passive shield (fact10 D25) is no press at all, hidden or not
     if (!e.noPressLogged || e.procSource || e.kind === "passive") continue;
     // a wall a switch of auras opened has no line of its own: the press
@@ -136,6 +146,20 @@ export function auraOnlyActivations(
       spellId: e.spellId,
       spellName: e.spellName,
       family: "save",
+      ...(e.procOwned
+        ? {
+            procOwned: true as const,
+            pressesBesideSeconds: saves
+              .filter(
+                (p) =>
+                  p.kind === "self-save" &&
+                  p.spellId === e.spellId &&
+                  !p.noPressLogged &&
+                  !p.unseenPress,
+              )
+              .map((p) => p.atSeconds),
+          }
+        : {}),
     });
   }
   for (const o of auraOffensiveOccurrences(unit, bounds).occurrences) {

@@ -139,6 +139,10 @@ export function emitFriendlyFormEntries(ctx: {
  * aura-only rows (`auraOnlyActivationSeconds`) already print a line. */
 const LEDGER_ROW_NEAR_S = 1;
 
+/** A ledger row and the producer's press event are one cast row read twice:
+ * the same millisecond. */
+const PRESS_ROW_SAME_S = 0.001;
+
 /**
  * fact8 class 5 (D11 D17 D22 D26 D40; every family of `auraOnlyActivations`):
  * a tracked cooldown's aura that went up on the owner or a teammate with no
@@ -173,11 +177,23 @@ export function emitFriendlyAuraOnlyEntries(ctx: {
         ? ctx.ownerCDs
         : (ctx.teammateCDs.find((t) => t.player.id === u.id)?.cds ?? []);
     for (const a of auraOnlyActivations(u, units, matchStartMs, endMs)) {
+      // …except beside a proc's own activation (the producer's `procOwned`,
+      // T259 B194 review), where a logged press of the same button is a
+      // second fact with its own [CD] line: the ledger row of that press does
+      // not stand for the proc (85a6cad9 r4: the proc 0:56, the press 0:57 —
+      // the press alone was printed). Any other row this near still does.
+      const ownPress = (s: number) =>
+        a.procOwned === true &&
+        (a.pressesBesideSeconds ?? []).some(
+          (p) => Math.abs(p - s) <= PRESS_ROW_SAME_S,
+        );
       const inLedger = ledger.some(
         (cd) =>
           (cd.spellId === a.spellId || cd.spellName === a.spellName) &&
           cd.casts.some(
-            (c) => Math.abs(c.timeSeconds - a.atSeconds) <= LEDGER_ROW_NEAR_S,
+            (c) =>
+              Math.abs(c.timeSeconds - a.atSeconds) <= LEDGER_ROW_NEAR_S &&
+              !ownPress(c.timeSeconds),
           ),
       );
       if (inLedger) continue;
