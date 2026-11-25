@@ -323,6 +323,24 @@ export function spellRadiusForCaster(
   return modified(e.radiusYards, e.radiusMods, caster);
 }
 
+/**
+ * Does the table's row for `spellId` carry DB2's placeholder instead of a
+ * distance — a range or a radius of `PLACEHOLDER_RANGE_YD` or more (the
+ * 100 yd vision-range row, the 50000 yd "anywhere" row) on a heal's effect
+ * id, a pet's or a triggered aura's? `spellReachForCaster` hands such a row
+ * back as it stands, which is the safe side for "could NOT reach" and the
+ * accusing side for "was in reach": a reader that claims the second asks
+ * this first (pipeline T242, GH #227). False when the table has no row.
+ */
+export function isPlaceholderReach(spellId: string): boolean {
+  const e = SPELLS[spellId];
+  return (
+    !!e &&
+    (e.rangeYards >= PLACEHOLDER_RANGE_YD ||
+      e.radiusYards >= PLACEHOLDER_RANGE_YD)
+  );
+}
+
 /** How far from the caster the spell can take effect: range for a targeted
  * spell, range + radius for a placed area, radius for a caster-centred one —
  * the `reachYards` semantics of the generated table, with the caster's range

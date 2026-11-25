@@ -157,6 +157,18 @@ describe("T88: the no-heal stretch before a teammate's first death", () => {
     expect(round({ mateFar: [23, 26] })).toEqual([]);
   });
 
+  // pipeline T242: Living Flame's heal id 361509 carries DB2's 100 yd
+  // placeholder; pressed once, it made a teammate 90 yd away "in reach"
+  it("占位射程的治疗 id 不决定治疗距离(T242)", () => {
+    expect(
+      round({
+        mateFar: [23, 26],
+        otherPresses: [["361509", 10, "mate"]],
+        effectHeals: [["361509", 10, "mate"]],
+      }),
+    ).toEqual([]);
+  });
+
   it("空档里处在猎豹形态时带上形态和它的起点", () => {
     const cat = [
       makeAuraEvent(

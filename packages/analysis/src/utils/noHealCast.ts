@@ -69,7 +69,11 @@ import { CC_MAX_CAST_RANGE_YARDS } from "./positionSampling";
 import { foldSamePressRows, isNoPlayerPressRow } from "./pressRow";
 import { manaPct, type RawStreams } from "./rawStreams";
 import { toRenderSecond } from "./renderGrid";
-import { spellReachForCaster } from "./spellRange";
+import {
+  healerReachYards,
+  isPlaceholderReach,
+  spellReachForCaster,
+} from "./spellRange";
 
 /**
  * The shortest stretch that is a line. Editorial, read off the 605 corpus
@@ -197,11 +201,20 @@ export function noHealStretchesBeforeFirstDeath(params: {
     (id) => effectiveCooldownSeconds(id) === undefined,
   );
   if (spammable.length === 0) return [];
-  const reachYd = Math.max(
-    ...spammable.map(
-      (id) => spellReachForCaster(owner, id) ?? CC_MAX_CAST_RANGE_YARDS,
-    ),
-  );
+  // A heal whose row is DB2's placeholder (Verdant Embrace's effect id
+  // 361195: 50000 yd; Living Flame 361509 and Healing Stream Totem 5394:
+  // 100 yd) says nothing about reach: with it, door 3 read a teammate
+  // across the arena as in reach of a Preservation Evoker (pipeline T242).
+  // The other pressed heals decide; with none left, the spec's own heals.
+  const measured = spammable.filter((id) => !isPlaceholderReach(id));
+  const reachYd =
+    measured.length > 0
+      ? Math.max(
+          ...measured.map(
+            (id) => spellReachForCaster(owner, id) ?? CC_MAX_CAST_RANGE_YARDS,
+          ),
+        )
+      : healerReachYards(owner, CC_MAX_CAST_RANGE_YARDS);
 
   const deathMs = startMs + first.atSeconds * 1000;
   const fromMs = Math.max(startMs, deathMs - DEATH_WINDOW_S * 1000);
