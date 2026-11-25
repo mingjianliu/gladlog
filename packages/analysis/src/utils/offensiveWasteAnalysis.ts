@@ -106,6 +106,10 @@ interface IDefenseWindow {
   nonMeleeVerdict: MitigationVerdict;
   fromSeconds: number;
   toSeconds: number;
+  /** the log line of the APPLIED row that opened it, when one did: a row of
+   * that millisecond logged before it landed before the wall was up
+   * (`landedBeforeWallRow`) */
+  fromLine?: number;
   unitId: string;
   unitName: string;
   unitSpec: string;
@@ -186,6 +190,18 @@ function buildDefenseWindows(
         nonMeleeVerdict: nonMeleeMitigationVerdictOf(verdictKey) ?? verdict,
         fromSeconds: iv.fromS,
         toSeconds: iv.toS,
+        ...(() => {
+          const openMs = Math.round(combat.startTime + iv.fromS * 1000);
+          const row = (enemy.auraEvents ?? []).find(
+            (a) =>
+              a.spellId === iv.spellId &&
+              a.destUnitId === enemy.id &&
+              a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+              a.logLine.timestamp === openMs,
+          );
+          const line = row?.logLine.lineIndex;
+          return line === undefined ? {} : { fromLine: line };
+        })(),
         unitId: enemy.id,
         unitName: enemy.name,
         unitSpec: specToString(enemy.spec),
@@ -450,6 +466,26 @@ export function buildOffensiveWasteSummary(
               return false;
             if (landedThroughWall(window.spellId, landings.get(e)!))
               return false;
+            // pipeline T281: a row logged before the wall's own APPLIED row
+            // in one millisecond landed on an unwalled target; an IMMUNE
+            // under a damage-reduction wall is another aura's refusal
+            if (
+              landedBeforeWallRow(
+                landings.get(e)!,
+                Math.round(matchStartMs + window.fromSeconds * 1000),
+                window.fromLine,
+              )
+            )
+              return false;
+            if (
+              refusedByAnotherAura(
+                window.spellId,
+                e.spellId,
+                e.spellName,
+                landings.get(e)!,
+              )
+            )
+              return false;
             // B28: for immunity windows, also count high-value CC/utility spells that do no damage
             // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
             // Round-1 retest idx 44: only into an immunity that covers it — a
@@ -600,6 +636,58 @@ export interface IPressLanding {
   atMs: number;
   spellId: string | null;
   hit: boolean;
+  /** the landing row's line in the log, when the row carries one */
+  lineIndex?: number;
+  /** the landing row is a refusal: the game logged the attack IMMUNE */
+  immune?: true;
+}
+
+/**
+ * Pipeline T281 (audit-1215 10 D1, 50b433c2 r5 2:31): did this press land
+ * BEFORE the wall went up — its landing row in the wall's opening
+ * millisecond, logged before the wall's APPLIED row? A Wrath's damage row and
+ * Ironbark's APPLIED shared 20:10:57.795 with the Wrath first: it hit an
+ * unwalled target and read `Wrath + Starsurge into Ironbark`. The log's own
+ * order decides inside one millisecond; a row or a wall with no line number
+ * keeps the instant's reading.
+ */
+export function landedBeforeWallRow(
+  landing: Pick<IPressLanding, "atMs" | "lineIndex">,
+  wallOpenMs: number,
+  wallOpenLine: number | undefined,
+): boolean {
+  return (
+    wallOpenLine !== undefined &&
+    landing.lineIndex !== undefined &&
+    landing.atMs === wallOpenMs &&
+    landing.lineIndex < wallOpenLine
+  );
+}
+
+/**
+ * Pipeline T281 (same round: a Starsurge logged IMMUNE 0.26 s after Ice
+ * Block went up, counted into the Ironbark under it): was this press refused
+ * outright — its landing row an IMMUNE — inside a wall that refuses nothing
+ * itself? A damage-reduction wall takes a share off a hit; an IMMUNE row
+ * under it is another aura's doing, and the cast went into that, not into
+ * the wall. A wall that stops every hit it covers (`wallStopsEveryHit`) and
+ * a wall that is the control avoidance refusing this very cast
+ * (`applicableCCAvoidanceIds`: a stun into Icebound Fortitude) keep it.
+ */
+export function refusedByAnotherAura(
+  wallAuraId: string,
+  castSpellId: string,
+  castSpellName: string | null | undefined,
+  landing: Pick<IPressLanding, "immune">,
+): boolean {
+  return (
+    landing.immune === true &&
+    !wallStopsEveryHit(wallAuraId) &&
+    !applicableCCAvoidanceIds(
+      castSpellId,
+      getEnglishSpellName(castSpellId, castSpellName ?? ""),
+    ).has(wallAuraId)
+  );
 }
 
 /** Did this landing go THROUGH the defensive `auraId` — a damage row of the
@@ -631,9 +719,17 @@ export function pressLandingRows<T extends LandingPress>(
     atMs: number,
     attack: boolean,
     hit: boolean,
+    lineIndex?: number,
+    immune?: boolean,
   ) => {
     const key = `${destUnitId}|${spellNameKey(spellId, spellName)}`;
-    const row = { atMs, spellId: attack ? (spellId ?? null) : null, hit };
+    const row: IPressLanding = {
+      atMs,
+      spellId: attack ? (spellId ?? null) : null,
+      hit,
+      ...(lineIndex === undefined ? {} : { lineIndex }),
+      ...(immune ? { immune: true as const } : {}),
+    };
     const rows = rowsByKey.get(key);
     if (rows) rows.push(row);
     else rowsByKey.set(key, [row]);
@@ -642,7 +738,15 @@ export function pressLandingRows<T extends LandingPress>(
     const event = d.logLine?.event as string | undefined;
     if (event === LogEvent.SPELL_ABSORBED) continue;
     if (event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
-    add(d.destUnitId, d.spellId, d.spellName, d.logLine.timestamp, true, true);
+    add(
+      d.destUnitId,
+      d.spellId,
+      d.spellName,
+      d.logLine.timestamp,
+      true,
+      true,
+      d.logLine.lineIndex,
+    );
   }
   for (const m of caster.missesOut ?? []) {
     if (m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED) continue;
@@ -656,6 +760,8 @@ export function pressLandingRows<T extends LandingPress>(
       m.timestamp,
       true,
       m.missType === "ABSORB",
+      m.logLine?.lineIndex,
+      m.missType === "IMMUNE",
     );
   }
   for (const unit of targets)
@@ -666,7 +772,15 @@ export function pressLandingRows<T extends LandingPress>(
         event === LogEvent.SPELL_AURA_APPLIED ||
         event === LogEvent.SPELL_AURA_REFRESH
       )
-        add(unit.id, a.spellId, a.spellName, a.logLine.timestamp, false, false);
+        add(
+          unit.id,
+          a.spellId,
+          a.spellName,
+          a.logLine.timestamp,
+          false,
+          false,
+          a.logLine.lineIndex,
+        );
     }
   for (const rows of rowsByKey.values()) rows.sort((a, b) => a.atMs - b.atMs);
 

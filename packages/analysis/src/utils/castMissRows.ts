@@ -407,7 +407,12 @@ export function isPressHitRow(
  * D10 (16bc5861 1:10 / 3:14 / 4:31): The Hunt's root 370970 met Blessing of
  * Freedom IMMUNE, its impact 370966 and DoT 370969 landed in the same
  * millisecond — three `[IMMUNE — Blessing of Freedom was up]` read as the
- * whole cooldown refused.
+ * whole cooldown refused. With `refusedAtMs`, the hit is one logged up to
+ * the refusal's instant: in it, or before it — pipeline T281 (audit-1215 17
+ * D1, 0d211b8b r1 1:32): Merithra's Blessing healed its target at 1:33.125,
+ * Cyclone landed there at 1:33.189, and a later pulse's IMMUNE at 1:33.880
+ * read `[IMMUNE — Cyclone was up]` for a press that had landed. A hit after
+ * the refusal stays out (`PRESS_LANDED_SAME_INSTANT_MS`).
  */
 export function pressLandedOn(
   rows: readonly IPressHitRow[],
@@ -416,8 +421,8 @@ export function pressLandedOn(
   sameSpellCastMs: readonly number[],
   castMs: number,
   destUnitId: string,
-  /** the refusal row's own ms: a hit counts only in its instant
-   * (`PRESS_LANDED_SAME_INSTANT_MS`) */
+  /** the refusal row's own ms: a hit counts up to its instant
+   * (`PRESS_LANDED_SAME_INSTANT_MS`), never after it */
   refusedAtMs?: number,
 ): boolean {
   return rows.some(
@@ -429,15 +434,15 @@ export function pressLandedOn(
       !r.logLine.event?.startsWith("SPELL_PERIODIC_") &&
       missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp) &&
       (refusedAtMs === undefined ||
-        Math.abs(r.logLine.timestamp - refusedAtMs) <=
-          PRESS_LANDED_SAME_INSTANT_MS) &&
+        r.logLine.timestamp <= refusedAtMs + PRESS_LANDED_SAME_INSTANT_MS) &&
       isPressHitRow(spellId, spellName, r),
   );
 }
 
-/** A hit of the press is the press landing through a refused component only
- * in the refusal's own instant — The Hunt's impact and its root's IMMUNE share
- * a millisecond (fact11 D10). A same-named hit seconds later is a separate
+/** A hit of the press is the press landing through a refused component up
+ * to the refusal's own instant — The Hunt's impact and its root's IMMUNE share
+ * a millisecond (fact11 D10); a hit before it landed before the immunity
+ * (T281). A same-named hit seconds later is a separate
  * trigger landing once the immunity is gone: Arcane Surge 365350 IMMUNE into
  * Ice Block, its 453326 "Arcane Surge" 2.4 s later on the unblocked mage. */
 export const PRESS_LANDED_SAME_INSTANT_MS = CAST_MISS_LEAD_MS;

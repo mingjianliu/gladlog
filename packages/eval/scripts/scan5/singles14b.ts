@@ -74,7 +74,9 @@ import {
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import {
   EMPOWER_HOLD_ROW_MS,
+  landedBeforeWallRow,
   landedThroughWall,
+  refusedByAnotherAura,
   pressLandingCaster,
   withoutDeferralTag,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
@@ -410,18 +412,23 @@ interface IWallRun {
   key: string;
   fromMs: number;
   toMs: number;
+  /** the log line of the APPLIED row that opened it */
+  fromLine?: number;
 }
 
 /** A wall's runs on `target`, its own rows only: APPLIED → REMOVED per spell and
  * source; one the log lost the REMOVED of stops at DB2's length. */
 function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
   const open = new Map<string, number>();
+  // the log line of the APPLIED row that opened each run (T281)
+  const openLine = new Map<string, number>();
   const runs: IWallRun[] = [];
   const closeLostEnd = (key: string, fromMs: number) => {
     const d = spellEffectData[key.split("|")[0]!]?.durationSeconds ?? 0;
     runs.push({
       key,
       fromMs,
+      fromLine: openLine.get(key),
       toMs: d > 0 ? Math.min(fromMs + d * 1000, ctx.end) : ctx.end,
     });
   };
@@ -435,14 +442,28 @@ function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
           tsOf(a) >= r.toMs &&
           tsOf(a) - r.toMs <= REBROADCAST_MS,
       );
-      if (prev >= 0) open.set(key, runs.splice(prev, 1)[0]!.fromMs);
-      else if (!open.has(key)) open.set(key, tsOf(a));
+      if (prev >= 0) {
+        const joined = runs.splice(prev, 1)[0]!;
+        open.set(key, joined.fromMs);
+        if (joined.fromLine !== undefined) openLine.set(key, joined.fromLine);
+        else openLine.delete(key);
+      } else if (!open.has(key)) {
+        open.set(key, tsOf(a));
+        if (a.logLine?.lineIndex !== undefined)
+          openLine.set(key, a.logLine.lineIndex);
+        else openLine.delete(key);
+      }
     } else if (ev(a) === REMOVED) {
       const k = open.has(key)
         ? key
         : [...open.keys()].find((o) => o.startsWith(`${a.spellId}|`));
       if (k === undefined) continue;
-      runs.push({ key: k, fromMs: open.get(k)!, toMs: tsOf(a) });
+      runs.push({
+        key: k,
+        fromMs: open.get(k)!,
+        toMs: tsOf(a),
+        fromLine: openLine.get(k),
+      });
       open.delete(k);
     }
   }
@@ -545,7 +566,12 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           .map((d) => tsOf(d) as number);
         // `hit`: the product's `IPressLanding.hit` — a damage row, or a miss
         // the target's absorb ate (fact11 D21)
-        const rows: { t: number; hit: boolean }[] = [
+        const rows: {
+          t: number;
+          hit: boolean;
+          lineIndex?: number;
+          immune?: true;
+        }[] = [
           ...((caster.damageOut ?? []) as any[])
             .filter(
               (d) =>
@@ -554,10 +580,16 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
                 same(d.spellId, d.spellName),
             )
-            .map((d) => ({ t: tsOf(d) as number, hit: true })),
+            .map((d) => ({
+              t: tsOf(d) as number,
+              hit: true,
+              lineIndex: d.logLine?.lineIndex as number | undefined,
+            })),
           ...missed.map((d) => ({
             t: tsOf(d) as number,
             hit: d.missType === "ABSORB",
+            lineIndex: d.logLine?.lineIndex as number | undefined,
+            ...(d.missType === "IMMUNE" ? { immune: true as const } : {}),
           })),
           ...((target.auraEvents ?? []) as any[])
             .filter(
@@ -566,9 +598,16 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 (ev(a) === APPLIED || ev(a) === REFRESH) &&
                 same(a.spellId, a.spellName),
             )
-            .map((a) => ({ t: tsOf(a) as number, hit: false })),
+            .map((a) => ({
+              t: tsOf(a) as number,
+              hit: false,
+              lineIndex: a.logLine?.lineIndex as number | undefined,
+            })),
         ].sort((a, b) => a.t - b.t);
         const wallAuraId = iv.key.split("|")[0]!;
+        const castId: string | undefined = rowsOfSpell[0]?.spellId
+          ? String(rowsOfSpell[0].spellId)
+          : undefined;
         let next = 0;
         let inside = 0;
         for (const t of presses) {
@@ -582,6 +621,24 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           // a hit through a wall that stops every hit went through it, it
           // was not pressed into it (fact11 D21, `landedThroughWall`)
           if (matched && landedThroughWall(wallAuraId, row)) continue;
+          // T281, the product's two readings: a row logged before the
+          // wall's APPLIED row in one millisecond, and an IMMUNE under a
+          // damage-reduction wall
+          if (
+            matched &&
+            landedBeforeWallRow(
+              { atMs: row.t, lineIndex: row.lineIndex },
+              fromMs,
+              iv.fromLine,
+            )
+          )
+            continue;
+          if (
+            matched &&
+            castId &&
+            refusedByAnotherAura(wallAuraId, castId, spell, row)
+          )
+            continue;
           if (at >= fromMs && at <= toMs) inside++;
         }
         return { spell, printed, inside, iv };

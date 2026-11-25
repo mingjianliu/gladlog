@@ -2210,6 +2210,16 @@ const INDEX: PredicateRow[] = [
     mod: offensiveWasteAnalysis,
   },
   {
+    file: `${A}/utils/offensiveWasteAnalysis.ts`,
+    symbol: "landedBeforeWallRow",
+    mod: offensiveWasteAnalysis,
+  },
+  {
+    file: `${A}/utils/offensiveWasteAnalysis.ts`,
+    symbol: "refusedByAnotherAura",
+    mod: offensiveWasteAnalysis,
+  },
+  {
     file: `${A}/data/healingVerdicts.ts`,
     symbol: "healingVerdictOf",
     mod: healingVerdicts,

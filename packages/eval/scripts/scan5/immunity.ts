@@ -96,6 +96,7 @@ import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
   isControlCast,
   isPressHitRow,
+  missBelongsToCast,
   PRESS_LANDED_SAME_INSTANT_MS,
   PRESS_TRIGGERED_CAST_IDS,
   pressAuraLandedOn,
@@ -516,7 +517,10 @@ export function run(ctx: IRoundCtx): void {
       ((caster.damageOut ?? []) as any[]).some(
         (d) =>
           d.destUnitId === m.destUnitId &&
-          Math.abs(tsOf(d) - tsOf(m)) <= PRESS_LANDED_SAME_INSTANT_MS &&
+          // up to the refusal's instant, a row of this press (T281)
+          tsOf(d) <= tsOf(m) + PRESS_LANDED_SAME_INSTANT_MS &&
+          !String(ev(d) ?? "").startsWith("SPELL_PERIODIC_") &&
+          missBelongsToCast(sameSpellCastMs, t, tsOf(d)) &&
           hitIds.some((h) => isPressHitRow(h, h === id ? pressName : "", d)),
       );
     // T216: the press's own aura already up on that unit — the IMMUNE row
