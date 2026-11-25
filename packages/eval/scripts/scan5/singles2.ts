@@ -12,8 +12,9 @@
  *    `EffectMiscValue_0` = Y, `EffectBasePointsF` = X, X and Y sharing a
  *    non-zero `SpellCategories.Category` or `ChargeCategory` (one cooldown).
  *    Read from the datagen DB2 cache (`$DATAGEN_CACHE`, default
- *    `~/.cache/gladlog-datagen`, newest build holding both tables); without
- *    it the check says so in its report and checks nothing. Y is tracked for
+ *    `~/.cache/gladlog-datagen`) at the product data's build
+ *    (`db2Cache.ts`); without the tables the check says so in its report,
+ *    checks nothing, and the run fails. Y is tracked for
  *    the unit when it is in `OFFENSIVE_CD_SPELL_IDS`, or its English name is
  *    in the unit's `<cooldowns>` loadout or on any of the unit's rendered
  *    cooldown lines. Kinds: `line:<X>` — no `[ENEMY CD]` / `[ENEMY DEF]` /
@@ -77,9 +78,7 @@
  *    missed-purge definition says the same while a purger of the owner's
  *    team removed ≥ 2 with one press this round.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 import { isResRowLine } from "@gladlog/analysis/src/context/resRow";
 import spellReach from "@gladlog/analysis/src/data/spellReachGenerated.json";
@@ -106,6 +105,7 @@ import {
 } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { fmtS, type IRoundCtx, nameOf, secOf } from "./ctx";
+import { DB2_BUILD, db2CacheDir, db2TablePaths } from "./db2Cache";
 
 export const CHECKS = [
   "overrideVariantPressMissing",
@@ -262,37 +262,20 @@ function readCsv(path: string): Array<Record<string, string>> {
 }
 function variants(): Map<string, string[]> | null {
   if (variantTable !== undefined) return variantTable;
-  const dir =
-    process.env.DATAGEN_CACHE ?? join(homedir(), ".cache", "gladlog-datagen");
-  const builds = (table: string) =>
-    existsSync(dir)
-      ? readdirSync(dir)
-          .map((f) => new RegExp(`^${table}-([\\d.]+)\\.csv$`).exec(f)?.[1])
-          .filter((b): b is string => !!b)
-      : [];
-  const cats = new Set(builds("SpellCategories"));
-  const cmp = (a: string, b: string) => {
-    const x = a.split(".").map(Number);
-    const y = b.split(".").map(Number);
-    for (let k = 0; k < Math.max(x.length, y.length); k++)
-      if ((x[k] ?? 0) !== (y[k] ?? 0)) return (x[k] ?? 0) - (y[k] ?? 0);
-    return 0;
-  };
-  const build = builds("SpellEffect")
-    .filter((b) => cats.has(b))
-    .sort(cmp)
-    .pop();
-  if (!build) {
-    variantSource = `no DB2 cache under ${dir} — overrideVariantPressMissing checked nothing`;
+  const paths = db2TablePaths(["SpellCategories", "SpellEffect"]);
+  if (!paths) {
+    // the run fails on the miss (`db2Cache.ts`)
+    variantSource = `no DB2 ${DB2_BUILD} tables under ${db2CacheDir()} — overrideVariantPressMissing checked nothing`;
     return (variantTable = null);
   }
+  const build = DB2_BUILD;
   const cat = new Map<string, { c: string; ch: string }>();
-  for (const r of readCsv(join(dir, `SpellCategories-${build}.csv`)))
+  for (const r of readCsv(paths[0]!))
     if (r.DifficultyID === "0")
       cat.set(r.SpellID!, { c: r.Category!, ch: r.ChargeCategory! });
   const t = new Map<string, string[]>();
   let rows = 0;
-  for (const r of readCsv(join(dir, `SpellEffect-${build}.csv`))) {
+  for (const r of readCsv(paths[1]!)) {
     if (r.EffectAura !== "332") continue;
     const y = r.EffectMiscValue_0!;
     const x = String(Math.round(Number(r.EffectBasePointsF)));

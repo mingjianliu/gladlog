@@ -21,6 +21,7 @@ import type {
   IViolationRef,
   RecordViolation,
 } from "./scan5/ctx";
+import { DB2_BUILD, db2CacheDir, db2Misses } from "./scan5/db2Cache";
 import { writeJsonIndent1 } from "./verify/jsonWrite";
 import { type MergeRule, mergeState } from "./verify/merge";
 import {
@@ -238,6 +239,8 @@ const MODULE_FILES = [
   "t281",
 ];
 await ensureAnalysisData();
+/** `checked` key of a DB2 table the cache has not got (`db2Cache.ts`) */
+const DB2_MISS = "DB2 cache has no ";
 const modules: Array<IScanModule & { file: string }> = [];
 for (const m of MODULE_FILES) {
   const p = join(import.meta.dirname, "scan5", `${m}.ts`);
@@ -315,6 +318,9 @@ function runRound(base: IContext): void {
   for (const m of modules)
     if (!ONLY || m.CHECKS.some((c) => ONLY!.includes(c)))
       timed(`scan5/${m.file}`, () => m.run(ctx));
+  // a DB2 table a check asked for and this machine's cache has not got:
+  // carried in `checked` (it merges across the workers) to the report
+  for (const f of db2Misses()) checked.set(`${DB2_MISS}${f}`, 1);
 }
 
 function report(): void {
@@ -360,6 +366,14 @@ function report(): void {
   }
   for (const u of loadFailures) say(u);
   if (loadFailures.length > 0) process.exitCode = 1;
+  // A check with no DB2 table to read checked nothing: not a clean pass
+  // (T249 — 28 stack reports of one wave said "no DB2 cache" and exited 0).
+  const missed = [...checked.keys()].filter((k) => k.startsWith(DB2_MISS));
+  for (const k of missed)
+    say(
+      `corpusFactScan5: ${k} under ${db2CacheDir()} (build ${DB2_BUILD}, DATAGEN_CACHE) — the checks reading it checked nothing`,
+    );
+  if (missed.length > 0) process.exitCode = 1;
   // A scan over nothing must not read as a clean pass (2026-11-20: a wide pass whose file filter kept 0 files
   // exited 0 and was nearly reported as a measurement).
   if (contexts === 0) {

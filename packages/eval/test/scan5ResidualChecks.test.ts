@@ -21,6 +21,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { makeUnit } from "../../analysis/test/ported/testHelpers";
 import { run as runCastThroughStun } from "../scripts/scan5/castThroughStun";
 import { run as runDamageBasis } from "../scripts/scan5/damageBasis";
+import { DB2_BUILD } from "../scripts/scan5/db2Cache";
 import { run as runFact8 } from "../scripts/scan5/fact8";
 import { run as runFact9 } from "../scripts/scan5/fact9";
 import { run as runFact9b } from "../scripts/scan5/fact9b";
@@ -2351,12 +2352,13 @@ describe("listGapPress — a form re-shift and a control press (T205)", () => {
 
 describe("silenceFiledAsKick", () => {
   // the check reads SpellEffect from the datagen cache, which CI has not got:
-  // a two-row table of its own. Silence has aura 27 and no effect 68.
+  // a two-row table of its own, at the build the scan pins. Silence has aura
+  // 27 and no effect 68.
   beforeAll(() => {
     const dir = mkdtempSync(join(tmpdir(), "silence-kick-"));
     mkdirSync(dir, { recursive: true });
     writeFileSync(
-      join(dir, "SpellEffect-12.1.5.1.csv"),
+      join(dir, `SpellEffect-${DB2_BUILD}.csv`),
       "SpellID,Effect,EffectAura\n15487,6,27\n47528,68,0\n",
     );
     process.env.DATAGEN_CACHE = dir;

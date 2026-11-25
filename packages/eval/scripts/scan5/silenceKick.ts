@@ -2,9 +2,9 @@
 /**
  * scan5/silenceKick.ts — class 7 of the round-7 audit (fact7 F21, D47 / D48 /
  * D74): a silence filed as an interrupt. Truth = DB2 SpellEffect itself, read
- * from the datagen cache (`$DATAGEN_CACHE`, default ~/.cache/gladlog-datagen,
- * newest 12.1.x table), never the kit's own `silenceOnly`: a spell with an
- * aura-27 silence row and no effect-68 INTERRUPT_CAST row is a silence.
+ * from the datagen cache at the product data's build (`db2Cache.ts`), never
+ * the kit's own `silenceOnly`: a spell with an aura-27 silence row and no
+ * effect-68 INTERRUPT_CAST row is a silence.
  *
  * Check `silenceFiledAsKick`, kinds:
  *  - `[KICK] miss`: a `[KICK] …'s X on N missed — IMMUNE` line of such a spell;
@@ -15,10 +15,6 @@
  *    moved with ruling 2026-10-30, counted like the others;
  *  - `inKit`: a silence still in the interrupt kit.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-
 import {
   INTERRUPT_SPELL_IDS,
   interruptForUnit,
@@ -26,23 +22,17 @@ import {
 import { spellRangeForCaster } from "@gladlog/analysis/src/utils/spellRange";
 
 import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
+import { db2Lines } from "./db2Cache";
 
 export const CHECKS = ["silenceFiledAsKick"] as const;
 
 let silenceIds: Set<string> | undefined;
-function silenceOnlyIds(ctx: IRoundCtx): Set<string> {
+function silenceOnlyIds(): Set<string> {
   if (silenceIds) return silenceIds;
-  const dir =
-    process.env.DATAGEN_CACHE ?? join(homedir(), ".cache/gladlog-datagen");
   const out = new Set<string>();
-  const file = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((f) => /^SpellEffect-12\.1\.5\.\d+\.csv$/.test(f))
-        .sort()
-        .pop()
-    : undefined;
-  if (file) {
-    const lines = readFileSync(join(dir, file), "utf8").split("\n");
+  const lines = db2Lines("SpellEffect");
+  // no table: nothing is checked, and the run fails on the miss (db2Cache)
+  if (lines) {
     const cols = lines[0]!.trim().split(",");
     const sp = cols.indexOf("SpellID");
     const ef = cols.indexOf("Effect");
@@ -54,7 +44,7 @@ function silenceOnlyIds(ctx: IRoundCtx): Set<string> {
       if (f[ef] === "6" && f[au] === "27") out.add(f[sp]!);
     }
     for (const id of kick) out.delete(id);
-  } else ctx.bump("silenceFiledAsKick: no DB2 cache");
+  }
   silenceIds = out;
   return out;
 }
@@ -91,7 +81,7 @@ const secOfLine = (line: string): number | undefined => {
 };
 
 export function run(ctx: IRoundCtx): void {
-  const ids = silenceOnlyIds(ctx);
+  const ids = silenceOnlyIds();
   ctx.lines.forEach((line, i) => {
     const m = KICK_MISS.exec(line);
     if (m) {
@@ -169,8 +159,7 @@ export function run(ctx: IRoundCtx): void {
     if (
       yd > realMax &&
       silences.some(
-        (s) =>
-          Math.round(spellRangeForCaster(s.e as never, s.id) ?? 0) === yd,
+        (s) => Math.round(spellRangeForCaster(s.e as never, s.id) ?? 0) === yd,
       )
     )
       ctx.violate(
