@@ -8587,3 +8587,16 @@ changed); among the 391 of 727 wide archives screened (the other 336 were
 not measured), the only moved line is 0c2f3878 r2's [KILL WINDOW] 1:04-1:18 ->
 1:08-1:18 (the 3.3 s before invisibility is under the 5 s window minimum). scan5 effectEnd unseenEndOpener now calls the producer's
 holderOpenerDebuffAfter.
+
+v665 (pipeline batch B199, T263): no prompt change. packages/eval
+verify/run.ts streams the five corpus scans' --json reports element by element
+(byte-equal to JSON.stringify(obj, null, 1); the wide violations list no
+longer has to fit one V8 string), cuts a walk into --chunks runs (a chunk
+whose node died of SIGILL is walked again, at most three times) and reruns
+only the join with --join-from. Measured at the lane: on the 605 capture the
+reports are byte-identical to the base runner in default mode and with
+--chunks 10 (15/15 files, timing aside). Stack check against dev/next-round
+e479d06d8: 605 capture identical (3,519 contexts, 0 diff lines), the 12.1.5
+supplement capture identical (2,955 contexts); every verify scan unchanged on
+both (605: 630 kinds, 0 rose / 0 fell, in-total 20,485 -> 20,485; 12.1.5: 628
+kinds, 0 rose / 0 fell); gates diff empty on both.

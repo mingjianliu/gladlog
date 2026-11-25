@@ -1907,5 +1907,11 @@
  *  window's stealth split applies again (wide: one round, 0c2f3878 r2,
  *  among the 391 of 727 wide archives screened; the 605: no change).
  *  See docs/prompt-version-history.md.
+ *
+ * v665 (2026-11-24; pipeline batch B199, T263): No prompt change: the
+ *  verify runner streams the corpus scans' JSON reports and can cut a wide
+ *  walk into chunks and rerun only its join (eval tooling, T263). The
+ *  number moves because every batch carries one.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 664;
+export const PROMPT_VERSION = 665;
