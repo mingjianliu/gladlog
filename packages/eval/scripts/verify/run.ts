@@ -67,6 +67,7 @@ import {
   makeStageDir,
   readSplitRun,
   removeWalk,
+  STAGE_MARKER,
   WALK_FILE,
   writeSplit,
 } from "./stage";
@@ -139,7 +140,10 @@ const only = argOf("--scans")?.split(",");
  * rest of the command line. */
 const ONLY_CHECKS = argOf("--only")?.split(",").filter(Boolean);
 const specs = SPECS.filter((s) => !only || only.includes(s.name));
-if (!DIR || !OUT) {
+// the capture is the first argument, never a flag: `run.ts --join-from --out
+// reports` would otherwise take `--join-from` for the capture, skip it in the
+// check below (which starts after the capture) and clear the reports
+if (!DIR || DIR.startsWith("--") || !OUT) {
   console.error("usage: verify/run.ts <captureDir> --out <dir> [--scans a,b]");
   process.exit(2);
 }
@@ -373,6 +377,8 @@ function publish(): void {
   const done: string[] = [];
   try {
     for (const f of readdirSync(reportDir)) {
+      // the stage's own marker is not a report
+      if (f === STAGE_MARKER) continue;
       renameSync(join(reportDir, f), join(OUT!, f));
       done.push(f);
     }
@@ -480,7 +486,10 @@ async function main(): Promise<void> {
    * in the join (or a signal during it) leaves is the walk, for
    * `--join-from`. Everything else leaves nothing of the walk: its own files
    * go, and the directory with them when nothing else is in it — never
-   * recursively, a directory the caller named can be the capture itself. */
+   * recursively, a directory the caller named can be the capture itself.
+   * The walk's own files are those of this run's chunks and scans: a joined
+   * walk's `walk.json` is this run's, character for character (refused
+   * above otherwise), so both are what the kept walk recorded. */
   const dropTmp = (): void => {
     if (stage) rmSync(stage, { recursive: true, force: true });
     if (walked && !judged)
@@ -490,7 +499,8 @@ async function main(): Promise<void> {
     else if (
       !removeWalk(
         tmp,
-        SPECS.map((s) => s.name),
+        CHUNKS,
+        specs.map((s) => s.name),
       ) &&
       !JOIN_FROM
     )
@@ -580,7 +590,8 @@ async function main(): Promise<void> {
       await stopWorkers();
     }
     const walkEnd = Date.now();
-    stage = makeStageDir(OUT!);
+    // the walk about to be read is never a dead stage, wherever it was kept
+    stage = makeStageDir(OUT!, tmp);
     reportDir = stage;
     const scans = await loadScans();
     const unmapped: string[] = [];

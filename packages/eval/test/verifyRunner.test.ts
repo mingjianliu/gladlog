@@ -42,6 +42,7 @@ import {
   makeStageDir,
   readSplitRun,
   removeWalk,
+  STAGE_MARKER,
   writeSplit,
 } from "../scripts/verify/stage";
 
@@ -493,8 +494,22 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
 
     const stage = makeStageDir(out);
     expect(dirname(stage)).toBe(realpathSync(real));
+    expect(readdirSync(stage)).toEqual([STAGE_MARKER]);
     expect(readdirSync(linkParent)).toEqual(["out"]);
-    rmSync(stage, { recursive: true });
+    // the next stage clears it; a directory the walk to join lies in stays,
+    // marked or not, and so does one with the prefix and no marker
+    const holder = join(real, ".verify-out-holder");
+    mkdirSync(join(holder, "walk"), { recursive: true });
+    writeFileSync(join(holder, STAGE_MARKER), "1\n");
+    mkdirSync(join(real, ".verify-out-plain"));
+    const next = makeStageDir(out, join(out, ".verify-out-holder", "walk"));
+    expect(existsSync(stage)).toBe(false);
+    expect(readdirSync(real).sort()).toEqual(
+      [".verify-out-holder", ".verify-out-plain", next.split("/").pop()].sort(),
+    );
+    expect(existsSync(join(holder, "walk"))).toBe(true);
+    for (const d of [next, holder, join(real, ".verify-out-plain")])
+      rmSync(d, { recursive: true });
 
     const r = runner(cap, out, "--workers", "1");
     expect(r.stdout).toContain("5/5 contexts");
@@ -616,6 +631,7 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
     const out = join(cap, "out");
     const stale = join(out, ".verify-out-x");
     mkdirSync(stale, { recursive: true });
+    writeFileSync(join(stale, STAGE_MARKER), "1\n");
     writeFileSync(join(stale, "corpusFactScan5.json"), '{"capture": "half');
     const r = runner(cap, out, "--workers", "1");
     expect(r.status).toBe(0);
@@ -624,6 +640,103 @@ describe("verify/run.ts --chunks / --join-from (T263)", () => {
       "gates.txt",
       "timing.txt",
     ]);
+  }, 60_000);
+
+  /** a finished walk whose join could not publish, moved to `to` */
+  const keptWalkAt = (cap: string, to: string, ...cut: string[]): void => {
+    const work = mkdtempSync(join(tmpdir(), "verify-work-"));
+    const blocked = join(work, "reports");
+    mkdirSync(blocked);
+    chmodSync(blocked, 0o555);
+    const failed = runner(cap, blocked, ...cut);
+    chmodSync(blocked, 0o755);
+    expect(failed.status).not.toBe(0);
+    const [kept] = keptDirs(work);
+    expect(kept).toBeDefined();
+    expect(readdirSync(join(work, kept!))).toContain("walk.json");
+    renameSync(join(work, kept!), to);
+  };
+
+  // B198 review 1: the walk being joined is not a dead stage
+  it.skipIf(process.getuid?.() === 0 || process.platform === "win32")(
+    "joins a walk kept as .verify-out-recovery inside --out, and clears only marked stages",
+    () => {
+      const cap = capture();
+      const out = join(mkdtempSync(join(tmpdir(), "verify-out-")), "reports");
+      mkdirSync(out);
+      const recovery = join(out, ".verify-out-recovery");
+      keptWalkAt(cap, recovery, "--workers", "2", "--chunks", "3");
+      const unmarked = join(out, ".verify-out-x");
+      mkdirSync(unmarked);
+      writeFileSync(join(unmarked, "mine.txt"), "not a stage\n");
+      const marked = join(out, ".verify-out-y");
+      mkdirSync(marked);
+      writeFileSync(join(marked, STAGE_MARKER), "1\n");
+      writeFileSync(join(marked, "gates.json"), '{"half');
+
+      const joined = runner(cap, out, "--chunks", "3", "--join-from", recovery);
+      expect(joined.stderr).not.toContain("kept its states");
+      expect(joined.stdout).toContain("5/5 contexts");
+      expect(joined.status).toBe(0);
+      // the walk's own files went with the verdict, and its directory with them
+      expect(readdirSync(out).sort()).toEqual([
+        ".verify-out-x",
+        "gates.json",
+        "gates.txt",
+        "timing.txt",
+      ]);
+      expect(readdirSync(unmarked)).toEqual(["mine.txt"]);
+    },
+    180_000,
+  );
+
+  // B198 review 2: another walk's chunk and another scan's part stay
+  it.skipIf(process.getuid?.() === 0 || process.platform === "win32")(
+    "leaves a foreign chunk state and an unselected scan's part after joining a one-chunk walk",
+    () => {
+      const cap = capture();
+      const work = mkdtempSync(join(tmpdir(), "verify-work-"));
+      const kept = join(work, "kept");
+      keptWalkAt(cap, kept, "--workers", "1");
+      expect(readdirSync(kept)).toContain("w0.bin");
+      writeFileSync(join(kept, "w27.bin"), "another walk's\n");
+      writeFileSync(join(kept, "w0.bin.corpusFactScan5.0"), "another scan's\n");
+
+      const out = join(work, "out");
+      const joined = runner(cap, out, "--workers", "1", "--join-from", kept);
+      expect(joined.stdout).toContain("5/5 contexts");
+      expect(joined.status).toBe(0);
+      expect(readdirSync(kept).sort()).toEqual([
+        "w0.bin.corpusFactScan5.0",
+        "w27.bin",
+      ]);
+    },
+    180_000,
+  );
+
+  // B198 review 3: the capture is an argument, not a flag
+  it("refuses a flag where the capture goes before it touches --out", () => {
+    const work = mkdtempSync(join(tmpdir(), "verify-work-"));
+    const out = join(work, "reports");
+    mkdirSync(out);
+    const last = "the last good run\n";
+    for (const args of [
+      ["--join-from", "--out", out],
+      ["--out", out],
+      ["--out", out, "--scans", "gates"],
+    ]) {
+      writeFileSync(join(out, "gates.txt"), last);
+      const r = spawnSync(
+        process.execPath,
+        ["--import", "tsx", join(SCRIPTS, "verify/run.ts"), ...args],
+        { cwd: join(__dirname, ".."), encoding: "utf8" },
+      );
+      expect(r.status, args.join(" ")).toBe(2);
+      expect(r.stderr).toContain("usage: verify/run.ts <captureDir>");
+      expect(readFileSync(join(out, "gates.txt"), "utf8")).toBe(last);
+      expect(readdirSync(out)).toEqual(["gates.txt"]);
+      expect(readdirSync(work)).toEqual(["reports"]);
+    }
   }, 60_000);
 });
 
@@ -666,7 +779,7 @@ describe("verify/argv.ts (T263, B197 review 3 and 4)", () => {
   });
 });
 
-describe("the walk's own files (T263, B197 review 1 and 2)", () => {
+describe("the walk's own files (T263, B197 review 1 and 2, B198 review 2)", () => {
   const SCANS = ["gates", "corpusFactScan5"];
 
   it("names the manifests, the chunk states and their parts, nothing else", () => {
@@ -678,7 +791,11 @@ describe("the walk's own files (T263, B197 review 1 and 2)", () => {
       "w3.bin.gates.0",
       "w3.bin.corpusFactScan5.17",
     ])
-      expect(isWalkFile(f, SCANS), f).toBe(true);
+      expect(isWalkFile(f, 13, SCANS), f).toBe(true);
+    // a chunk this walk does not have, a scan it did not run
+    for (const f of ["w13.bin", "w27.bin", "w27.bin.gates.0", "w03.bin"])
+      expect(isWalkFile(f, 13, SCANS), f).toBe(false);
+    expect(isWalkFile("w0.bin.corpusFactScan5.0", 1, ["gates"])).toBe(false);
     for (const f of [
       "w0.bin.other.0",
       "w.bin",
@@ -688,7 +805,7 @@ describe("the walk's own files (T263, B197 review 1 and 2)", () => {
       "walk.json.bak",
       "s0",
     ])
-      expect(isWalkFile(f, SCANS), f).toBe(false);
+      expect(isWalkFile(f, 13, SCANS), f).toBe(false);
   });
 
   it("removes the walk and leaves a directory that holds anything else", () => {
@@ -700,16 +817,16 @@ describe("the walk's own files (T263, B197 review 1 and 2)", () => {
     writeFileSync(join(dir, "capture.sha256"), "abc\n");
     // a directory under a walk file's name is not the runner's
     mkdirSync(join(dir, "w1.bin"));
-    expect(removeWalk(dir, SCANS)).toBe(false);
+    expect(removeWalk(dir, 1, SCANS)).toBe(false);
     expect(readdirSync(dir).sort()).toEqual(["capture.sha256", "s0", "w1.bin"]);
     expect(existsSync(join(dir, "s0", "context", "1-1-1.txt"))).toBe(true);
 
     const own = mkdtempSync(join(tmpdir(), "verify-walk-"));
     for (const f of ["walk.json", "split.json", "w0.bin", "w0.bin.gates.0"])
       writeFileSync(join(own, f), "x");
-    expect(removeWalk(own, SCANS)).toBe(true);
+    expect(removeWalk(own, 1, SCANS)).toBe(true);
     expect(existsSync(own)).toBe(false);
-    expect(removeWalk(own, SCANS)).toBe(true);
+    expect(removeWalk(own, 1, SCANS)).toBe(true);
   });
 
   it("hands a worker the recorded cut after the archives changed size", () => {

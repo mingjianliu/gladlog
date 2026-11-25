@@ -8615,4 +8615,9 @@ SIGILL retry; a worker's command line drops the parent's --out by position
 (`--out 10 --chunks 10` keeps its chunk count); every occurrence of --out /
 --join-from / --chunks needs a value and two differing values exit 2; and a
 .verify-out-* stage left inside --out by a killed join is removed before the
-next stage is made.
+next stage is made. Third review fix: the runner marks each stage it makes
+(.verify-stage) and clears only marked .verify-out-* directories, never the
+--join-from directory or one that contains it; a verdict removes only the
+files of the walk's own chunks and selected scans (another walk's w27.bin or
+an unselected scan's part stays); and a missing capture argument, or a flag in
+its place, exits 2 before anything under --out is touched.
