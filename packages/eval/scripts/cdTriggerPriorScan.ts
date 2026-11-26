@@ -373,7 +373,8 @@ function emitTable(): void {
           : "all 12.1+ healer rounds in the archive",
       rows: rows.length,
       nFloor: CD_TRIGGER_PRIOR_N_FLOOR,
-      predicateVersion: 1,
+      // 2: Aura Mastery's immunity-branch presses are no observation (T230)
+      predicateVersion: 2,
     },
     cells: out,
   };

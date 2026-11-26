@@ -34,10 +34,26 @@
  * — `cd-hoarded` already judges it — so this engine drops it rather than
  * saying the same thing twice. `[CD PRIOR]` lives in the band between the
  * cohort's median and the crisis line.
+ *
+ * Aura Mastery is two buttons under one id (ruling R53,
+ * `utils/auraMasteryBranch`): the wall under Devotion Aura, a silence /
+ * interrupt immunity under Concentration Aura. The cohort is the wall's
+ * (pipeline T230): an immunity-branch press that never switched to the wall
+ * is no observation, and a paladin whose Aura Mastery is no wall this round
+ * (`auraMasteryIsNoWallOf`) is not held against the wall's median. Counted
+ * before the change — 605 files: 304 wall presses (median 54), 18 immunity
+ * (median 57), 1 switched; 12.1.5 files: 92 / 1 / 0. The medians do not move
+ * on either set (54, 56); the generated table is filtered at its next regen.
  */
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
+import {
+  AURA_MASTERY_ID,
+  auraMasteryIsNoWallOf,
+  auraMasteryPressIsImmunityBranch,
+  auraMasteryPressSwitchedToWall,
+} from "../utils/auraMasteryBranch";
 import {
   type NamedCannotCastInterval,
   pressBlockedIntervalsForSpells,
@@ -218,6 +234,15 @@ export function cdTriggerObservations(
       const tSec = Math.floor(c.timeSeconds);
       if (tSec < 0) continue;
       if (tSec - lastKeptSec < CD_TRIGGER_DEDUPE_S) continue;
+      // the immunity button is not the wall the cohort describes
+      if (cd.spellId === AURA_MASTERY_ID) {
+        const atMs = Math.round(startMs + c.timeSeconds * 1000);
+        if (
+          auraMasteryPressIsImmunityBranch(owner, atMs) &&
+          !auraMasteryPressSwitchedToWall(owner, atMs)
+        )
+          continue;
+      }
       const low = lowestFriendlyGridHp(friends, startMs, tSec);
       if (!low) continue;
       if (low.hpPct >= CD_TRIGGER_NEEDED_HP_PCT) continue;
@@ -261,6 +286,13 @@ export function cdPriorHoldEpisodes(
   const lastSec = Math.floor((endMs - startMs) / 1000);
   const friends = friendliesOf(combat, owner);
   const cds = rosterOf(owner, combat, overrides)
+    // the wall's median says nothing about a round in which this paladin's
+    // Aura Mastery is the immunity
+    .filter(
+      (cd) =>
+        cd.spellId !== AURA_MASTERY_ID ||
+        !auraMasteryIsNoWallOf(owner, { startTime: startMs, endTime: endMs }),
+    )
     .map((cd) => ({ cd, ref: refOf(cd.spellId) }))
     .filter(
       (x): x is { cd: SpendableDefensiveCd; ref: CdTriggerPriorRef } =>

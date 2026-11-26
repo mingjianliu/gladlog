@@ -405,3 +405,72 @@ describe("cdPriorHoldEpisodes (product side)", () => {
     expect(eps.map((e) => e.tSec)).toEqual([1, 15]);
   });
 });
+
+describe("Aura Mastery: the cohort is the wall's (pipeline T230, ruling R53)", () => {
+  const AM = "31821";
+  const row = (spellId: string, event: string, dtMs: number) => ({
+    spellId,
+    srcUnitId: "H",
+    destUnitId: "H",
+    logLine: { event, timestamp: T0 + dtMs },
+  });
+  const am = (over: Record<string, unknown> = {}) =>
+    cd({ spellId: AM, spellName: "Aura Mastery", ...over });
+  const lowMate = () =>
+    unit("M", { advancedActions: [hp(0, 100), hp(3000, 61), hp(4000, 58)] });
+  const dip = () =>
+    unit("M", {
+      advancedActions: [
+        hp(0, 100),
+        hp(1000, 60),
+        hp(2000, 50),
+        hp(3000, 45),
+        hp(4000, 48),
+        hp(5000, 50),
+        hp(6000, 70),
+      ],
+    });
+
+  it("a wall press is an observation; an immunity-branch press is not", () => {
+    const wall = unit("H", {
+      spellCastEvents: [row(AM, "SPELL_CAST_SUCCESS", 3400)],
+      auraEvents: [row(AM, "SPELL_AURA_APPLIED", 3400)],
+    });
+    const cds = [am({ casts: [{ timeSeconds: 3.4 }], neverUsed: false })];
+    expect(
+      cdTriggerObservations(wall, combat([wall, lowMate()]), { cds }),
+    ).toHaveLength(1);
+    const immunity = unit("H", {
+      spellCastEvents: [row(AM, "SPELL_CAST_SUCCESS", 3400)],
+      auraEvents: [
+        row(AM, "SPELL_AURA_APPLIED", 3400),
+        row("317929", "SPELL_AURA_APPLIED", 3400),
+      ],
+    });
+    expect(
+      cdTriggerObservations(immunity, combat([immunity, lowMate()]), { cds }),
+    ).toHaveLength(0);
+  });
+
+  it("no hold episode for a paladin whose Aura Mastery is the immunity this round", () => {
+    const refAm = () => ref({ cellKey: "Holy Paladin|Lightsmith|31821" });
+    const devotion = unit("H");
+    expect(
+      cdPriorHoldEpisodes(devotion, combat([devotion, dip()]), refAm, {
+        cds: [am()],
+      }),
+    ).toHaveLength(1);
+    // Concentration Aura up from before the round, never Devotion Aura
+    const concentration = unit("H", {
+      auraEvents: [row("317920", "SPELL_AURA_APPLIED", -60_000)],
+    });
+    expect(
+      cdPriorHoldEpisodes(
+        concentration,
+        combat([concentration, dip()]),
+        refAm,
+        { cds: [am()] },
+      ),
+    ).toHaveLength(0);
+  });
+});
