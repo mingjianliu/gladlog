@@ -8739,3 +8739,16 @@ fell (procActivationNoLine / Frenzied Regeneration 9 -> 0 | 6 -> 0); in-total
 noPressButPressed reads the producer's event behind each line (procOwned): 605
 9 / 2,283 -> 9 / 2,292, 1215 0 / 1,671 -> 0 / 1,677 (the new lines checked,
 none flagged).
+
+v672 (pipeline batch B214, T194): four fact defects from the T194 count-first
+bundle. A kick whose target's Shadowmeld / Feign Death / Transfer is logged on
+the kicker's side inside the cast bar reads "hit nothing", not "JUKED by fake
+X"; a stop logged after the kick is no fake it was sent into, and the stop
+bound counts whole ms from the interrupt's own instant (a commanded pet's
+interrupt from its own cast). Touch of Karma stacks print once (they printed
+twice) and keep the absorb-row id's price; stacks the cap of 2 crowded out now
+print. Cheetah reads 16 s, not 12 s. Measured by the lane on c711793af vs
+79ed92ca4 (605 | 1215): [KICK] JUKED -> hit nothing 7 | 8; Karma double prints
+11 | 26 -> 0, none lost, 4 | 2 crowded-out stacks added; Cheetah 12 s rows 32
+-> 0 (605 only); nothing rose, gates identical. Stack check on 2df0d5a07: see
+the B214 artifacts.
