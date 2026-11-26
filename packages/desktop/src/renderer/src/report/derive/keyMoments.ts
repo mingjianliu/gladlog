@@ -191,7 +191,9 @@ function deriveKeyMomentsUncached(
     for (const w of enemyTl.alignedBurstWindows) {
       out.push({
         t: w.fromSeconds,
-        toT: w.toSeconds,
+        // where the log shows it end: a buff running past the round's end
+        // drew the band over seconds after it (T237, codex 80-PIPE-234-B212)
+        toT: w.observedToSeconds ?? w.toSeconds,
         kind: "burst-band",
         side: "enemy",
         title: translate(lang, "report.keyMoment.enemyBurst"),

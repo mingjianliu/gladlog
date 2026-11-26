@@ -46,7 +46,6 @@ import {
 } from "./combatMemo";
 import {
   canonicalSpellId,
-  getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   isEnemyCdWindowSpell,
   isHealerSpec,
@@ -239,7 +238,14 @@ export interface IAlignedBurstWindow {
   readonly damageInWindow: number;
   readonly damageRatio: number;
   readonly healerCCed: boolean;
-  /** HP% of the most-pressured friendly at window start, midpoint, and end */
+  /** Pipeline T237 (codex 80-PIPE-234-B212 #1): where the log shows the
+   * window end — `toSeconds` cut at the round's end (`roundDamageEndMs`).
+   * `toSeconds` itself stays the last buff's end (T91); the outcome — the
+   * HP readings below, the desktop burst band — reads this one. */
+  readonly observedToSeconds?: number;
+  /** HP% of the most-pressured friendly at window start, midpoint, and end
+   * of the observed window (`observedToSeconds`), each a reading taken no
+   * later than that end (`burstHpPctAt`) */
   readonly mostPressuredTarget?: {
     readonly unitName: string;
     readonly startHpPct: number | null;
@@ -1072,16 +1078,23 @@ export function lastPeriodicTriggerEndS(
   // shield, `attackSpellId` the tick (4da68e83 r4 0:31: Disintegrate's last
   // tick into an Anti-Magic Shell 1 ms after the REMOVED; codex
   // 85-tk-L6-T248-1 #2)
+  // …a scripted channel's too, by the attack's name, not the shield's
+  // (5443c00c r2: Void Ray 1214595 into Void Shield 12 ms after the
+  // REMOVED; 905ef1e0 r4 into Life Cocoon; codex 80-PIPE-234-B212 #2)
   const fires = (d: {
     spellId?: string;
     spellName?: string;
     attackSpellId?: string;
+    attackSpellName?: string;
   }) =>
     !!d.spellId &&
     (ids
       ? ids.includes(d.spellId) ||
         (!!d.attackSpellId && ids.includes(d.attackSpellId))
-      : getEnglishSpellName(d.spellId, d.spellName ?? "") === scriptedName);
+      : getEnglishSpellName(d.spellId, d.spellName ?? "") === scriptedName ||
+        (!!d.attackSpellId &&
+          getEnglishSpellName(d.attackSpellId, d.attackSpellName ?? "") ===
+            scriptedName));
   const endMs = combat.startTime + endS * 1000;
   // a channel chained into its next one is back up at once (REMOVED and
   // APPLIED in one millisecond, or a few ms apart): the rows from that
@@ -2723,20 +2736,14 @@ function reconstructEnemyCDTimelineUncached(
           }
         }
         if (topUnit && topDmg > 0) {
-          const midMs = windowStartMs + (windowEndMs - windowStartMs) / 2;
+          const midMs = windowStartMs + (observedEndMs - windowStartMs) / 2;
+          const at = (ms: number) =>
+            burstHpPctAt(topUnit, ms, observedEndMs, hpLookupRadiusMs);
           mostPressuredTarget = {
             unitName: topUnit.name,
-            startHpPct: getUnitHpAtTimestamp(
-              topUnit,
-              windowStartMs,
-              hpLookupRadiusMs,
-            ),
-            midHpPct: getUnitHpAtTimestamp(topUnit, midMs, hpLookupRadiusMs),
-            endHpPct: getUnitHpAtTimestamp(
-              topUnit,
-              windowEndMs,
-              hpLookupRadiusMs,
-            ),
+            startHpPct: at(windowStartMs),
+            midHpPct: at(midMs),
+            endHpPct: at(observedEndMs),
           };
         }
       }
@@ -2744,6 +2751,7 @@ function reconstructEnemyCDTimelineUncached(
       alignedBurstWindows.push({
         fromSeconds: windowStart,
         toSeconds: windowEnd,
+        observedToSeconds: (observedEndMs - matchStartMs) / 1000,
         activeCDs: inWindow.map((c) => ({
           playerName: c.playerName,
           spellName: c.spellName,

@@ -11,7 +11,9 @@ import {
   markRoundEndingDeathSecond,
 } from "../src/analysis/burstWindowDecisionPoints";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { burstHpPctAt } from "../src/utils/enemyCDs";
 import { roundDamageEndMs, SOLO_SHUFFLE_BRACKET } from "../src/utils/roundEnd";
+import { makeAdvancedAction, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -90,5 +92,28 @@ describe("markRoundEndingDeathSecond", () => {
     markRoundEndingDeathSecond(cut, [player([DEATH])], T0, DEATH);
     const after = segOf(cut);
     expect(after[0]!.toSeconds).toBe(87);
+  });
+});
+
+describe("burstHpPctAt — an aligned burst's HP readings stop at the round's end (codex 80-PIPE-234-B212 #1)", () => {
+  // 7686e97d r5: the deciding death at 239.105 s at 8 %, the window's buff
+  // to 254.065 s, a 100 % reading at 251.995 s
+  const reading = (ms: number, hp: number) => ({
+    ...makeAdvancedAction(ms, 0, 0, 1000, hp),
+    advancedActorId: "u",
+  });
+  const unit = makeUnit("u", {
+    advancedActions: [reading(T0 + 238_900, 80), reading(T0 + 251_995, 1000)],
+  } as never);
+  const end = T0 + 239_105;
+  it("the end is read at the observed end, from a reading no later than it", () => {
+    expect(burstHpPctAt(unit, T0 + 254_065, end, 3_000)).toBe(8);
+  });
+  it("a reading after the observed end is none", () => {
+    expect(burstHpPctAt(unit, T0 + 252_000, T0 + 252_500, 3_000)).toBe(100);
+    const late = makeUnit("u", {
+      advancedActions: [reading(T0 + 239_500, 1000)],
+    } as never);
+    expect(burstHpPctAt(late, end, end, 3_000)).toBeNull();
   });
 });

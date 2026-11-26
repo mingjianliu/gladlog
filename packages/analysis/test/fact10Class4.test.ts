@@ -148,6 +148,28 @@ describe("fact10 D29 residual — a scripted periodic trigger reads its ticks by
     expect(endOf("Void Ray", 121.767)).toBeCloseTo(121.767, 6);
     expect(endOf("Eye Beam", 121.767, "198030")).toBeCloseTo(121.766, 6);
   });
+  it("5443c00c r2: a tick a shield took whole is read by the attack's name, not the shield's", () => {
+    const { unit, combat } = combatWith(120.3);
+    const dh = unit as any;
+    dh.auraEvents = dh.auraEvents.map((a: any) => ({
+      ...a,
+      spellId: VOID_RAY,
+      spellName: "Void Ray",
+    }));
+    dh.damageOut = [
+      { ...hit(120.3, TICK), spellName: "Void Ray" },
+      {
+        ...hit(121.778, "1215196"),
+        spellName: "Void Shield",
+        attackSpellId: TICK,
+        attackSpellName: "Void Ray",
+        logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: at(121.778) },
+      },
+    ];
+    expect(
+      observedEffectEndSeconds(dh, VOID_RAY, 119.247, Infinity, combat),
+    ).toBeCloseTo(121.778, 6);
+  });
 });
 
 describe("pipeline T248 — a channel whose own aura ticks: the tick after the REMOVED", () => {
