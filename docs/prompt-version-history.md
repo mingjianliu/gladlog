@@ -8762,3 +8762,21 @@ hunter whose own series ran 16 s 32 -> 0 (605 only); no in-total violation kind
 rose (605 inventory cheetahFoxPress / agrees 4 -> 36, the corrected rows moving
 into it), gates identical. Stack check on 2df0d5a07: identical rendered diffs,
 same scan movement, gates diff 0 (B214 artifacts).
+
+v673 (pipeline batch B222, T192; first assembled as B215; user ruling R121): the
+recorder's own Vanish whose stealth (aura 11327) came off before its full
+duration names the press that ended it: the [BUFF FADED] line reads "ended by
+your own X" instead of "ended after N of M s — no dispel logged". The press is
+the recorder's last SPELL_CAST_SUCCESS logged after this application's APPLIED
+row and at most 100 ms before the stealth's first REMOVED row (rows of one ms in
+source order), at a unit not on the recorder's side, of a spell stealth does not
+allow (DB2) or of an allowed spell whose damage row or ABSORB miss row on that
+same unit is logged within 100 ms after the cast (Shadowstrike, Ambush). With no
+such press the line stays as it was. Measured by the lane on c711793af vs
+80aaccf75 (605 | 1215): early ends named 0 -> 266 | 228 (605: Cheap Shot 145,
+Garrote 95, Shadowstrike 13, Rupture 4, Gouge 3, Kidney Shot 2, Kick / Envenom /
+Pistol Shot / Dispatch 1; 1215: Cheap Shot 158, Garrote 40, Shadowstrike 14,
+Kidney Shot 7, Eviscerate 3, Ambush 2, Kick 2, Gouge 2). Stack check b99904a02
+vs e29e35df1 (the code of 1a452ded8 and of this batch): 266 | 228 [BUFF FADED]
+lines changed and no other line; scan5 chargeSpentReadEarly / stealth taken by
+the holder's opener 265 | 227 -> 0, no violation kind rose, gates identical.
