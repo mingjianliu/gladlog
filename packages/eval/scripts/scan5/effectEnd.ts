@@ -56,7 +56,10 @@ import {
 } from "@gladlog/analysis/src/data/spellSchools";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
-import { isButtonPress } from "@gladlog/analysis/src/utils/castCommitSpans";
+import {
+  channelRunsThroughPress,
+  isButtonPress,
+} from "@gladlog/analysis/src/utils/castCommitSpans";
 import { stasisReplayWindows } from "@gladlog/analysis/src/utils/combatStates";
 import {
   ENEMY_DEF_TAG_NAME_RE_SRC,
@@ -317,6 +320,7 @@ function channelOutlived(ctx: IRoundCtx, line: string): void {
   );
   const at = press ? tsOf(press) : startRow ? tsOf(startRow) : undefined;
   if (at === undefined) return;
+  const channelId = String((press ?? startRow).spellId);
   const end = at + Number(m[3]) * 1000;
   const replays = stasisReplayWindows(ctx.owner);
   const inside = ((ctx.owner.spellCastEvents ?? []) as any[]).find(
@@ -335,7 +339,11 @@ function channelOutlived(ctx: IRoundCtx, line: string): void {
       c.srcUnitId === ctx.owner.id &&
       nameOf(c.spellId, c.spellName ?? "") !== m[2] &&
       tsOf(c) > at + 100 &&
-      tsOf(c) < end - 100,
+      tsOf(c) < end - 100 &&
+      // a press the channel ran on through, the producer's reading (T284:
+      // Ultimate Penitence's ascent before its bolts, codex
+      // 85-tk-L5-T284-1c #4)
+      !channelRunsThroughPress(ctx.owner, channelId, at, tsOf(c)),
   );
   if (inside)
     ctx.violate(

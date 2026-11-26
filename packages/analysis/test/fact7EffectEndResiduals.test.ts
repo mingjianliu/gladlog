@@ -109,7 +109,7 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
       5.88,
     );
   });
-  it("a press before the first bolt still ends it when nothing follows, or one bolt in the air (T284)", () => {
+  it("a press before the first bolt ends it when no bolt follows (T284: a real cancel)", () => {
     const cancelled = {
       id: "h",
       spellCastEvents: [press(UP, 0), press("32379", 0.05)],
@@ -117,8 +117,6 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
       healOut: [],
     };
     expect(nextPressEndingChannelMs(cancelled, UP, ms(0))).toBe(ms(0.05));
-    const inFlight = { ...cancelled, damageOut: [bolt(0.9)] };
-    expect(nextPressEndingChannelMs(inFlight, UP, ms(0))).toBe(ms(0.05));
   });
   it("an effect row in the channel's own millisecond, a press, effects after: the press ends it (codex 85-tk-L5-T284-1 #1)", () => {
     const unit = {
@@ -129,15 +127,24 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
     };
     expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(0.084));
   });
-  it("a cast begun ends it whatever lands after (codex 85-tk-L5-T284-1 #3)", () => {
+  it("an instant cast with its START row, a Penance 1 ms in, bolts after: it runs on (codex 85-tk-L5-T284-1c #1 / #3)", () => {
+    const shadowMend = press("186263", 0.001);
     const begun = {
       id: "h",
-      spellCastEvents: [press(UP, 0)],
-      castStartEvents: [press("1242173", 0.05)],
-      damageOut: [bolt(1.2), bolt(3)],
+      spellCastEvents: [press(UP, 0), shadowMend],
+      castStartEvents: [shadowMend],
+      damageOut: [bolt(0.84), bolt(3), bolt(5.274)],
       healOut: [],
     };
-    expect(nextPressEndingChannelMs(begun, UP, ms(0))).toBe(ms(0.05));
+    expect(nextPressEndingChannelMs(begun, UP, ms(0))).toBe(Infinity);
+    // the round ends 1.5 s in: six heals in 0.9 s are the channel's
+    const cut = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("47540", 0.001)],
+      damageOut: [0.611, 0.8, 1.0, 1.2, 1.4, 1.524].map(bolt),
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(cut, UP, ms(0))).toBe(Infinity);
   });
   it("presses in the ascent before the bolts, all 25 after them, end nothing (codex 85-tk-L5-T284-1b #1: Shadow Word: Pain 132 ms, a shield 236 ms in)", () => {
     const unit = {
@@ -153,16 +160,7 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
     };
     expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(5.2));
   });
-  it("one volley in the air after an early press is no channel running (codex 85-tk-L5-T284-1b #4)", () => {
-    const unit = {
-      id: "h",
-      spellCastEvents: [press(UP, 0), press("586", 0.087)],
-      damageOut: [bolt(1.126), bolt(1.147)],
-      healOut: [],
-    };
-    expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(0.087));
-  });
-  it("a channel DB2 marks is ended by the press whatever its rows do (Penance)", () => {
+  it("a channel DB2 marks is ended by the press whatever its rows do (Penance: codex 85-tk-L5-T284-1b #4, its one late volley after a Fade)", () => {
     const PENANCE = "47540";
     const unit = {
       id: "h",

@@ -168,28 +168,9 @@ export interface IChannelSpan {
  * still end it here, as before (Soothing Mist, which allows them, is
  * measured by its aura and never reaches this reading).
  *
- * A channel its effect rows measure — a press DB2 does not call a channel
- * (`CHANNELED_SPELL_IDS`: Ultimate Penitence's 421453 is the shield, its
- * bolts the channel, `channelEndSeconds`) — runs on through a press it had
- * produced nothing by (no effect row of it, `lastChannelEffectMs`, from its
- * own millisecond on) when its effect rows after that press are sustained:
- * the first and the last of them more than `CHANNEL_PRESS_IN_FLIGHT_MS`
- * apart, the last more than that past the press — the channel kept
- * producing, which a stopped one does not (T284, audit-1215 02 D1:
- * acc115f2, Shadow Word: Death 1–64 ms after the press, the bolts from 0.8
- * s to 5.9 s — `channeled 0.0s`; codex 85-tk-L5-T284-1b #1: Shadow Word:
- * Pain 132 ms and a shield 236 ms in, all 25 bolts after them). One volley
- * in the air is no channel running (#4: Penance's single late volley after
- * a Fade). Such a press is passed over and the next one read. A cast start
- * is a cast begun and always ends it, and so does any press of a channel
- * DB2 marks — its own channel measures it (codex 85-tk-L5-T284-1 #1/#3:
- * Spinning Crane Kick, Penance past a Void Blast, Soothing Mist past
- * Transcendence). Read only on a unit that carries its effect rows.
+ * A channel its effect rows measure runs on through a press it had
+ * produced nothing by (`channelRunsThroughPress`); the next press is read.
  */
-export const CHANNEL_PRESS_IN_FLIGHT_MS = 1000;
-/** How far past its press a channel's own effect rows are read for that
- * test, when no next press of the same channel comes first. */
-const CHANNEL_EFFECT_READ_MS = 15_000;
 export function nextPressEndingChannelMs(
   unit: Pick<ICombatUnit, "spellCastEvents"> &
     Partial<Pick<ICombatUnit, "id" | "damageOut" | "healOut" | "missesOut">>,
@@ -198,28 +179,57 @@ export function nextPressEndingChannelMs(
 ): number {
   const casts = unit.spellCastEvents ?? [];
   const presses = [
-    ...casts
-      .filter((e) => rowIsPressEndingCast(e, casts))
-      .map((e) => ({ ms: e.timestamp, begun: false, spellId: e.spellId })),
+    ...casts.filter((e) => rowIsPressEndingCast(e, casts)),
     ...(
       (unit as { castStartEvents?: typeof unit.spellCastEvents })
         .castStartEvents ?? []
-    )
-      .filter((e) => !pressRidesAlong(e.spellId))
-      .map((e) => ({ ms: e.timestamp, begun: true, spellId: e.spellId })),
+    ).filter((e) => !pressRidesAlong(e.spellId)),
   ]
-    .filter((e) => e.spellId !== spellId && e.ms > afterMs)
-    .sort((x, y) => x.ms - y.ms || Number(y.begun) - Number(x.begun));
-  if (!presses.length) return Infinity;
+    .filter((e) => e.spellId !== spellId && e.timestamp > afterMs)
+    .map((e) => e.timestamp)
+    .sort((x, y) => x - y);
+  for (const ms of presses)
+    if (!channelRunsThroughPress(unit, spellId, afterMs, ms)) return ms;
+  return Infinity;
+}
+
+/**
+ * Does a channel begun at `afterMs` run on through a press at `pressMs`?
+ * Only a channel its effect rows measure — a press DB2 does not call a
+ * channel (`CHANNELED_SPELL_IDS`: Ultimate Penitence's 421453 is the shield,
+ * its bolts the channel, `channelEndSeconds`) — and only a press it had
+ * produced nothing by (no effect row of it, `lastChannelEffectMs`, from its
+ * own millisecond on) after which its rows come all the same (before the
+ * caster's next press of it, within `CHANNEL_EFFECT_READ_MS`): a channel a
+ * press stopped before its first bolt has none. Ultimate Penitence's ascent
+ * takes presses before its bolts start (T284, audit-1215 02 D1: acc115f2,
+ * Shadow Word: Death 1–64 ms after the press, the bolts from 0.8 s to 5.9 s
+ * — `channeled 0.0s`; codex 85-tk-L5-T284-1b #1 / 1c #1 / 1c #3: Shadow
+ * Word: Pain 132 ms, a shield 236 ms, an instant Shadow Mend with its START
+ * row 1 ms, a Penance 1 ms in, each with every bolt after it). Once a bolt
+ * has landed, a press ends it, the bolts behind it in the air (Arcane
+ * Missiles above). A channel DB2 marks is measured by its own channel and
+ * every press ends it (codex 85-tk-L5-T284-1 #1/#3, 1b #4). False on a unit
+ * that carries no effect rows. The scan5 `channelOutlived` gate reads it.
+ */
+export function channelRunsThroughPress(
+  unit: Pick<ICombatUnit, "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "id" | "damageOut" | "healOut" | "missesOut">>,
+  spellId: string,
+  afterMs: number,
+  pressMs: number,
+): boolean {
   if (
     CHANNELED_SPELL_IDS.has(spellId) ||
     unit.id === undefined ||
     (!unit.damageOut && !unit.healOut)
   )
-    return presses[0]!.ms;
+    return false;
   const effects = unit as Parameters<typeof lastChannelEffectMs>[0];
   const name = getEnglishSpellName(spellId, "");
-  const nextSame = casts.find(
+  if (lastChannelEffectMs(effects, name, afterMs - 1, pressMs) !== undefined)
+    return false;
+  const nextSame = (unit.spellCastEvents ?? []).find(
     (e) =>
       e.spellId === spellId &&
       e.logLine.timestamp > afterMs &&
@@ -229,24 +239,13 @@ export function nextPressEndingChannelMs(
     nextSame ?? Infinity,
     afterMs + CHANNEL_EFFECT_READ_MS,
   );
-  for (const p of presses) {
-    if (p.begun || p.ms >= untilMs) return p.ms;
-    // the channel produced something by this press (a row of its own
-    // millisecond included): it ends it
-    if (lastChannelEffectMs(effects, name, afterMs - 1, p.ms) !== undefined)
-      return p.ms;
-    const first = firstChannelEffectMs(effects, name, p.ms, untilMs);
-    const last = lastChannelEffectMs(effects, name, p.ms, untilMs, true);
-    if (
-      first === undefined ||
-      last === undefined ||
-      last - first <= CHANNEL_PRESS_IN_FLIGHT_MS ||
-      last - p.ms <= CHANNEL_PRESS_IN_FLIGHT_MS
-    )
-      return p.ms;
-  }
-  return Infinity;
+  return lastChannelEffectMs(effects, name, pressMs, untilMs, true) !== undefined;
 }
+
+/** How far past its press a channel's own effect rows are read for
+ * `channelRunsThroughPress`, when no next press of the same channel comes
+ * first. */
+const CHANNEL_EFFECT_READ_MS = 15_000;
 
 /** Has DB2 a SpellCooldowns row for this cast id — on the global cooldown or
  * off it (`ON_GCD_SPELL_IDS` / `OFF_GCD_SPELL_IDS`)? A row with none — a
@@ -312,18 +311,6 @@ function lastChannelEffectMs(
 ): number | undefined {
   const ts = channelEffectTimes(unit, name, afterMs, untilMs, untilExclusive);
   return ts.length ? Math.max(...ts) : undefined;
-}
-
-/** The caster's first row of a channel's effect — `lastChannelEffectMs`'
- * rows, the earliest. */
-function firstChannelEffectMs(
-  unit: Parameters<typeof lastChannelEffectMs>[0],
-  name: string,
-  afterMs: number,
-  untilMs: number,
-): number | undefined {
-  const ts = channelEffectTimes(unit, name, afterMs, untilMs, true);
-  return ts.length ? Math.min(...ts) : undefined;
 }
 
 /** The instants of `lastChannelEffectMs`' rows in (`afterMs`, `untilMs`]. */

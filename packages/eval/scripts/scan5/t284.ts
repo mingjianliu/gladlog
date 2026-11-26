@@ -11,8 +11,7 @@
  *    channel), its own effect rows (damage / heal / miss under the
  *    channel's English name, by the caster, from its own millisecond,
  *    before its next press of the same spell and within 15 s) all after
- *    the press, sustained: first to last, and the last past the press, more
- *    than `CHANNEL_PRESS_IN_FLIGHT_MS`. Checked = presses with an ending press before
+ *    the press. Checked = presses with an ending press before
  *    their last effect row. Kind = the spell.
  *  - `pressLastsTriggerWindow` (audit 04 D2): a `[PRESS]` line's `lasts`
  *    (`extractOffListPresses` → `durationSeconds` / `durationAura`) read
@@ -34,12 +33,10 @@ import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
-import {
-  CHANNEL_PRESS_IN_FLIGHT_MS,
-  nextPressEndingChannelMs,
-} from "@gladlog/analysis/src/utils/castCommitSpans";
+import { nextPressEndingChannelMs } from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
   extractOffListPresses,
+  pressAuraCandidates,
   pressEffectHandoffRow,
 } from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -104,13 +101,8 @@ function channels(ctx: IRoundCtx): void {
       const last = Math.max(...fx);
       if (last <= p) continue;
       ctx.bump("channelEndedBeforeItsBolts");
-      const after = fx.filter((t) => t > p);
-      if (
-        first <= p ||
-        Math.max(...after) - Math.min(...after) <= CHANNEL_PRESS_IN_FLIGHT_MS ||
-        last - p <= CHANNEL_PRESS_IN_FLIGHT_MS
-      )
-        continue;
+      // nothing of it at the press, rows of it after it: the channel ran on
+      if (first <= p) continue;
       const by = [
         ...(u.spellCastEvents ?? []),
         ...(u.castStartEvents ?? []),
@@ -168,6 +160,19 @@ function presses(ctx: IRoundCtx): void {
     const nextPress = successesOf(caster).find(
       (c: any) => String(c.spellId) === p.spellId && tsOf(c) > tsOf(row),
     );
+    const cast = successesOf(caster).find(
+      (c: any) =>
+        String(c.spellId) === p.spellId &&
+        Math.abs(tsOf(c) - (ctx.start + p.timeSeconds * 1000)) < 0.5,
+    );
+    const copies = cast
+      ? pressAuraCandidates(
+          caster,
+          cast,
+          units,
+          nextPress ? tsOf(nextPress) : Infinity,
+        )
+      : [];
     const handoff = pressEffectHandoffRow(
       caster,
       holder,
@@ -178,6 +183,7 @@ function presses(ctx: IRoundCtx): void {
         nextPress ? tsOf(nextPress) : Infinity,
         roundEndMs(ctx.legacy) + 1,
       ),
+      copies,
     );
     if (!handoff) continue;
     const name = getEnglishSpellName(p.spellId, "");
