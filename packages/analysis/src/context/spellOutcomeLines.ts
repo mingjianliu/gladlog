@@ -16,7 +16,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { binarySearchClosest } from "../utils/binarySearch";
-import { breakingHitOnHolder } from "../utils/brokenRowBreaker";
+import { BREAKING_HIT_LOOKBACK_MS } from "../utils/brokenRowBreaker";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import { isControlSpell, isCountedReflectRow } from "../utils/castMissRows";
 import { ccLandingStateAt, ccRemainingSeconds } from "../utils/ccBreakAnalysis";
@@ -378,13 +378,13 @@ export function netherWardPressedSpells(
  * and Pyroblast reflected 119 ms apart, the first 178k return broke
  * Earthgrab "by Fireball"; the nearest REFLECT row, Pyroblast's, took both
  * returns: 357k on the Pyroblast line, no Fireball line). A breaker some
- * other hit of that spell on the caster explains (`breakingHitOnHolder`:
- * another mage's Frostbolt in that millisecond) names nothing here — the
- * return logs under 23920, never under the spell (codex 85-tk-L6-T285-1
- * #1). Shared by `reflectedSpells` and corpusFactScan `reflectReturn`.
+ * other hit explains names nothing here — a row sourced to a third party,
+ * or a hit of that spell on the caster within `BREAKING_HIT_LOOKBACK_MS`
+ * (another mage's Frostbolt in that millisecond): the return logs under
+ * 23920, never under the spell (codex 85-tk-L6-T285-1 #1, -2). Shared by `reflectedSpells` and corpusFactScan `reflectReturn`.
  */
 export function spellReflectionNamedSpells(
-  caster: Pick<ICombatUnit, "absorbsIn" | "auraEvents" | "damageIn"> &
+  caster: Pick<ICombatUnit, "id" | "absorbsIn" | "auraEvents" | "damageIn"> &
     Partial<Pick<ICombatUnit, "missesIn">>,
   reflectorId: string | undefined,
   ts: number,
@@ -396,7 +396,29 @@ export function spellReflectionNamedSpells(
       e.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
       const breaker = String(e.logLine.parameters?.[11] ?? "");
-      if (breaker && !breakingHitOnHolder(caster, e)) out.add(breaker);
+      if (!breaker) continue;
+      // the row's source is the caster (as in the ticket's row), the
+      // reflector or none — a third party is that party's break (codex -2)
+      const src = e.srcUnitId;
+      if (src && !/^0+$/.test(src) && src !== caster.id && src !== reflectorId)
+        continue;
+      // and no hit of that spell on the caster in reach of the row, in
+      // whatever log order (an unindexed parse cannot order them)
+      const near = (rowMs: number) =>
+        rowMs >= ts - BREAKING_HIT_LOOKBACK_MS && rowMs <= ts;
+      if (
+        (caster.damageIn ?? []).some(
+          (d) => d.spellId === breaker && near(d.logLine.timestamp),
+        ) ||
+        (caster.missesIn ?? []).some(
+          (m) =>
+            m.missType === "ABSORB" &&
+            m.spellId === breaker &&
+            near(m.logLine.timestamp),
+        )
+      )
+        continue;
+      out.add(breaker);
     }
   return out;
 }

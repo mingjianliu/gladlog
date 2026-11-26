@@ -296,6 +296,34 @@ describe("reflectedSpells (0051f0c9)", () => {
     expect(by(reflectedSpells([frost, unit("Player-W")], T0))).toEqual({
       "11366": 178_109,
     });
+    // codex -2: the same hit in the row's own millisecond with no line
+    // order, and a break sourced to the second mage with no hit row at all
+    const sameMs = unit("Player-P", {
+      missesOut: [reflect("116", 4_900), reflect("11366", 5_033)],
+      damageIn: [
+        back(178_109, 5_338),
+        {
+          spellId: "116",
+          srcUnitId: "Player-M2",
+          effectiveAmount: -30_000,
+          logLine: at(5_338),
+        },
+      ],
+      auraEvents: [broken("116", 5_338)],
+      advancedActions: advanced(900_000),
+    });
+    expect(by(reflectedSpells([sameMs, unit("Player-W")], T0))).toEqual({
+      "11366": 178_109,
+    });
+    const thirdParty = unit("Player-P", {
+      missesOut: [reflect("116", 4_900), reflect("11366", 5_033)],
+      damageIn: [back(178_109, 5_338)],
+      auraEvents: [{ ...broken("116", 5_338), srcUnitId: "Player-M2" }],
+      advancedActions: advanced(900_000),
+    });
+    expect(by(reflectedSpells([thirdParty, unit("Player-W")], T0))).toEqual({
+      "11366": 178_109,
+    });
     // codex -1 #2: a named chain past the direct-return window (its last
     // REFLECT row 3,050 ms before the row) is not preferred — the gate does
     // not see it
