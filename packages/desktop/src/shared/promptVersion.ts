@@ -1959,11 +1959,12 @@
  *  the press). A re-listed proc aura is up only within its life.
  *  See docs/prompt-version-history.md.
  *
- * v672 (2026-11-26; pipeline batch B216, T194): A kick whose target used
- *  Shadowmeld / Feign Death / Transfer on the kicker's side inside the cast
- *  bar, with no logged stop, reads "hit nothing" instead of "JUKED by fake
- *  X" (a logged stop still decides by its instant, 300 ms tolerance); Touch
- *  of Karma stacks print once, freeing the cap's slots the duplicates held;
- *  Cheetah is 16 s. See docs/prompt-version-history.md.
+ * v672 (2026-11-26; pipeline batch B216, T194): A kick into a bar with
+ *  no logged stop, inside which a player on the kicker's side used
+ *  Shadowmeld / Feign Death / Transfer, reads "hit nothing" instead of
+ *  "JUKED by fake X" (a logged stop is read at the stop: ±300 ms for what
+ *  sits at it, at most 300 ms after the interrupt); Touch of Karma stacks
+ *  print once, freeing the cap's slots the duplicates held; Cheetah is
+ *  16 s. See docs/prompt-version-history.md.
  */
 export const PROMPT_VERSION = 672;
