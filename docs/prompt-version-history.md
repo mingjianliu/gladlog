@@ -8740,15 +8740,21 @@ noPressButPressed reads the producer's event behind each line (procOwned): 605
 9 / 2,283 -> 9 / 2,292, 1215 0 / 1,671 -> 0 / 1,677 (the new lines checked,
 none flagged).
 
-v672 (pipeline batch B214, T194): four fact defects from the T194 count-first
-bundle. A kick whose target's Shadowmeld / Feign Death / Transfer is logged on
-the kicker's side inside the cast bar reads "hit nothing", not "JUKED by fake
-X"; a stop logged after the kick is no fake it was sent into, and the stop
-bound counts whole ms from the interrupt's own instant (a commanded pet's
-interrupt from its own cast). Touch of Karma stacks print once (they printed
-twice) and keep the absorb-row id's price; stacks the cap of 2 crowded out now
-print. Cheetah reads 16 s, not 12 s. Measured by the lane on c711793af vs
-79ed92ca4 (605 | 1215): [KICK] JUKED -> hit nothing 7 | 8; Karma double prints
-11 | 26 -> 0, none lost, 4 | 2 crowded-out stacks added; Cheetah 12 s rows 32
--> 0 (605 only); nothing rose, gates identical. Stack check on 2df0d5a07: see
-the B214 artifacts.
+v672 (pipeline batch B216, T194; first assembled as B214): four fact defects
+from the T194 count-first bundle. A kick into a cast bar inside which the
+target's Shadowmeld / Feign Death / Transfer is logged on the kicker's side
+reads "hit nothing", not "JUKED by fake X", when the bar has no logged stop. A
+bar with a logged stop is decided by the stop's instant, not by the drop: a stop
+before the kick, or at most 300 ms after it (whole ms from the interrupt's own
+instant; a commanded pet's interrupt from its own cast), is still a juke even
+when the drop came earlier in the bar; a drop at the stop's instant, or a stop
+more than 300 ms after the kick, is a miss ("hit nothing"). Touch of Karma
+stacks print once (they printed twice) and keep the absorb-row id's price; the
+cap of 2 stacks still applies, and the slots the duplicate Karma rows held now
+go to other stacks. Cheetah reads 16 s, not 12 s. Measured by the lane on
+c711793af vs 79ed92ca4 (605 | 1215): [KICK] JUKED -> hit nothing 7 | 8; Karma
+double prints 11 | 26 -> 0, none lost, 4 | 2 stacks the duplicates had crowded
+out added; Cheetah 12 s rows 32 -> 0 (605 only); no in-total violation kind rose
+(605 inventory cheetahFoxPress / agrees 4 -> 36, the corrected rows moving into
+it), gates identical. Stack check on 2df0d5a07: identical rendered diffs, same
+scan movement, gates diff 0 (B214 artifacts).
