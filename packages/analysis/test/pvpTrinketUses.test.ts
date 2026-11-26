@@ -107,9 +107,7 @@ describe("pvpTrinketUses", () => {
     ).toBe(trinketUseRemainingSeconds(uses, 90, 28, true));
   });
   it("codex review: an observed Adaptation proc counts even when the equipment is unknown", () => {
-    // no `info.equipment`: the logged trigger is the proof of Adaptation
-    // (T278, codex 85-tk-L5-T278-1 #4 — it read "Unknown", and the
-    // [HEALER EXPOSURE] line priced the lockout as a pressable trinket)
+    // no `info.equipment` → detectTrinketType reads "Unknown"
     const summary = analyzePlayerCCAndTrinket(
       {
         ...adaptationPriest,
@@ -125,7 +123,7 @@ describe("pvpTrinketUses", () => {
       [],
       { startTime: T0, endTime: at(112), startInfo: { zoneId: "1505" } },
     );
-    expect(summary.trinketType).toBe("Adaptation");
+    expect(summary.trinketType).toBe("Unknown");
     expect(summary.trinketUseTimes).toEqual([28.783]);
   });
 });

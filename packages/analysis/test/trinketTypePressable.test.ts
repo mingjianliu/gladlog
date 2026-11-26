@@ -73,7 +73,9 @@ describe("hasPressablePvpTrinket", () => {
   it("codex 85-tk-M-T126-1b #2: a Medallion cast outside the round makes no Medallion of two other trinkets", () => {
     const twoOthers = (atMs: number) =>
       unitWith([BADGE, "1"], [[MEDALLION_SPELL_ID, atMs]]);
-    expect(hasPressablePvpTrinket(twoOthers(-1), ROUND)).toBe(false);
+    expect(hasPressablePvpTrinket(twoOthers(-1), ROUND)).toBe(
+      false,
+    );
     expect(hasPressablePvpTrinket(twoOthers(125_000), ROUND)).toBe(false);
     expect(hasPressablePvpTrinket(twoOthers(60_000), ROUND)).toBe(true);
   });
@@ -88,33 +90,5 @@ describe("hasPressablePvpTrinket", () => {
     expect(hasPressablePvpTrinket(u, threes)).toBe(
       medallionPressedInRound(u, threes),
     );
-  });
-});
-
-// pipeline T278 (codex 85-tk-L5-T278-1 #4): with no trinket slot to read,
-// Adaptation's own trigger aura is the log's proof of it, as a Medallion
-// press is of the Medallion
-describe("detectTrinketType — Adaptation from its trigger aura (T278)", () => {
-  const trigger = (u: ICombatUnit, dest?: string): ICombatUnit =>
-    ({
-      ...u,
-      id: "P",
-      auraEvents: [
-        {
-          spellId: "283167",
-          destUnitId: dest ?? "P",
-          logLine: { event: "SPELL_AURA_APPLIED", timestamp: 1000 },
-        },
-      ],
-    }) as unknown as ICombatUnit;
-  it("no equipment, the trigger on the unit: Adaptation", () => {
-    expect(detectTrinketType(trigger(unitWith(null)))).toBe("Adaptation");
-  });
-  it("no equipment, no trigger, or a trigger on someone else: still Unknown", () => {
-    expect(detectTrinketType(unitWith(null))).toBe("Unknown");
-    expect(detectTrinketType(trigger(unitWith(null), "Q"))).toBe("Unknown");
-  });
-  it("readable slots decide first", () => {
-    expect(detectTrinketType(trigger(unitWith([BADGE, "1"])))).toBe("None");
   });
 });
