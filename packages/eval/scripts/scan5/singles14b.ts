@@ -82,6 +82,7 @@ import {
   claimLandingRow,
   EMPOWER_HOLD_ROW_MS,
   isAuraLandingEvent,
+  isGuardianRowOf,
   isTickStackRow,
   landedAfterWallRow,
   landedBeforeWallRow,
@@ -610,6 +611,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 d.destUnitId === target.id &&
                 ev(d) !== ABSORBED &&
                 !(ev(d) as string).startsWith("SPELL_PERIODIC") &&
+                !isGuardianRowOf(caster.id, d.srcUnitId) &&
                 same(d.spellId, d.spellName),
             )
             .map((d) => ({
@@ -678,11 +680,11 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             continue;
           if (
             matched &&
-            row!.immune &&
+            claim!.refusedOutright &&
             refusedByAnotherAura(
               wallAuraId,
               row!.spellId ?? String(rowsOfSpell[0]?.spellId ?? ""),
-              row!,
+              { immune: true },
               aurasRefusingSpellAt(
                 target,
                 ctx.units,

@@ -16,6 +16,7 @@ import {
   aurasRefusingSpellAt,
   claimLandingRow,
   isAuraLandingEvent,
+  isGuardianRowOf,
   isTickStackRow,
   landedAfterWallRow,
   landedBeforeWallRow,
@@ -221,61 +222,57 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       ),
     ).toBe(false);
   });
-  it("the cursor: a hit after another press of the spell is that press's", () => {
-    // presses 10.900 and 12.030; refusal 12.000, hit 12.070 — -4 #1
-    const rows = [
-      { atMs: 12_000, hit: false, immune: true as const },
-      { atMs: 12_070, hit: true },
-    ];
+  it("the cursor: one row per press, in order (the base's)", () => {
     const at = (r: { atMs: number }) => r.atMs;
-    expect(claimLandingRow(rows, 0, at, 10_900, [10_900, 12_030])).toEqual({
-      landing: 0,
-      cursor: 1,
-    });
-    expect(claimLandingRow(rows, 0, at, 10_900, [10_900])).toEqual({
-      landing: 1,
-      cursor: 2,
-    });
-    // the press's own success row logged between its refusal and its hit
-    // (b3dea9f6: Rake) is no later press — -5 #1
-    expect(claimLandingRow(rows, 0, at, 12_030, [12_030])).toEqual({
-      landing: 1,
-      cursor: 2,
-    });
-  });
-  it("the cursor: a later press already in flight owns the hit beside an earlier press's miss", () => {
-    // Throw Glaives at 17.400 and 17.840; dodge 18.050, hit 18.070 — -11 #1
+    // two Throw Glaives in flight, the first dodged, the second hit (-11 #1)
     const rows = [
       { atMs: 18_050, hit: false },
       { atMs: 18_070, hit: true },
     ];
-    expect(
-      claimLandingRow(rows, 0, (r) => r.atMs, 17_400, [17_400, 17_840]),
-    ).toEqual({ landing: 0, cursor: 1 });
-  });
-  it("the cursor: an aura row with a hit beside it landed at the hit", () => {
-    // Wildfire Bomb's aura refreshed 12 ms before its hit — -10 #1
-    const rows = [
-      { atMs: 139_058, hit: false },
-      { atMs: 139_070, hit: true },
-    ];
-    expect(claimLandingRow(rows, 0, (r) => r.atMs, 139_000, [139_000])).toEqual(
-      { landing: 1, cursor: 2 },
-    );
-  });
-  it("the cursor: a hit takes the refusal of its own millisecond with it", () => {
-    // Rake damage and stun refusal both at 12.050, damage first — -4 #5
-    const rows = [
-      { atMs: 12_050, hit: true },
-      { atMs: 12_050, hit: false, immune: true as const },
-      { atMs: 12_180, hit: true },
-    ];
-    expect(
-      claimLandingRow(rows, 0, (r) => r.atMs, 12_000, [12_000, 12_010]),
-    ).toEqual({
+    expect(claimLandingRow(rows, 0, at, 17_400, [17_400, 17_840])).toEqual({
       landing: 0,
-      cursor: 2,
+      cursor: 1,
+      refusedOutright: false,
     });
+    expect(claimLandingRow(rows, 1, at, 17_840, [17_400, 17_840])).toEqual({
+      landing: 1,
+      cursor: 2,
+      refusedOutright: false,
+    });
+  });
+  it("refused outright: an IMMUNE with no hit of the spell until the next press", () => {
+    const at = (r: { atMs: number }) => r.atMs;
+    const refusal = { atMs: 93_750, hit: false, immune: true as const };
+    // Takedown: Nature component refused, physical hit 520 ms later (-12 #1)
+    expect(
+      claimLandingRow(
+        [refusal, { atMs: 94_270, hit: true }],
+        0,
+        at,
+        93_700,
+        [93_700],
+      ).refusedOutright,
+    ).toBe(false);
+    // the hit is the next press's: refused outright
+    expect(
+      claimLandingRow(
+        [refusal, { atMs: 94_270, hit: true }],
+        0,
+        at,
+        93_700,
+        [93_700, 94_000],
+      ).refusedOutright,
+    ).toBe(true);
+    // nothing within REFLECT_ROW_LAG_MS: refused outright
+    expect(
+      claimLandingRow(
+        [refusal, { atMs: 95_300, hit: true }],
+        0,
+        at,
+        93_700,
+        [93_700],
+      ).refusedOutright,
+    ).toBe(true);
   });
   it("a school-limited immunity wall gives up a refusal only another aura explains", () => {
     // Blessing of Spellwarding 204018 and Icebound Fortitude 48792 up,
@@ -399,8 +396,8 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
       } as never,
       [],
     ).get(press)!;
-  it("the stun's IMMUNE with the damage 16 ms later: the press landed, at the damage row", () => {
-    expect(landing(12_066)).toMatchObject({ atMs: 12_066, hit: true });
+  it("the stun's IMMUNE with the damage 16 ms later: the press landed (no outright refusal)", () => {
+    expect(landing(12_066)).toMatchObject({ atMs: 12_050, hit: false });
     expect(landing(12_066).immune).toBeUndefined();
   });
   it("the hit row beside a refusal is taken once: a second press does not land on it", () => {
@@ -432,9 +429,8 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
       } as never,
       [],
     );
-    // the second press went off before the hit, so the hit may be its own
-    // (-11 #1): the first lands at its refusal, the second at the hit, and
-    // no row is taken twice
+    // one row per press: the first lands at its refusal, the second at the
+    // hit, and no row is taken twice
     expect(got.get(press)).toMatchObject({ atMs: 12_050, hit: false });
     expect(got.get(second)).toMatchObject({ atMs: 12_066, hit: true });
   });
@@ -454,12 +450,19 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
       landedAfterWallRow({ atMs: 109_045, lineIndex: 1891 }, undefined),
     ).toBe(false);
   });
+  it("a guardian's row is no landing of its owner's press; a pet's is", () => {
+    expect(isGuardianRowOf("Player-1", "Creature-0-1-2-3-4-5")).toBe(true);
+    expect(isGuardianRowOf("Player-1", "Pet-0-1-2-3-4-5")).toBe(false);
+    expect(isGuardianRowOf("Player-1", "Player-1")).toBe(false);
+    expect(isGuardianRowOf("Player-1", undefined)).toBe(false);
+  });
   it("a stack added is a landing row", () => {
     expect(isAuraLandingEvent(LogEvent.SPELL_AURA_APPLIED_DOSE)).toBe(true);
     expect(isAuraLandingEvent(LogEvent.SPELL_AURA_REMOVED)).toBe(false);
   });
-  it("the IMMUNE alone, or with a hit a second later: refused outright", () => {
+  it("the IMMUNE alone, or a hit only past REFLECT_ROW_LAG_MS: refused outright", () => {
     expect(landing(null).immune).toBe(true);
-    expect(landing(13_100).immune).toBe(true);
+    expect(landing(13_100).immune).toBeUndefined();
+    expect(landing(13_600).immune).toBe(true);
   });
 });

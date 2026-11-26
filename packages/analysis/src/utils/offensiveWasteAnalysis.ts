@@ -21,7 +21,7 @@ import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { isHardCcAura } from "./cannotCastIntervals";
 import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
-import { isControlCast, PRESS_LANDED_SAME_INSTANT_MS } from "./castMissRows";
+import { isControlCast } from "./castMissRows";
 import {
   COMPANION_CAST_ROW_MS,
   isNoPressRow,
@@ -657,6 +657,20 @@ export function pressLandingsMs<T extends LandingPress>(
   return landed;
 }
 
+/** A row the owner's `damageOut` carries from a guardian (a Dryad, a
+ * Treant): its source is a creature, not the caster nor a pet ("Pet-"). Its same-named spell
+ * is no landing of the press — a Dryad's Starsurge hit 3 rows before the
+ * Ironbark the druid's own Starsurge landed in (2c8867a8 r2, codex
+ * 85-tk-L6-T281-12 #2). A pet's hit (Kill Command 83381) stays. */
+export function isGuardianRowOf(
+  casterId: string,
+  srcUnitId: string | undefined,
+): boolean {
+  return (
+    !!srcUnitId && srcUnitId !== casterId && srcUnitId.startsWith("Creature-")
+  );
+}
+
 /** The caster as `pressLandingRows` reads it, with its pets' misses: a pet's
  * hits are merged into its owner's `damageOut`, its misses are not, and a
  * press can land as the pet's row alone (Kill Command 34026, the pet's 83381,
@@ -690,9 +704,8 @@ export interface IPressLanding {
   /** the landing row's line in the log, when the row carries one */
   lineIndex?: number;
   /** the press was refused outright: its landing row is an IMMUNE and no
-   * hit of the press is logged on that unit in that row's instant
-   * (`PRESS_LANDED_SAME_INSTANT_MS` — Rake's stun 163505 IMMUNE and its
-   * damage 16 ms later are one press that landed) */
+   * hit of the spell is logged on that unit until its next press
+   * (`claimLandingRow`) */
   immune?: true;
 }
 
@@ -883,18 +896,19 @@ export function refusedByAnotherAura(
 }
 
 /**
- * Pipeline T281: which of a press's rows is its landing, and where the next
- * press of the spell starts reading. `rows` are the spell's rows on the
- * target in time order, `next` the first one this press can own.
- *  - a row that is no hit (a refusal, the press's aura row, a miss) with a
- *    hit beside it (`PRESS_LANDED_SAME_INSTANT_MS`) landed
- *    at the hit (Rake's stun 163505 IMMUNE, its damage 16 ms later), unless
- *    a later press of the spell went off between the two — the hit is that
- *    one's; both rows are consumed;
- *  - a hit takes the other rows of its own millisecond with it (a hit sorts
- *    before them).
- * One cursor for the section (`pressLandingRows`) and its gate (scan5
- * `singles14b`) — codex 85-tk-L6-T281-3 #1, -4 #1, #5.
+ * Pipeline T281: a press's landing and where the next press of the spell
+ * starts reading — one row per press, in order, as before the ticket — and
+ * whether the press was refused outright: its landing row an IMMUNE and no
+ * hit of the spell on that target from the press until the next press of
+ * the spell, or `REFLECT_ROW_LAG_MS` after it. A press with a hit in that
+ * span landed, at least in part (Rake's stun 163505 IMMUNE and its damage
+ * 16 ms later; Takedown's Nature component refused under Spellwarding and
+ * its physical hit 520 ms later — 966e13d9 r1, codex 85-tk-L6-T281-12 #1),
+ * and stays the wall's. The cursor itself is the base's: twelve rounds of
+ * review found that moving the landing to a hit beside it gave one row to
+ * two presses or a press another's projectile (codex -3 #1, -4 #1 #5, -11
+ * #1, -12 #3 #4). One function for the section (`pressLandingRows`) and its
+ * gate (scan5 `singles14b`).
  */
 export function claimLandingRow<
   R extends { hit: boolean; immune?: true | undefined },
@@ -905,35 +919,17 @@ export function claimLandingRow<
   /** this press, and every press of the spell on the target */
   pressMs: number,
   pressTimesMs: readonly number[],
-): { landing: number; cursor: number } {
+): { landing: number; cursor: number; refusedOutright: boolean } {
   const row = rows[next]!;
-  const at = atOf(row);
-  // a row that is no hit — a refusal, the press's aura going on, a miss —
-  // with a hit of the press beside it landed at the hit (Wildfire Bomb's
-  // aura refreshed 12 ms before its 83k hit: 69372d87 r4, codex
-  // 85-tk-L6-T281-10 #1)
-  if (!row.hit) {
-    const beside = rows.findIndex(
-      (o, k) =>
-        k > next &&
-        o.hit &&
-        atOf(o) - at <= PRESS_LANDED_SAME_INSTANT_MS &&
-        // …and no LATER press than this one went off by the hit: its own
-        // projectile can be the hit (two Throw Glaives 440 ms apart, the
-        // first dodged 20 ms before the second hit — codex 85-tk-L6-T281-11
-        // #1). This press's own success row can be logged after its refusal
-        // and is no later press (b3dea9f6: Rake's stun refused 12.606, its
-        // success and damage 12.622 — -5 #1).
-        !pressTimesMs.some((p) => p > pressMs && p <= atOf(o)),
+  const nextPress = pressTimesMs.find((p) => p > pressMs);
+  const until = Math.min(nextPress ?? Infinity, pressMs + REFLECT_ROW_LAG_MS);
+  const refusedOutright =
+    row.immune === true &&
+    !rows.some(
+      (o) =>
+        o.hit && atOf(o) >= pressMs - PRESS_EFFECT_LEAD_MS && atOf(o) <= until,
     );
-    return beside >= 0
-      ? { landing: beside, cursor: beside + 1 }
-      : { landing: next, cursor: next + 1 };
-  }
-  let cursor = next + 1;
-  while (rows[cursor] && !rows[cursor]!.hit && atOf(rows[cursor]!) === at)
-    cursor++;
-  return { landing: next, cursor };
+  return { landing: next, cursor: next + 1, refusedOutright };
 }
 
 /** Did this landing go THROUGH the defensive `auraId` — a damage row of the
@@ -1014,6 +1010,7 @@ export function pressLandingRows<T extends LandingPress>(
   for (const d of caster.damageOut) {
     const event = d.logLine?.event as string | undefined;
     if (event === LogEvent.SPELL_ABSORBED) continue;
+    if (isGuardianRowOf(caster.id, d.srcUnitId)) continue;
     if (event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
     add(
       d.destUnitId,
@@ -1101,7 +1098,11 @@ export function pressLandingRows<T extends LandingPress>(
         atMs,
         pressTimesByKey.get(key) ?? [],
       );
-      landed.set(press, rows[claim.landing]!);
+      const { immune: _immune, ...landing } = rows[claim.landing]!;
+      landed.set(
+        press,
+        claim.refusedOutright ? { ...landing, immune: true } : landing,
+      );
       next = claim.cursor;
     } else {
       // no row of its own: it lands at its press, in the log's order (an
