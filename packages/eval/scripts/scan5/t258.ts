@@ -15,8 +15,10 @@
  *    response list. Kind `not in the response list` is the failure; the
  *    presses that are in it are counted by whether the schools the shell
  *    covers (`saveSchoolMask`) are at least `SCHOOL_SAVE_MIN_SHARE` of the
- *    damage the pressured unit took in the span (inventory: the ruling set
- *    no school gate). Counted: every such press in a window.
+ *    damage the pressured unit took in the span, landed and absorbed, by
+ *    the save candidates' own reader (`incomingPressureBySchool`;
+ *    inventory: the ruling set no school gate). Counted: every such press
+ *    in a window.
  *  - `preWallBeforeOpenerMs` (R113): no response of a window was pressed
  *    more than `BURST_RESPONSE_PRE_MS` before the opener's own
  *    millisecond. A landed control is left out: it answers by its landing
@@ -48,7 +50,6 @@ import {
   saveSchoolMask,
   SCHOOL_SAVE_MIN_SHARE,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import { isEffectHolderUnit } from "@gladlog/analysis/src/utils/effectHolder";
 import {
@@ -57,12 +58,17 @@ import {
   reconstructEnemyCDTimeline,
 } from "@gladlog/analysis/src/utils/enemyCDs";
 import {
+  documentRecordsAttackSpell,
+  incomingPressureBySchool,
+} from "@gladlog/analysis/src/utils/incomingPressure";
+import { buildRosterSides } from "@gladlog/analysis/src/utils/rosterSide";
+import {
   AURA_NATURAL_END_JITTER_S,
   DEATH_CASCADE_MS,
   firstDeathMs,
 } from "@gladlog/analysis/src/utils/unitDeath";
 
-import { ev, type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
+import { type IRoundCtx, nameOf, successesOf, tsOf } from "./ctx";
 
 export const CHECKS = [
   "amsInBurstWindow",
@@ -87,15 +93,6 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ...PET_KINDS.map((k) => `petCopyKeepsEffectAfterDeath|${k}`),
 ]);
 
-const PHYS = 1;
-function rowSchool(r: any): number | undefined {
-  const e = ev(r);
-  if (e === "SWING_DAMAGE" || e === "SWING_DAMAGE_LANDED") return PHYS;
-  const p = r.logLine?.parameters?.[10];
-  if (typeof p === "string" && /^0x/i.test(p)) return parseInt(p, 16);
-  return spellSchoolMask(String(r.spellId));
-}
-
 const MENU_ROW = /id=slow-defensive-response:\S+?:(\d+) type=/g;
 
 export function run(ctx: IRoundCtx): void {
@@ -113,6 +110,11 @@ export function run(ctx: IRoundCtx): void {
   const friendlies = (ctx.players as any[]).filter(
     (u) => u.reaction === owner.reaction,
   );
+  let sides_: ReturnType<typeof buildRosterSides> | undefined;
+  const sides = () => (sides_ ??= buildRosterSides(ctx.units as any[]));
+  let records_: boolean | undefined;
+  const recordsAttackSpell = () =>
+    (records_ ??= documentRecordsAttackSpell(ctx.units as any[]));
   // one shell, two ids: both carry the same DB2 absorb mask
   const amsMask = saveSchoolMask([...ANTI_MAGIC_SHELL_ANSWER_IDS][0]!) ?? 0x7e;
   for (const p of points) {
@@ -135,18 +137,26 @@ export function run(ctx: IRoundCtx): void {
           (f.id === pr.unitId && selfCast) || dest === pr.unitId;
         if (!forPressured) continue;
         ctx.bump("amsInBurstWindow");
+        // the damage on the pressured unit by school, landed and absorbed,
+        // the one reader the save candidates use (`incomingPressureBySchool`:
+        // a hit the shell itself absorbed counts, a deferred tick counts
+        // under the school it was thrown in; T300, codex 80-WSL-BW1-1 #2)
         let covered = 0;
         let total = 0;
-        for (const d of (prUnit?.damageIn ?? []) as any[]) {
-          const t = tsOf(d);
-          if (t < w0 || t > w1) continue;
-          const amount = Math.abs(Number(d.effectiveAmount ?? d.amount ?? 0));
-          if (!(amount > 0)) continue;
-          total += amount;
-          const s = rowSchool(d);
-          if (s !== undefined && s !== 0 && (s & ~amsMask) === 0)
-            covered += amount;
-        }
+        if (prUnit)
+          for (const [k, amount] of Object.entries(
+            incomingPressureBySchool(
+              prUnit,
+              w0,
+              w1,
+              sides(),
+              recordsAttackSpell(),
+            ),
+          )) {
+            const s = Number(k);
+            total += amount;
+            if (s !== 0 && (s & ~amsMask) === 0) covered += amount;
+          }
         const inList = p.responseCasts.some(
           (r) => r.spellId === id && r.casterId === f.id,
         );

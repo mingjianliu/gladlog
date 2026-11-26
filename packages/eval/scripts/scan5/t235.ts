@@ -14,7 +14,11 @@
  *  - `breakWithExternalUnnamed`: a FAILED attempt of the owner's side whose
  *    `primary` is the trinket or a break and whose attribution holds at
  *    least one external, and whose printed line does not say `saved by
- *    external (`. Kind = trinketed / broke out. Non-zero on a capture taken
+ *    external (`. Kind = trinketed / broke out. Kind `names other externals`:
+ *    the line's clause is there, but the names it lists (each less its
+ *    `[up since m:ss]` mark) are not exactly the attempt's externals — one
+ *    left out, one added, or a clause where the attempt has none (T300,
+ *    codex 80-WSL-BW1-1 #4). Non-zero on a capture taken
  *    before rulings R98 + R115 landed, 0 on one taken with them. Counted: every FAILED
  *    attempt of the owner's side whose `primary` is the trinket or a break.
  *    An external that IS the immunity the line already names (Blessing of
@@ -35,10 +39,26 @@ export const CHECKS = [
 ] as const;
 const OWN_WALL = "a wall of the target's own beside the break";
 const IS_THE_IMMUNITY = "the external is the immunity the line names";
+const NAMES_DIFFER = "names other externals";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `breakWithExternalUnnamed|${IS_THE_IMMUNITY}`,
   `breakWithOwnWallUnnamed|${OWN_WALL}`,
 ]);
+
+/** The names of a FAILED text's `saved by external (…)` clause, or undefined
+ * when it has none. Beside a trinket or a break the clause closes the text
+ * and lists plain names joined by `/` (the producer's `externalClause` with
+ * `plainNames`), each perhaps marked `[up since m:ss]`. */
+export function printedExternalNames(failed: string): string[] | undefined {
+  const at = failed.indexOf("saved by external (");
+  if (at < 0) return undefined;
+  const body = failed.slice(at + "saved by external (".length);
+  const close = body.lastIndexOf(")");
+  return (close < 0 ? body : body.slice(0, close))
+    .split("/")
+    .map((n) => n.replace(/ \[up since \d+:\d{2}\]$/, "").trim())
+    .filter(Boolean);
+}
 
 const ATTEMPT =
   /^ {2}\[(\d+:\d{2})–(\d+:\d{2})\] on (\S+) — .*\| FAILED: (.*)$/;
@@ -82,16 +102,27 @@ export function run(ctx: IRoundCtx): void {
     const immunity = attr.immunityBaited ? (attr.immunityNames ?? []) : [];
     const externals = received.filter((n) => !immunity.includes(n));
     const detail = `${a.targetName} ${a.fromSeconds.toFixed(1)}–${a.toSeconds.toFixed(1)}s ${attr.primary}${attr.brokeOut?.length ? ` (${attr.brokeOut.join("/")})` : ""}${attr.immunityBaited ? " + immunity" : ""}; externals ${externals.join("/") || "-"}; own walls ${attr.defensivePopped.join("/") || "-"}`;
-    if (
-      externals.length > 0 &&
-      !(line?.failed ?? "").includes("saved by external (")
-    )
+    const named = printedExternalNames(line?.failed ?? "");
+    const sameNames =
+      named !== undefined &&
+      named.length === externals.length &&
+      [...named].sort().join("\n") === [...externals].sort().join("\n");
+    if (externals.length > 0 && named === undefined)
       ctx.violate(
         "breakWithExternalUnnamed",
         attr.primary === "trinketed" ? "trinketed out" : "broke out",
         ctx.start + a.fromSeconds * 1000,
         fact,
         detail,
+        line?.line,
+      );
+    else if (named !== undefined && !sameNames)
+      ctx.violate(
+        "breakWithExternalUnnamed",
+        NAMES_DIFFER,
+        ctx.start + a.fromSeconds * 1000,
+        fact,
+        `${detail}; printed ${named.join("/")}`,
         line?.line,
       );
     if (

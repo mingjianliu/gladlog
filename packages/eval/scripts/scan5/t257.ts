@@ -7,7 +7,7 @@
  * cap slots the other windows leave; no line is renamed or pushed out.
  *
  * THIS SCAN RE-RUNS THE ENGINE AND THE RENDERER: its numbers are the
- * checkout's. Which windows print, in which order and with which answer is
+ * checkout's; only `teamHealWallUnnamed` reads the capture. Which windows print, in which order and with which answer is
  * the producer's own `formatBurstAnsweredLines` (called with stand-in labels);
  * which of them are team-heal-wall credits is its `teamHealWallCredit`.
  *
@@ -16,10 +16,16 @@
  *    no `[BURST ANSWERED]` line at that second naming that spell. Non-zero
  *    on a capture taken before the fix, 0 on one taken with it. Kind = the
  *    spell. Counted: every such line of the checkout's renderer.
- *  - `creditLineRenamedOrDropped`: a `[BURST ANSWERED]` line of the capture
- *    that the checkout's renderer does not print at that second with that
- *    answer, that answering player and that time — "nothing renamed, nothing pushed out of the
- *    cap". 0 on both captures. Counted: every printed line.
+ *  - `creditLineRenamedOrDropped`: a line the checkout's renderer prints
+ *    WITHOUT the team-heal-wall fallback (the same engine output with every
+ *    window `teamHealWallCredit` names left out — those windows are never
+ *    otherwise creditable, so nothing else moves) that it does not print
+ *    WITH the fallback at that second with that answer, that answering
+ *    player and that time — "nothing renamed, nothing pushed out of the
+ *    cap". Both renders come from one engine run, so a change another
+ *    ticket makes to the engine (a T258 span) cannot read as a T257 drop
+ *    (T300, codex 80-WSL-BW1-1 #3). 0 by construction of the fix. Counted:
+ *    every line of the render without the fallback.
  *  - `teamHealWallPastCap`: inventory, never a failure — a window only a
  *    teammate's team-heal wall answers that the round's cap leaves out.
  *    Counted: every window with such a credit.
@@ -70,13 +76,26 @@ export function run(ctx: IRoundCtx): void {
   // clause as one (the capture's lines carry `5(RPaladin)` labels)
   const label = (n: string): string => `${ctx.pidOf(n) ?? "0"}(x)`;
   const labels = { friendly: label, enemy: label };
-  const rendered = formatBurstAnsweredLines(points, undefined, labels)
-    .filter((e) => !pastEnd(e.atSeconds))
-    .map((e) => ({
-      atSec: e.atSeconds,
-      answer: readPrintedAnswer(`${fmtTime(e.atSeconds)}  ${e.line}`),
-      wall: teamHealWallCredit(points.find((p) => p.tSec === e.atSeconds)!),
-    }));
+  const render = (pts: typeof points) =>
+    formatBurstAnsweredLines(pts, undefined, labels)
+      .filter((e) => !pastEnd(e.atSeconds))
+      .map((e) => {
+        const text = `${fmtTime(e.atSeconds)}  ${e.line}`;
+        return {
+          atSec: e.atSeconds,
+          text,
+          answer: readPrintedAnswer(text),
+          wall: teamHealWallCredit(pts.find((p) => p.tSec === e.atSeconds)!),
+        };
+      });
+  const rendered = render(points);
+  // the same engine output rendered without the R110 fallback: the windows
+  // only a team-heal wall answers left out (`teamHealWallCredit` is defined
+  // only where `creditedAnswer` is not, so no other window's door, rank or
+  // answer moves)
+  const withoutWall = render(
+    points.filter((p) => teamHealWallCredit(p) === undefined),
+  );
   const printed = ctx.lines
     .filter((l) => l.includes("[BURST ANSWERED]"))
     .map((l) => ({ line: l.trim(), answer: readPrintedAnswer(l) }))
@@ -102,9 +121,10 @@ export function run(ctx: IRoundCtx): void {
       `window at ${r.atSec}s: ${r.wall.casterName} ${r.wall.spellName} ${r.wall.latencySec}s is the window's only credit; the capture prints no line naming it`,
     );
   }
-  for (const x of printed) {
+  for (const w of withoutWall) {
+    if (!w.answer) continue;
     ctx.bump("creditLineRenamedOrDropped");
-    const a = x.answer!;
+    const a = w.answer;
     const same = rendered.find((r) => r.atSec === a.atSec);
     const kind = !same?.answer
       ? "the renderer prints no line at that second"
@@ -122,8 +142,8 @@ export function run(ctx: IRoundCtx): void {
       kind,
       ctx.start + a.atSec * 1000,
       fact(a.atSec),
-      `printed: ${a.spellName} ${a.latencySec}s; renderer: ${same?.answer ? `${same.answer.spellName} ${same.answer.latencySec}s` : "none"}`,
-      x.line,
+      `without the fallback: ${a.spellName} ${a.latencySec}s; with it: ${same?.answer ? `${same.answer.spellName} ${same.answer.latencySec}s` : "none"}`,
+      w.text,
     );
   }
   for (const p of points) {
