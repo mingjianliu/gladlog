@@ -1972,5 +1972,15 @@
  *  ("ended by your own Cheap Shot") instead of "no dispel logged" when the
  *  log shows a qualifying opener at the removal. See
  *  docs/prompt-version-history.md.
+ *
+ * v674 (2026-11-26; pipeline batch B255, WSL bundle W1: T225 T244 T235 T251
+ *  T258 T257 T190 T242): deferral shields named from one table (Refractive
+ *  Images); a teammate Mistweaver's Transcendence: Transfer gets its [PRESS]
+ *  line; a FAILED kill attempt that met a break names the external after it;
+ *  Anti-Magic Shell answers a burst as a wall and the response span opens at
+ *  the opener's own millisecond; team heal walls are named in [BURST
+ *  ANSWERED]; Defy Fate prints its cheat-death proc; [NO HEAL CAST] ignores
+ *  placeholder reach rows; more DB2 control auras are recognised. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 673;
+export const PROMPT_VERSION = 674;

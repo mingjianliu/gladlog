@@ -8788,3 +8788,48 @@ Eviscerate 3, Ambush 2, Kick 2, Gouge 2). Stack check b99904a02 vs e29e35df1
 (the code of 1a452ded8 and of this batch): 266 | 228 [BUFF FADED] lines changed
 and no other line; scan5 chargeSpentReadEarly / stealth taken by the holder's
 opener 265 | 227 -> 0, no violation kind rose, gates identical.
+
+v674 (pipeline batch B255, WSL bundle W1: T225 T244 T235 T251 T258 T257 T190
+T242, plus the eval-only T300; user ruling 2026-11-26: bundled. The assembly
+review codex 80-WSL-BW1-1 asked for changes: #1 is this version bump; #2-#4 are
+eval-only scan5 findings (t258 AMS school share, t257 attribution when stacked
+with T258, t235 external names), fixed in this batch by T300 (branch reviews
+85-tk-L2-T300-1 REQUEST_CHANGES, its 5 P3 findings fixed, then 85-tk-L2-T300-2
+APPROVE); an eval-only scan5/t258.ts presubmit fix was reviewed APPROVE in
+80-WSL-BW1-2; the T300 delta and this entry in 80-WSL-BW1-3 / -4). Per ticket, measured by its lane on its own base (605 | 1215):
+T225 — DB2 control auras gain possess 2, pacify-silence 60, AoE charm 177 and
+type 298 (ctrlAura ids 95 -> 114); scan5/t177 checked 64,381 | 55,599 ->
+66,524 | 57,363, violations 0 | 0 unchanged; no prompt line moved.
+T244 — a teammate Mistweaver's Transcendence: Transfer the save roster strips
+now prints its [PRESS] line: listGapPress listed/ally/noLine 71 | 162 -> 0 | 0.
+T235 (R98, R115) — a FAILED kill attempt that met a trinket or break names the
+external after it (`; saved by external (Y)`): breakWithExternalUnnamed 617 of
+5,048 | 576 of 4,689 -> 0 | 0.
+T251 — Refractive Images 1309497 / Refraction 1309786 join the deferral-shield
+table and the legends name it from that table: allyOverlapDeferral 171 | 167,
+killFocusOverSpan 47 | 42, nextSpikeNotNearest 37 | 11, channelTookBasis 14 |
+33 -> all 0.
+T258 (R112, R113, R114) — Anti-Magic Shell answers a burst as a wall and the
+response span opens at the opener's own millisecond: printedControlAnswerDiffers
+/ printedSummonControlAnswerDiffers / slowResponseRowDiffers -> 0 on both.
+T257 — team heal walls (Tree of Life, Spirit of Redemption, Ancient of Lore) are
+named in [BURST ANSWERED]: teamHealWallUnnamed 30 | 30 -> 0 | 0
+(creditLineRenamedOrDropped 0 of 4,349 | 3,948 on its own base; T300 makes it
+readable stacked with T258).
+T300 (eval-only) — scan5 t258 reads the shared incomingPressureBySchool share
+(the review's two AMS windows: 42% -> 63%, 49% -> 64%; no inventory category
+moves on the cover set); t257 compares the renderer with and without the
+team-heal-wall fallback on the same engine output (cross-tree false drops on the
+three W1 repro archives 9 of 51 -> 0 of 51; same-tree cover set 0 of 1,027 -> 0 of
+1,009); t235 compares the printed external names (0 of 5,048 | 4,689 unchanged).
+T190 — Defy Fate's cheat-death proc prints ([ENEMY DEF] / [TEAM] [PROC] / [YOU]
+[PROC]): cheatDeathProcNoLine 0 | 12 -> 0 | 0.
+T242 — [NO HEAL CAST] ignores range rows of 100 yd or more (placeholder reach):
+2 | 2 lines removed, none added.
+Bundle check (wsl2 BW-1-W1, 647c5b7b3 -> 6c4c7b33f, both sides on one machine):
+every changed tagged line kind matches the sum of the members' pair checks
+(T251's [YOU] [CD] 1402 | 711, [OFFENSIVE WINDOW], [RES], [STATE] and kill
+lines; T244's [PRESS] 71 | 162; T258 + T257's [BURST ANSWERED] +184/-146 |
++180/-159; T190's [ENEMY DEF] / [PROC]; menu rows T251 + T258 8/8 | 12/11);
+scan5 in-total violations 31,369 -> 30,131 | 35,863 -> 34,559, no violation kind
+rose, gates identical.
