@@ -277,6 +277,37 @@ describe("reflectedSpells (0051f0c9)", () => {
     expect(by(reflectedSpells([caster(false), unit("Player-W")], T0))).toEqual({
       "11366": 356_642,
     });
+    // codex -1 #1: a breaker another hit of that spell explains (a second
+    // mage's Frostbolt in that ms) names nothing — nearest again
+    const frost = unit("Player-P", {
+      missesOut: [reflect("116", 4_900), reflect("11366", 5_033)],
+      damageIn: [
+        back(178_109, 5_338),
+        {
+          spellId: "116",
+          srcUnitId: "Player-M2",
+          effectiveAmount: -30_000,
+          logLine: at(5_330),
+        },
+      ],
+      auraEvents: [broken("116", 5_338)],
+      advancedActions: advanced(900_000),
+    });
+    expect(by(reflectedSpells([frost, unit("Player-W")], T0))).toEqual({
+      "11366": 178_109,
+    });
+    // codex -1 #2: a named chain past the direct-return window (its last
+    // REFLECT row 3,050 ms before the row) is not preferred — the gate does
+    // not see it
+    const old = unit("Player-P", {
+      missesOut: [reflect("133", 2_288), reflect("11366", 2_407)],
+      damageIn: [back(178_109, 5_338)],
+      auraEvents: [broken("133", 5_338)],
+      advancedActions: advanced(900_000),
+    });
+    expect(by(reflectedSpells([old, unit("Player-W")], T0))).toEqual({
+      "11366": 178_109,
+    });
   });
   it("a scripted damage spell the profile misses (Fel Lance) owns the reflector's own-id return when its caster's hits of it are in the round", () => {
     const FEL_LANCE = "206966";

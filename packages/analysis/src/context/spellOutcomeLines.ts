@@ -16,6 +16,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { binarySearchClosest } from "../utils/binarySearch";
+import { breakingHitOnHolder } from "../utils/brokenRowBreaker";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import { isControlSpell, isCountedReflectRow } from "../utils/castMissRows";
 import { ccLandingStateAt, ccRemainingSeconds } from "../utils/ccBreakAnalysis";
@@ -376,11 +377,15 @@ export function netherWardPressedSpells(
  * root and the row names the reflected spell (41243fd2 r5 3:18.338: Fireball
  * and Pyroblast reflected 119 ms apart, the first 178k return broke
  * Earthgrab "by Fireball"; the nearest REFLECT row, Pyroblast's, took both
- * returns: 357k on the Pyroblast line, no Fireball line). Shared by
- * `reflectedSpells` and corpusFactScan `reflectReturn`.
+ * returns: 357k on the Pyroblast line, no Fireball line). A breaker some
+ * other hit of that spell on the caster explains (`breakingHitOnHolder`:
+ * another mage's Frostbolt in that millisecond) names nothing here — the
+ * return logs under 23920, never under the spell (codex 85-tk-L6-T285-1
+ * #1). Shared by `reflectedSpells` and corpusFactScan `reflectReturn`.
  */
 export function spellReflectionNamedSpells(
-  caster: Pick<ICombatUnit, "absorbsIn" | "auraEvents">,
+  caster: Pick<ICombatUnit, "absorbsIn" | "auraEvents" | "damageIn"> &
+    Partial<Pick<ICombatUnit, "missesIn">>,
   reflectorId: string | undefined,
   ts: number,
 ): Set<string> {
@@ -391,7 +396,7 @@ export function spellReflectionNamedSpells(
       e.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
       const breaker = String(e.logLine.parameters?.[11] ?? "");
-      if (breaker) out.add(breaker);
+      if (breaker && !breakingHitOnHolder(caster, e)) out.add(breaker);
     }
   return out;
 }
@@ -419,7 +424,11 @@ export function reflectChainNamed(
  * rows lead theirs), or for Nether Ward the chain holding the row it paired
  * with (`pairNetherWardReturns`). A Spell Reflection row whose millisecond
  * names a spell (`spellReflectionNamedSpells`) goes to a chain of that spell
- * — the nearest of them — before any other (T285; 605 | 1215, own-id rows
+ * — the nearest of them — before any other, if that chain is still one the
+ * row can come back from directly (its last REFLECT row at most
+ * `REFLECT_DIRECT_RETURN_MS` before it: the gate's candidate window, so the
+ * name never picks a chain the gate cannot see; codex 85-tk-L6-T285-1 #2)
+ * (T285; 605 | 1215, own-id rows
  * with two or more reflected spells in reach and one of them named: the
  * nearest row was the named one 25 of 26 | 23 of 36 times, one row per
  * REFLECT row in order 12 | 13, the latest free row behind it 24 | 17).
@@ -443,7 +452,10 @@ export function reflectOwnIdRowGap(
       ownId !== NETHER_WARD_ID &&
       named &&
       named.spells.size > 0 &&
-      !reflectChainNamed(named.chainIds, named.spells)
+      !(
+        reflectChainNamed(named.chainIds, named.spells) &&
+        ts <= Math.max(...rows) + REFLECT_DIRECT_RETURN_MS
+      )
     )
       return REFLECT_DAMAGE_WINDOW_S * 1000 + gap;
     return gap;
