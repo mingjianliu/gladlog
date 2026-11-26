@@ -54,6 +54,10 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
+import {
+  enemySourceIds,
+  spellPressBlockedAt,
+} from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -87,10 +91,8 @@ const minCd = Number(arg("--min-cd", "8"));
 /** a "not ready" refusal this soon after a cast of the unit's is its global
  * cooldown's, not the spell's (the longest unhasted GCD plus the row slack) */
 const REJECT_GCD_MS = 1600;
-/** a "not ready" refusal this soon after the unit was interrupted is its
- * school lockout's (the longest kick lockout; codex 85-tk-L6-T266-2 #2:
- * six Shadow Teleport refusals after a Skull Bash on Hand of Gul'dan) */
-const REJECT_LOCKOUT_MS = 6000;
+/** how long a cast with no closing row of its own counts as in progress */
+const CAST_IN_PROGRESS_MAX_MS = 10_000;
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
@@ -268,27 +270,19 @@ for (const f of files) {
     continue;
   }
   // unit GUID → spell id → ms of its "not ready" SPELL_CAST_FAILED rows
-  // (the recorder's only; `--spells` runs), and unit GUID → ms of the
-  // interrupts it took. Fields by the parser's own quote-aware split: a
-  // spell name with a comma ("Invoke Chi-Ji, the Red Crane") shifted every
-  // later field (codex 85-tk-L6-T266-2 #4).
+  // (the recorder's only; `--spells` runs). Fields by the parser's own
+  // quote-aware split: a spell name with a comma ("Invoke Chi-Ji, the Red
+  // Crane") shifted every later field (codex 85-tk-L6-T266-2 #4).
   const rejected = new Map<string, Map<string, number[]>>();
-  const interrupted = new Map<string, number[]>();
   for (const line of text.split("\n")) {
     parser.push(line);
     if (!onlySpells.size) continue;
-    const isFail = line.includes("SPELL_CAST_FAILED,");
-    if (!isFail && !line.includes("SPELL_INTERRUPT,")) continue;
+    if (!line.includes("SPELL_CAST_FAILED,")) continue;
     const split = splitRawLine(line.endsWith("\r") ? line.slice(0, -1) : line);
     if (!split) continue;
     const { datePart, eventName, params } = split;
     const at = parseRawTimestamp(datePart);
     if (at === null) continue;
-    if (eventName === "SPELL_INTERRUPT") {
-      const dest = params[4] ?? "";
-      interrupted.set(dest, [...(interrupted.get(dest) ?? []), at]);
-      continue;
-    }
     if (eventName !== "SPELL_CAST_FAILED") continue;
     // base units [0..7], spell id [8], the localized reason [11]
     const id = params[8] ?? "";
@@ -433,20 +427,60 @@ for (const f of files) {
             }
             modelImpossibleAt.push(Math.round(pt * 10) / 10);
           }
+          // what else the game can refuse a press for (codex
+          // 85-tk-L6-T266-3): the global cooldown of a cast of its own; a
+          // cast of its own in progress (Haunt refused during an Unstable
+          // Affliction cast, dca02448 r3); a control or a school lockout
+          // that stops the spell (`spellPressBlockedAt`: Teleport refused
+          // under a Rake stun, a5355113 r2; a kick lockout only for its
+          // school, not a blanket window — Dark Pact refused 0.7 s short of
+          // its cooldown 0.8 s after a Shadow kick, dca02448 r5); and a
+          // charge spell, whose refusal says nothing of one charge's return
+          // (Conflagrate refused with a charge spent, 41243fd2 r6)
           const ownCastMs: number[] = [];
-          for (const c of u.spellCastEvents ?? [])
+          const casting: Array<[number, number]> = [];
+          const ownRows = [...(u.spellCastEvents ?? [])].sort(
+            (a, b) => a.logLine.timestamp - b.logLine.timestamp,
+          );
+          for (const [k, c] of ownRows.entries()) {
             if (c.logLine.event === "SPELL_CAST_SUCCESS")
               ownCastMs.push(c.logLine.timestamp);
+            if (c.logLine.event !== "SPELL_CAST_START") continue;
+            const t0 = c.logLine.timestamp;
+            const close = ownRows
+              .slice(k + 1)
+              .find(
+                (o) =>
+                  String(o.spellId) === String(c.spellId) &&
+                  o.logLine.event !== "SPELL_CAST_START",
+              );
+            casting.push([
+              t0,
+              Math.min(
+                close ? close.logLine.timestamp : Infinity,
+                t0 + CAST_IN_PROGRESS_MAX_MS,
+              ),
+            ]);
+          }
+          const units = Object.values(legacy.units ?? {}) as any[];
+          const blockedAt = spellPressBlockedAt(
+            u,
+            enemySourceIds(
+              units.filter(
+                (o) => o.type === u.type && o.reaction !== u.reaction,
+              ),
+              units,
+            ),
+            units,
+            false,
+          );
           for (const ms of rejected.get(u.id)?.get(id) ?? []) {
+            if ((entry.charges ?? 1) > 1) break;
             if (ms < legacy.startTime || ms > endMs) continue;
             if (ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS))
               continue;
-            if (
-              (interrupted.get(u.id) ?? []).some(
-                (k) => k <= ms && ms - k < REJECT_LOCKOUT_MS,
-              )
-            )
-              continue;
+            if (casting.some(([a, b]) => a <= ms && ms < b)) continue;
+            if (blockedAt(id, ms)) continue;
             const rt = (ms - legacy.startTime) / 1000;
             const before = {
               ...entry,
