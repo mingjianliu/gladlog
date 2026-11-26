@@ -15,6 +15,7 @@ import {
 import {
   aurasRefusingSpellAt,
   claimLandingRow,
+  isAuraLandingEvent,
   landedBeforeWallRow,
   pressLandingRows,
   refusedByAnotherAura,
@@ -411,6 +412,10 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
     );
     expect(got.get(press)).toMatchObject({ atMs: 12_066, hit: true });
     expect(got.get(second)).toMatchObject({ atMs: 12_001, hit: false });
+  });
+  it("a stack added is a landing row", () => {
+    expect(isAuraLandingEvent(LogEvent.SPELL_AURA_APPLIED_DOSE)).toBe(true);
+    expect(isAuraLandingEvent(LogEvent.SPELL_AURA_REMOVED)).toBe(false);
   });
   it("the IMMUNE alone, or with a hit a second later: refused outright", () => {
     expect(landing(null).immune).toBe(true);

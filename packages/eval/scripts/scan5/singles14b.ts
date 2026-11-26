@@ -78,6 +78,7 @@ import {
   aurasRefusingSpellAt,
   claimLandingRow,
   EMPOWER_HOLD_ROW_MS,
+  isAuraLandingEvent,
   landedBeforeWallRow,
   landedThroughWall,
   pressLandingCaster,
@@ -93,7 +94,6 @@ import {
   ev,
   type IRoundCtx,
   nameOf,
-  REFRESH,
   REMOVED,
   secOf,
   successesOf,
@@ -601,7 +601,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             .filter(
               (a) =>
                 a.srcUnitId === caster.id &&
-                (ev(a) === APPLIED || ev(a) === REFRESH) &&
+                isAuraLandingEvent(ev(a)) &&
                 same(a.spellId, a.spellName),
             )
             .map((a) => ({
@@ -666,6 +666,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                   ),
                 row!.lineIndex,
               ) !== undefined,
+              target,
             )
           )
             continue;

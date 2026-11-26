@@ -524,6 +524,7 @@ export function buildOffensiveWasteSummary(
                       ),
                     landing.lineIndex,
                   ) !== undefined,
+                  window.unit,
                 )
               )
                 return false;
@@ -847,10 +848,12 @@ export function refusedByAnotherAura(
   landing: Pick<IPressLanding, "immune">,
   refusingAurasUp: readonly string[],
   immuneControlUp: boolean,
+  /** the wall's holder (`auraStopsSpell`) */
+  holder?: { info?: { pvpTalents?: string[] } | null },
 ): boolean {
   return (
     landing.immune === true &&
-    !auraStopsSpell(wallAuraId, spellId) &&
+    !auraStopsSpell(wallAuraId, spellId, holder) &&
     (immuneControlUp || refusingAurasUp.some((id) => id !== wallAuraId))
   );
 }
@@ -913,6 +916,20 @@ export function landedThroughWall(
   landing: Pick<IPressLanding, "hit">,
 ): boolean {
   return landing.hit && wallStopsEveryHit(auraId);
+}
+
+/** The aura rows a press lands as: its debuff applied, refreshed, or a
+ * stack added. Without the stack row a press that only added a stack had no
+ * landing of its own and an earlier press took the next refresh — Unstable
+ * Affliction's stack landed 1.07 s before Survival of the Fittest opened and
+ * the line counted three presses into it where two landed (872f275c r0;
+ * codex 85-tk-L6-T281-8). One test for the section and its gate. */
+export function isAuraLandingEvent(event: string | undefined): boolean {
+  return (
+    event === LogEvent.SPELL_AURA_APPLIED ||
+    event === LogEvent.SPELL_AURA_REFRESH ||
+    event === LogEvent.SPELL_AURA_APPLIED_DOSE
+  );
 }
 
 /** `pressLandingsMs` with the attack each press landed as (`IPressLanding`). */
@@ -978,11 +995,7 @@ export function pressLandingRows<T extends LandingPress>(
   for (const unit of targets)
     for (const a of unit.auraEvents ?? []) {
       if (a.srcUnitId !== caster.id) continue;
-      const event = a.logLine?.event;
-      if (
-        event === LogEvent.SPELL_AURA_APPLIED ||
-        event === LogEvent.SPELL_AURA_REFRESH
-      )
+      if (isAuraLandingEvent(a.logLine?.event))
         add(
           unit.id,
           a.spellId,
