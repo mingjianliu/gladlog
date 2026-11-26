@@ -13,13 +13,15 @@
  *
  *  - `teamHealWallUnnamed`: a line the checkout's renderer prints for a
  *    window only a teammate's team-heal wall answers, and the capture has
- *    no `[BURST ANSWERED]` line at that second naming that spell. Non-zero
+ *    no `[BURST ANSWERED]` line at that second naming that spell, that
+ *    player and that time. Non-zero
  *    on a capture taken before the fix, 0 on one taken with it. Kind = the
  *    spell. Counted: every such line of the checkout's renderer.
  *  - `creditLineRenamedOrDropped`: a line the checkout's renderer prints
  *    WITHOUT the team-heal-wall fallback (the same engine output with every
- *    window `teamHealWallCredit` names left out — those windows are never
- *    otherwise creditable, so nothing else moves) that it does not print
+ *    teammate's team-heal wall taken out of each window's responses —
+ *    `answersPressured` never credits one outside the fallback, so nothing
+ *    else moves) that it does not print
  *    WITH the fallback at that second with that answer, that answering
  *    player and that time — "nothing renamed, nothing pushed out of the
  *    cap". Both renders come from one engine run, so a change another
@@ -30,7 +32,10 @@
  *    teammate's team-heal wall answers that the round's cap leaves out.
  *    Counted: every window with such a credit.
  */
-import { burstWindowDecisionPoints } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import {
+  burstWindowDecisionPoints,
+  TEAM_HEAL_WALL_ANSWER_IDS,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
   formatBurstAnsweredLines,
   teamHealWallCredit,
@@ -54,6 +59,10 @@ const PAST_CAP = "left out by the round's cap";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `teamHealWallPastCap|${PAST_CAP}`,
 ]);
+
+/** Two roster labels name one player (`3(RDruid)` → 3). */
+const sameAnswerer = (a: string, b: string): boolean =>
+  /^(\d+)/.exec(a)?.[1] === /^(\d+)/.exec(b)?.[1];
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -93,8 +102,25 @@ export function run(ctx: IRoundCtx): void {
   // only a team-heal wall answers left out (`teamHealWallCredit` is defined
   // only where `creditedAnswer` is not, so no other window's door, rank or
   // answer moves)
+  // codex 85-tk-L2-T300-1 #1: the teammates' team-heal walls are taken out
+  // of each window's responses, not the windows out of the list, so a
+  // renderer that put one before an ordinary credit (169ee83b r5 0:35,
+  // Ironbark then Tree of Life) shows as a renamed line. `answersPressured`
+  // never credits another unit's wall outside the fallback, so the
+  // remaining responses credit what they credited before.
+  const otherTeamWall = (
+    p: (typeof points)[number],
+    r: (typeof points)[number]["responseCasts"][number],
+  ): boolean =>
+    r.category === "wall" &&
+    TEAM_HEAL_WALL_ANSWER_IDS.has(r.spellId) &&
+    r.casterId !== undefined &&
+    r.casterId !== p.pressured?.unitId;
   const withoutWall = render(
-    points.filter((p) => teamHealWallCredit(p) === undefined),
+    points.map((p) => ({
+      ...p,
+      responseCasts: p.responseCasts.filter((r) => !otherTeamWall(p, r)),
+    })),
   );
   const printed = ctx.lines
     .filter((l) => l.includes("[BURST ANSWERED]"))
@@ -109,7 +135,10 @@ export function run(ctx: IRoundCtx): void {
       printed.some(
         (x) =>
           x.answer!.atSec === r.atSec &&
-          x.answer!.spellName === r.answer!.spellName,
+          x.answer!.spellName === r.answer!.spellName &&
+          // the same player and time too (codex 85-tk-L2-T300-1 #3)
+          sameAnswerer(x.answer!.answerer, r.answer!.answerer) &&
+          Math.abs(x.answer!.latencySec - r.answer!.latencySec) <= 0.05,
       )
     )
       continue;
@@ -130,8 +159,7 @@ export function run(ctx: IRoundCtx): void {
       ? "the renderer prints no line at that second"
       : same.answer.spellName !== a.spellName
         ? "the renderer names another answer"
-        : /^(\d+)/.exec(same.answer.answerer)?.[1] !==
-            /^(\d+)/.exec(a.answerer)?.[1]
+        : !sameAnswerer(same.answer.answerer, a.answerer)
           ? "the renderer credits another player"
           : Math.abs(same.answer.latencySec - a.latencySec) > 0.05
             ? "the time differs"

@@ -27,4 +27,18 @@ describe("scan5/t235 printedExternalNames", () => {
       ),
     ).toEqual(["Blessing of Sacrifice", "Ironbark"]);
   });
+
+  it("子句后面还有别的子句时只读到它自己的右括号", () => {
+    expect(
+      printedExternalNames(
+        "target trinketed out; saved by external (Aura Mastery); self-saved (Nature's Guardian)",
+      ),
+    ).toEqual(["Aura Mastery"]);
+  });
+
+  it("空子句读成空列表(检查把它算作不符)", () => {
+    expect(
+      printedExternalNames("target trinketed out; saved by external ()"),
+    ).toEqual([]);
+  });
 });

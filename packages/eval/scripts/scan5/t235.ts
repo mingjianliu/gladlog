@@ -53,7 +53,13 @@ export function printedExternalNames(failed: string): string[] | undefined {
   const at = failed.indexOf("saved by external (");
   if (at < 0) return undefined;
   const body = failed.slice(at + "saved by external (".length);
-  const close = body.lastIndexOf(")");
+  // the clause's own closing parenthesis: a clause may follow it
+  // (`; self-saved (Nature's Guardian)`, codex 85-tk-L2-T300-1 #4)
+  let depth = 1;
+  let close = -1;
+  for (let i = 0; i < body.length && close < 0; i++)
+    if (body[i] === "(") depth++;
+    else if (body[i] === ")" && --depth === 0) close = i;
   return (close < 0 ? body : body.slice(0, close))
     .split("/")
     .map((n) => n.replace(/ \[up since \d+:\d{2}\]$/, "").trim())
@@ -103,8 +109,11 @@ export function run(ctx: IRoundCtx): void {
     const externals = received.filter((n) => !immunity.includes(n));
     const detail = `${a.targetName} ${a.fromSeconds.toFixed(1)}–${a.toSeconds.toFixed(1)}s ${attr.primary}${attr.brokeOut?.length ? ` (${attr.brokeOut.join("/")})` : ""}${attr.immunityBaited ? " + immunity" : ""}; externals ${externals.join("/") || "-"}; own walls ${attr.defensivePopped.join("/") || "-"}`;
     const named = printedExternalNames(line?.failed ?? "");
+    // a clause with no name, or one where the attempt has no external
+    // left, never matches (codex 85-tk-L2-T300-1 #5)
     const sameNames =
       named !== undefined &&
+      named.length > 0 &&
       named.length === externals.length &&
       [...named].sort().join("\n") === [...externals].sort().join("\n");
     if (externals.length > 0 && named === undefined)

@@ -50,6 +50,7 @@ import {
   saveSchoolMask,
   SCHOOL_SAVE_MIN_SHARE,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import { schoolShareCoveredBy } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import { isEffectHolderUnit } from "@gladlog/analysis/src/utils/effectHolder";
 import {
@@ -140,23 +141,24 @@ export function run(ctx: IRoundCtx): void {
         // the damage on the pressured unit by school, landed and absorbed,
         // the one reader the save candidates use (`incomingPressureBySchool`:
         // a hit the shell itself absorbed counts, a deferred tick counts
-        // under the school it was thrown in; T300, codex 80-WSL-BW1-1 #2)
-        let covered = 0;
-        let total = 0;
-        if (prUnit)
-          for (const [k, amount] of Object.entries(
-            incomingPressureBySchool(
-              prUnit,
-              w0,
-              w1,
-              sides(),
-              recordsAttackSpell(),
-            ),
-          )) {
-            const s = Number(k);
-            total += amount;
-            if (s !== 0 && (s & ~amsMask) === 0) covered += amount;
-          }
+        // under the school it was thrown in; T300, codex 80-WSL-BW1-1 #2),
+        // and the share the candidates read off it (`schoolShareCoveredBy`:
+        // a mixed school counts when it shares a bit with the shell's mask;
+        // codex 85-tk-L2-T300-1 #2); null = no damage
+        const share = prUnit
+          ? schoolShareCoveredBy(
+              {
+                dmg2sBySchool: incomingPressureBySchool(
+                  prUnit,
+                  w0,
+                  w1,
+                  sides(),
+                  recordsAttackSpell(),
+                ),
+              },
+              amsMask,
+            )
+          : null;
         const inList = p.responseCasts.some(
           (r) => r.spellId === id && r.casterId === f.id,
         );
@@ -164,14 +166,14 @@ export function run(ctx: IRoundCtx): void {
           "amsInBurstWindow",
           !inList
             ? "not in the response list"
-            : total === 0
+            : share === null
               ? AMS_SHARES[2]
-              : covered / total >= SCHOOL_SAVE_MIN_SHARE
+              : share >= SCHOOL_SAVE_MIN_SHARE
                 ? AMS_SHARES[0]
                 : AMS_SHARES[1],
           ms,
           `${fact}|${f.id}|${id}|${ms}`,
-          `window at ${p.tSec}s (${p.leadCd.spellName}): ${f.name} Anti-Magic Shell ${id} at ${at(ms)}s${dest === pr.unitId && f.id !== pr.unitId ? ` on ${pr.name}` : ""}; pressured ${pr.name} low ${pr.minHpPct ?? "?"}%${pr.died ? " (died)" : ""}; covered share ${total === 0 ? "-" : `${Math.round((100 * covered) / total)}%`}; responded ${p.responded}`,
+          `window at ${p.tSec}s (${p.leadCd.spellName}): ${f.name} Anti-Magic Shell ${id} at ${at(ms)}s${dest === pr.unitId && f.id !== pr.unitId ? ` on ${pr.name}` : ""}; pressured ${pr.name} low ${pr.minHpPct ?? "?"}%${pr.died ? " (died)" : ""}; covered share ${share === null ? "-" : `${Math.round(100 * share)}%`}; responded ${p.responded}`,
         );
       }
 
