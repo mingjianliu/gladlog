@@ -706,6 +706,13 @@ export function landedBeforeWallRow(
   );
 }
 
+/** The DB2 mechanics that take control of a unit (charm, disorient, fear,
+ * sleep, stun, freeze, knockout, polymorph, banish, horror, sap) — as
+ * opposed to a root, a snare, a silence or an interrupt. */
+const LOSS_OF_CONTROL_MECHANICS: ReadonlySet<number> = new Set([
+  1, 2, 5, 10, 12, 13, 14, 17, 18, 24, 30,
+]);
+
 /**
  * Pipeline T281: does the data say aura `auraId` stops spell `spellId` —
  * positive evidence only, readings of the aura itself:
@@ -721,35 +728,39 @@ export function landedBeforeWallRow(
  *    Invisibility: area damage lands through them, rulings U-KA3 / U-KA3b);
  *  - DB2's mechanic immunity on the aura listing the spell's mechanic
  *    (`immunityMechanics`: Dispersion against a root, Icebound Fortitude
- *    against a stun);
- *  - for a row that is itself a control or root aura (`SPELL_CATEGORIES`
- *    cc / roots, the mechanic leg too — not a control press's damage or
- *    slow, which land under Precognition), a
- *    listed control immunity that covers it (`CC_AVOIDANCE_BUFF_SPELLS` with
- *    `avoidanceBuffCoversCc`: Deep Breath's flight); an aura with a DB2 mechanic list
- *    (Precognition) answers by that list alone. Movement out of a ground effect (Hover, Blessing of Freedom —
- *    `applicableCCAvoidanceIds`' other half) refuses nothing on the target
- *    and is not asked (codex 85-tk-L6-T281-3 #4, #5, -4 #2, #3).
+ *    against a stun, Precognition against an interrupt, Sanctified Ground
+ *    against a silence, Master's Call against a snare). The mechanic is a
+ *    label of the spell: a row no table calls a control that carries a
+ *    loss-of-control label is no control (Snowdrift's pulse 390171,
+ *    "stunned", applied under Precognition) and is not matched;
+ *  - for a control or root aura whose mechanic DB2 knows (`SPELL_CATEGORIES`
+ *    cc / roots; Holy Word: Chastise's damage 88625 is typed cc, has none,
+ *    and landed under Deep Breath and Bladestorm), a listed control immunity
+ *    that covers it (`CC_AVOIDANCE_BUFF_SPELLS` with `avoidanceBuffCoversCc`:
+ *    Deep Breath's flight, Ultimate Penitence) — unless the aura's own DB2
+ *    list names loss-of-control mechanics, which then is the whole answer
+ *    (Precognition). Movement out of a ground effect (Hover, Blessing of
+ *    Freedom — `applicableCCAvoidanceIds`' other half) refuses nothing on
+ *    the target and is not asked.
+ * Codex 85-tk-L6-T281-3 #4 #5, -4 #2 #3, -5 #2 #3, -6 #1–#3.
  */
 export function auraStopsSpell(auraId: string, spellId: string): boolean {
   const mech = ccMechanicOf(spellId);
-  // the row is itself a control or a root aura — not a control press's
-  // damage or slow, which carry a mechanic label too and land under
-  // Precognition (Snowdrift's slow 389823, mechanic 11: 58a92059 r4)
   const kind = SPELL_CATEGORIES[spellId]?.type;
-  const control = kind === "cc" || kind === "roots";
+  const auraMechs = immunityMechanics(auraId);
   return (
     immunityStopsDamageSpell(auraId, spellId) ||
     immunityCoversSpell(auraId, spellId) === true ||
     (immunityLastsItsAura(auraId) &&
       !ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(auraId) &&
       immunityStopsSpellSchool(auraId, spellId) !== false) ||
-    (control &&
+    (mech !== undefined &&
+      !!auraMechs?.includes(mech) &&
+      !(kind === undefined && LOSS_OF_CONTROL_MECHANICS.has(mech))) ||
+    ((kind === "cc" || kind === "roots") &&
       mech !== undefined &&
-      !!immunityMechanics(auraId)?.includes(mech)) ||
-    (control &&
       CC_AVOIDANCE_BUFF_SPELLS.has(auraId) &&
-      immunityMechanics(auraId) === undefined &&
+      !auraMechs?.some((m) => LOSS_OF_CONTROL_MECHANICS.has(m)) &&
       avoidanceBuffCoversCc(auraId, spellId))
   );
 }

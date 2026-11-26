@@ -316,6 +316,16 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
     expect(up("377362", "88625", "Holy Word: Chastise")).toEqual([]);
     expect(up("377362", "389823", "Snowdrift")).toEqual([]);
     expect(up("377362", "389831", "Snowdrift")).toEqual(["377362"]);
+    // an interrupt, a silence: the aura's DB2 list names the mechanic (-6 #1)
+    expect(up("377362", "47528", "Mind Freeze")).toEqual(["377362"]);
+    expect(up("289655", "47476", "Strangulate")).toEqual(["289655"]);
+    // Ultimate Penitence lists a root only and is a listed control immunity
+    // (-6 #2); Chastise's damage id landed under Deep Breath (-6 #3)
+    expect(up("421453", "118905", "Static Charge")).toEqual(["421453"]);
+    expect(up("421453", "118", "Polymorph")).toEqual(["421453"]);
+    expect(up("433874", "88625", "Holy Word: Chastise")).toEqual([]);
+    expect(up("433874", "200200", "Holy Word: Chastise")).toEqual(["433874"]);
+    expect(up("377362", "390171", "Snowdrift")).toEqual([]);
     // area damage lands through Vanish (-5 #3)
     expect(up("11327", "81297", "Consecration")).toEqual([]);
     // Blessing of Freedom stops no stun
