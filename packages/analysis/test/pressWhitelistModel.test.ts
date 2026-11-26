@@ -29,6 +29,7 @@ import {
   chargeSpendTimesOf,
   pressReadyAgainAtSeconds,
   unitCooldownEntry,
+  unreleasedHoldMs,
 } from "../src/utils/cooldowns";
 import { extractOffListPresses } from "../src/utils/offListPress";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
@@ -101,6 +102,47 @@ describe("an empower hold never released starts no cooldown", () => {
       43 + entry.cooldownSeconds,
       6,
     );
+  });
+
+  it("a cast row logged a few ms after its START is still the cut hold's (T269)", () => {
+    // 12.1.5 recorders write the SUCCESS 2–50 ms behind the START (1215:
+    // 183 of 4,153 holds); the row is the one inside the hold
+    const lagged = (lagMs: number) =>
+      Object.assign(
+        makeUnit(PID, {
+          class: CombatUnitClass.Evoker,
+          spec: CombatUnitSpec.Evoker_Devastation,
+          info: { talents: [], pvpTalents: [] },
+          spellCastEvents: [10, 40, 43].map((s) =>
+            makeSpellCastEvent(FIRE_BREATH, T0 + s * 1000 + lagMs, ""),
+          ),
+        }),
+        {
+          empowerStarts: [10, 40, 43].map((s) =>
+            empower(FIRE_BREATH, s * 1000),
+          ),
+          empowerEnds: [
+            empower(FIRE_BREATH, 11_500, 2),
+            empower(FIRE_BREATH, 44_500, 3),
+          ],
+          empowerInterrupts: [empower(FIRE_BREATH, 40_600, 0)],
+        },
+      ) as any;
+    for (const lag of [3, 50]) {
+      const u = lagged(lag);
+      const entry = unitCooldownEntry(u, combatOf(u), FIRE_BREATH)!;
+      expect(chargeSpendTimesOf(entry)).toEqual([
+        10 + lag / 1000,
+        43 + lag / 1000,
+      ]);
+      expect(
+        unreleasedHoldMs(u, FIRE_BREATH, [
+          T0 + 10_000 + lag,
+          T0 + 40_000 + lag,
+          T0 + 43_000 + lag,
+        ]),
+      ).toEqual([T0 + 40_000 + lag]);
+    }
   });
 
   it("a retry right after a cut hold is a press that spends (codex review #1)", () => {

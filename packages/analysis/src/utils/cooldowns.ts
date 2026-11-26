@@ -6139,13 +6139,40 @@ function isDeadRelease(
  * (`empowerSpans`; released at level 0 is the same nothing — 1 corpus case,
  * re-pressed 3.3 s later), holds the log never closed and that were begun
  * again, releases that hit nothing (`isDeadRelease`), and
- * cleanses that removed nothing (`COOLDOWN_ON_DISPEL_IDS`). */
+ * cleanses that removed nothing (`COOLDOWN_ON_DISPEL_IDS`). `castMs` is the
+ * press's own SPELL_CAST_SUCCESS row (`holdCastRowMs`). */
 function cutHolds(
   unit: ICombatUnit,
-): Array<{ spellId: string; startMs: number }> {
+): Array<{ spellId: string; startMs: number; castMs: number }> {
+  // An empowered press's SPELL_CAST_SUCCESS is logged after its
+  // SPELL_EMPOWER_START and before the hold's END / INTERRUPT — every closed
+  // hold carries exactly one (605: 1,699 of 1,699; 1215: 4,153 of 4,153) —
+  // but not always on its millisecond: 0–1 ms behind on most recorders,
+  // 2–50 ms on some 12.1.5 ones (1215: 183 of 4,153 holds; 605: 4 of 1,699).
+  // Read on the START's own ms (±1), every cut hold of such a recorder spent
+  // its cooldown in the model (T269: a Preservation Fire Breath cut twice
+  // and re-pressed 1.5 s and 2.2 s later printed `back` 23 s out).
+  const successMs = (unit.spellCastEvents ?? [])
+    .filter((c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+    .map((c) => ({ id: String(c.spellId), ms: c.logLine.timestamp }));
+  /** the first cast row of `spellId` in [fromMs, untilMs]; the START's own
+   * ms when there is none (a parse that never logged it) */
+  const holdCastRowMs = (spellId: string, fromMs: number, untilMs: number) =>
+    successMs
+      .filter((c) => c.id === spellId && c.ms >= fromMs && c.ms <= untilMs)
+      .reduce((m, c) => Math.min(m, c.ms), Infinity);
+  const rowOr = (ms: number, startMs: number) =>
+    Number.isFinite(ms) ? ms : startMs;
   const out = (empowerSpans(unit) ?? [])
     .filter((h) => h.interrupted || h.level === 0 || isDeadRelease(unit, h))
-    .map((h) => ({ spellId: String(h.spellId), startMs: h.startMs }));
+    .map((h) => ({
+      spellId: String(h.spellId),
+      startMs: h.startMs,
+      castMs: rowOr(
+        holdCastRowMs(String(h.spellId), h.startMs, h.endMs),
+        h.startMs,
+      ),
+    }));
   // …and a hold the log never closed, begun again while it could still have
   // been held (`EMPOWER_MAX_HOLD_MS`): the spell was not on cooldown at the
   // second START, so the first fired nothing. `empowerSpans` has no span for
@@ -6193,7 +6220,15 @@ function cutHolds(
       landedBetween(unit.damageOut ?? [])
     )
       return;
-    out.push({ spellId: String(st.spellId), startMs: st.timestamp });
+    out.push({
+      spellId: String(st.spellId),
+      startMs: st.timestamp,
+      // its own row lies before the next START (which has one of its own)
+      castMs: rowOr(
+        holdCastRowMs(String(st.spellId), st.timestamp, next.timestamp - 1),
+        st.timestamp,
+      ),
+    });
   });
   for (const c of unit.spellCastEvents ?? []) {
     const id = String(c.spellId);
@@ -6209,15 +6244,16 @@ function cutHolds(
         String(a.spellId) === id &&
         Math.abs(a.logLine.timestamp - at) <= COOLDOWN_ON_DISPEL_MATCH_MS,
     );
-    if (!dispelled) out.push({ spellId: id, startMs: at });
+    if (!dispelled) out.push({ spellId: id, startMs: at, castMs: at });
   }
   return out;
 }
 
 /** Of `ms` (cast-row timestamps of `spellId` by `unit`), the ones that
  * spent no cooldown (`cutHolds`: cut holds, releases that hit nothing,
- * cleanses that removed nothing): one of that spell starting on the row's
- * millisecond (≤ 1 ms). No empower ones on a parse that carries no empower starts.
+ * cleanses that removed nothing): one of that spell whose own cast row is
+ * this row (≤ 1 ms; a hold's row is the SUCCESS inside it, not the START's
+ * millisecond — T269). No empower ones on a parse that carries no empower starts.
  * Such a row prints no `[PRESS]` line — the renderer's exclusion, which the
  * scan5 `offListPressLine` gate imports to pair a line with its press. */
 export function unreleasedHoldMs(
@@ -6227,7 +6263,7 @@ export function unreleasedHoldMs(
 ): number[] {
   const cut = cutHolds(unit).filter((h) => String(h.spellId) === spellId);
   if (!cut.length) return [];
-  return ms.filter((t) => cut.some((h) => Math.abs(t - h.startMs) <= 1));
+  return ms.filter((t) => cut.some((h) => Math.abs(t - h.castMs) <= 1));
 }
 
 /** The instants (s from the match start) of the cast rows in `rows` that
@@ -6244,7 +6280,7 @@ function unreleasedHoldSeconds(
       cut.some(
         (h) =>
           String(h.spellId) === String(e.spellId) &&
-          Math.abs(e.logLine.timestamp - h.startMs) <= 1,
+          Math.abs(e.logLine.timestamp - h.castMs) <= 1,
       ),
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
