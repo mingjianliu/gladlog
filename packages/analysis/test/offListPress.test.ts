@@ -20,6 +20,7 @@ import {
   PRESS_TARGET_AURA_LEAD_MS,
   pressChainFollowUps,
   pressDuration,
+  pressEffectCutShort,
   pressLineCaster,
   timeStopHeldSeconds,
 } from "../src/utils/offListPress";
@@ -299,6 +300,80 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
 
   it("a window that ran its length keeps it", () => {
     expect(tricks(undefined)?.durationSeconds).toBe(30);
+  });
+
+  // the window on the hunter closed at 627 ms; `extra` adds rows
+  const tricksWith = (extra: any[], roundEndAtMs = Infinity) => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", { spellCastEvents: [cast] });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        ...extra,
+        makeAuraEvent(REMOVED, "57934", T + 627, "rog", "hun", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 637, "rog", "hun", "BUFF"),
+      ].sort((a, b) => a.timestamp - b.timestamp),
+    });
+    return pressDuration(
+      rog,
+      cast as any,
+      [rog, hun],
+      rog.spellCastEvents,
+      roundEndAtMs,
+    );
+  };
+
+  it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
+    expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
+  });
+
+  it("an aura the caster was already re-laying while the window ran is no hand-off (codex 85-tk-L5-T284-1 #2: Holy Bulwark's 2 s shield)", () => {
+    const relaid = makeAuraEvent(
+      APPLIED,
+      "221630",
+      T + 100,
+      "rog",
+      "hun",
+      "BUFF",
+    );
+    expect(tricksWith([relaid])?.durationSeconds).toBe(30);
+  });
+
+  it("two holders handed off: a cut on one is no single-holder cut (codex 85-tk-L5-T284-1 #6)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const own = (u: string) => [
+      makeAuraEvent(APPLIED, "57934", T, "rog", u, "BUFF"),
+      makeAuraEvent(REMOVED, "57934", T + 627, "rog", u, "BUFF"),
+      makeAuraEvent(APPLIED, "221630", T + 630, "rog", u, "BUFF"),
+    ];
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: own("rog"),
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        ...own("hun"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_BROKEN,
+          "221630",
+          T + 3000,
+          "rog",
+          "hun",
+          "BUFF",
+        ),
+      ],
+    });
+    const d = pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+    expect(d?.row.spellId).toBe("221630");
+    expect(
+      pressEffectCutShort(
+        d!,
+        rog,
+        cast as any,
+        [rog, hun],
+        rog.spellCastEvents,
+      ),
+    ).toBeUndefined();
   });
 });
 

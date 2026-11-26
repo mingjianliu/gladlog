@@ -771,12 +771,39 @@ export function pressEffectCutShort(
   // another PLAYER — a pet's or a guardian's copy is not a second holder
   // (the user's reading of 2026-11-18: Camouflage sits on the hunter and
   // the pet)
+  // — each candidate read through its hand-off as the line's own row is
+  // (codex 85-tk-L5-T284-1 #6: two Tricks windows, each handing off to a
+  // 221630 on its unit)
+  const untilMs = Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1);
+  const effectRowOf = (c: {
+    unit: ICombatUnit;
+    row: ICombatUnit["auraEvents"][number];
+  }) => {
+    if (c.row.spellId === from.spellId || cast.spellId === undefined)
+      return c.row;
+    const len = buffFullDurationForCaster(
+      c.row.spellId!,
+      caster,
+      c.row.logLine.timestamp,
+      { pressed: true, onUnitId: c.unit.id },
+    );
+    return len === undefined
+      ? c.row
+      : (pressEffectHandoffRow(
+          caster,
+          c.unit,
+          cast.spellId,
+          c.row,
+          len,
+          untilMs,
+        ) ?? c.row);
+  };
   if (
     pressAuraCandidates(caster, cast, allUnits, nextPressMs).some(
       (c) =>
-        c.row.spellId === from.spellId &&
         c.unit.id !== dur.unit.id &&
-        isEffectHolderUnit(c.unit),
+        isEffectHolderUnit(c.unit) &&
+        effectRowOf(c).spellId === from.spellId,
     )
   )
     return undefined;
@@ -799,7 +826,10 @@ export function pressEffectCutShort(
  * hit closes (52816a5f r5: 0.6 s), its 221630 the 10 s it gives: the line
  * printed `lasts 30s` off the window. Undefined when `row` ran on, or no
  * aura of the press took over. A series (`PRESS_EFFECT_CHAIN_AURAS`) has
- * its own reading.
+ * its own reading. An aura the caster already laid on the unit while `row`
+ * ran is no hand-off (codex 85-tk-L5-T284-1 #2, 28b406d6 r0: Holy
+ * Bulwark's 432607 shield, re-laid every 2 s), nor one applied at or past
+ * `untilMs` (the caster's next press of the button, the round's end).
  */
 export function pressEffectHandoffRow(
   caster: Pick<ICombatUnit, "id">,
@@ -807,6 +837,7 @@ export function pressEffectHandoffRow(
   castSpellId: string,
   row: ICombatUnit["auraEvents"][number],
   lengthS: number,
+  untilMs = Infinity,
 ): ICombatUnit["auraEvents"][number] | undefined {
   if (PRESS_EFFECT_CHAIN_AURAS[row.spellId ?? ""]) return undefined;
   const start = row.logLine.timestamp;
@@ -821,17 +852,30 @@ export function pressEffectHandoffRow(
   );
   if (!removed) return undefined;
   const endMs = removed.logLine.timestamp;
+  if (endMs >= untilMs) return undefined;
   if ((endMs - start) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
     return undefined;
   const ids = new Set([castSpellId, ...effectAurasOfCast(castSpellId)]);
   ids.delete(row.spellId!);
+  const byCaster = (a: ICombatUnit["auraEvents"][number]) =>
+    a.srcUnitId === caster.id && !!a.spellId && ids.has(a.spellId);
+  // laid while the window ran: a recurring aura of the press, not its
+  // successor
+  for (const a of events)
+    if (
+      byCaster(a) &&
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+      a.logLine.timestamp > start &&
+      a.logLine.timestamp < endMs - PRESS_CHAIN_HANDOVER_MS
+    )
+      ids.delete(a.spellId!);
   return events.find(
     (a) =>
       a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-      a.srcUnitId === caster.id &&
-      !!a.spellId &&
-      ids.has(a.spellId) &&
+      byCaster(a) &&
       a.logLine.timestamp > start &&
+      a.logLine.timestamp < untilMs &&
       Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS,
   );
 }
@@ -995,7 +1039,14 @@ export function pressDuration(
     // press's (`pressEffectHandoffRow`)
     const handoff =
       cast.spellId !== undefined
-        ? pressEffectHandoffRow(caster, unit, cast.spellId, row, base)
+        ? pressEffectHandoffRow(
+            caster,
+            unit,
+            cast.spellId,
+            row,
+            base,
+            Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1),
+          )
         : undefined;
     if (handoff) {
       candidates.splice(k, 1, { unit, row: handoff });

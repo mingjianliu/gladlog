@@ -120,6 +120,32 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
     const inFlight = { ...cancelled, damageOut: [bolt(0.9)] };
     expect(nextPressEndingChannelMs(inFlight, UP, ms(0))).toBe(ms(0.05));
   });
+  it("an effect row in the channel's own millisecond, a press, effects after: the press ends it (codex 85-tk-L5-T284-1 #1)", () => {
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("32379", 0.084)],
+      damageOut: [bolt(0), bolt(0.5), bolt(2.5)],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(0.084));
+  });
+  it("a cast begun, or a press past the channel's own instant, ends it whatever lands after (codex 85-tk-L5-T284-1 #3)", () => {
+    const begun = {
+      id: "h",
+      spellCastEvents: [press(UP, 0)],
+      castStartEvents: [press("1242173", 0.05)],
+      damageOut: [bolt(1.2), bolt(3)],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(begun, UP, ms(0))).toBe(ms(0.05));
+    const late = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("32379", 0.5)],
+      damageOut: [bolt(1.2), bolt(3)],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(late, UP, ms(0))).toBe(ms(0.5));
+  });
   it("Ultimate Penitence's aura is the 6.5 s shield: its last bolt ends the channel (7a404f6a: bolts to 5.05 s, Fade at 5.25 s)", () => {
     const unit = {
       id: "h",

@@ -168,16 +168,22 @@ export interface IChannelSpan {
  * still end it here, as before (Soothing Mist, which allows them, is
  * measured by its aura and never reaches this reading).
  *
- * A press logged before the channel produced anything, after which its own
- * effect rows (`lastChannelEffectMs`) run on more than
- * `CHANNEL_PRESS_IN_FLIGHT_MS`, ended nothing (T284, audit-1215 02 D1:
- * acc115f2 r0, a Shadow Word: Death 1 ms after Ultimate Penitence, its bolts
- * from 1.1 s to 5.9 s after it — `channeled 0.0s`); the next press is read
- * instead. A press after the first effect row keeps ending the channel, the
- * rows behind it in the air (Arcane Missiles above). Read only on a unit
- * that carries its effect rows.
+ * A press in the channel's own instant (`CHANNEL_PRESS_SAME_INSTANT_MS`)
+ * that the channel had produced nothing by — no effect row of it
+ * (`lastChannelEffectMs`) from its own millisecond on — and after which its
+ * effect rows run on more than `CHANNEL_PRESS_IN_FLIGHT_MS` ended nothing
+ * (T284, audit-1215 02 D1: acc115f2, four Ultimate Penitences each with a
+ * Shadow Word: Death 1–64 ms after it, the bolts from 0.8 s to 5.9 s —
+ * `channeled 0.0s`); the next press is read instead. A cast start is a cast
+ * begun and ends the channel whatever lands after it, and so does any press
+ * later than that instant (codex 85-tk-L5-T284-1 #3: Penance's bolts past a
+ * Void Blast begun 0.87 s in; Soothing Mist's heals after Transcendence),
+ * or one after the channel's first effect row (#1: Spinning Crane Kick's
+ * hit in its own millisecond, Roll 84 ms on). Read only on a unit that
+ * carries its effect rows.
  */
 export const CHANNEL_PRESS_IN_FLIGHT_MS = 1000;
+export const CHANNEL_PRESS_SAME_INSTANT_MS = 100;
 /** How far past its press a channel's own effect rows are read for that
  * test, when no next press of the same channel comes first. */
 const CHANNEL_EFFECT_READ_MS = 15_000;
@@ -189,20 +195,33 @@ export function nextPressEndingChannelMs(
 ): number {
   const casts = unit.spellCastEvents ?? [];
   const presses = [
-    ...casts.filter((e) => rowIsPressEndingCast(e, casts)),
+    ...casts
+      .filter((e) => rowIsPressEndingCast(e, casts))
+      .map((e) => ({ ms: e.timestamp, begun: false, spellId: e.spellId })),
     ...(
       (unit as { castStartEvents?: typeof unit.spellCastEvents })
         .castStartEvents ?? []
-    ).filter((e) => !pressRidesAlong(e.spellId)),
+    )
+      .filter((e) => !pressRidesAlong(e.spellId))
+      .map((e) => ({ ms: e.timestamp, begun: true, spellId: e.spellId })),
   ]
-    .filter((e) => e.spellId !== spellId && e.timestamp > afterMs)
-    .map((e) => e.timestamp)
-    .sort((a, b) => a - b);
+    .filter((e) => e.spellId !== spellId && e.ms > afterMs)
+    .sort((x, y) => x.ms - y.ms || Number(y.begun) - Number(x.begun));
   if (!presses.length) return Infinity;
-  if (unit.id === undefined || (!unit.damageOut && !unit.healOut))
-    return presses[0];
+  const first = presses[0]!;
+  if (
+    unit.id === undefined ||
+    (!unit.damageOut && !unit.healOut) ||
+    first.begun ||
+    first.ms - afterMs > CHANNEL_PRESS_SAME_INSTANT_MS
+  )
+    return first.ms;
   const effects = unit as Parameters<typeof lastChannelEffectMs>[0];
   const name = getEnglishSpellName(spellId, "");
+  // the channel produced something by this press (a row of its own
+  // millisecond included): it ends it
+  if (lastChannelEffectMs(effects, name, afterMs - 1, first.ms) !== undefined)
+    return first.ms;
   const nextSame = casts.find(
     (e) =>
       e.spellId === spellId &&
@@ -213,15 +232,11 @@ export function nextPressEndingChannelMs(
     nextSame ?? Infinity,
     afterMs + CHANNEL_EFFECT_READ_MS,
   );
-  for (const p of presses) {
-    if (p >= untilMs) return p;
-    // the channel had produced something by this press: it ends it
-    if (lastChannelEffectMs(effects, name, afterMs, p) !== undefined) return p;
-    const after = lastChannelEffectMs(effects, name, p, untilMs, true);
-    if (after === undefined || after - p <= CHANNEL_PRESS_IN_FLIGHT_MS)
-      return p;
-  }
-  return Infinity;
+  const after = lastChannelEffectMs(effects, name, first.ms, untilMs, true);
+  if (after === undefined || after - first.ms <= CHANNEL_PRESS_IN_FLIGHT_MS)
+    return first.ms;
+  // the instant's press ended nothing: the next one is read as before
+  return presses[1]?.ms ?? Infinity;
 }
 
 /** Has DB2 a SpellCooldowns row for this cast id — on the global cooldown or
