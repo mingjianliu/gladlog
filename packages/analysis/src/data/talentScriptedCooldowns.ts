@@ -926,8 +926,10 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // impossible, 605 archives + the 285 12.1.5 files (`cooldownRecastScan
   // --spells 48020`; 909 + 962 model presses): Physical school alone 5 + 6;
   // weapon class alone 1 + 3, two of them presses the Physical school had
-  // explained; either one 1 + 2. The three left are open and stay counted:
-  // the 605 one was impossible before, the two 1215 ones are NEW (codex
+  // explained; either one 1 + 2. FLAG — the three left are open and stay
+  // counted (user ruling 2026-11-26: this entry as is, no idle rule):
+  // the 605 one (d780f387, 1.0 s short) was impossible before, the two
+  // 1215 ones (0.5 s and 1.4 s short) are NEW (codex
   // 85-tk-L6-T266-1 #1: 4dd0c954 r3 127.9, 820bc81e r3 108.5 — a newly
   // admitted hit took the 5 s lockout just before a proc the press needed;
   // the lockout's phase decides them). Tried and rejected (review round,
