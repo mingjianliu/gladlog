@@ -8,6 +8,7 @@ import {
   CAST_PARAM_DURATIONS,
   SUPERCHARGED_FINISHERS,
 } from "../data/castParamDurations";
+import { superchargedFinisherRows } from "./superchargedPoints";
 import { talentRankOf } from "./talentOwnership";
 
 /** How far before an aura's application its producing cast may land. The
@@ -28,7 +29,7 @@ export type CastParamCaster = Partial<
  * The combo points a supercharged point added to the finisher this caster
  * pressed at `castTs` (`SUPERCHARGED_FINISHERS`): the charging press leaves
  * one point per Supercharger rank, each damaging finisher after it takes
- * one. 0 without the talent's rank read from the loadout (`talentRankOf`: an
+ * one (`superchargedFinisherRows`, the cooldown ledger's walk too). 0 without the talent's rank read from the loadout (`talentRankOf`: an
  * unread rank never lengthens), for a spec not listed, or with no point left.
  */
 export function superchargedPointsAt(
@@ -46,20 +47,15 @@ export function superchargedPointsAt(
   };
   const rank = talentRankOf(unit, SUPERCHARGED_FINISHERS.talentSpellId);
   if (rank <= 0) return 0;
-  let left = 0;
-  let at: number | null = null;
-  for (const c of unit.spellCastEvents) {
-    if (c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-    const t = c.logLine.timestamp;
-    if (t > castTs) continue;
-    const id = String(c.spellId);
-    if (cfg.chargeCastIds.includes(id)) left = rank;
-    else if (cfg.finisherCastIds.includes(id)) {
-      if (t === castTs) at = left;
-      left = Math.max(0, left - 1);
-    }
-  }
-  if (at === null || at <= 0) return 0;
+  const used = superchargedFinisherRows(
+    unit.spellCastEvents,
+    cfg.chargeCastIds,
+    cfg.finisherCastIds,
+    rank,
+  );
+  let took = false;
+  for (const c of used) if (c.logLine.timestamp === castTs) took = true;
+  if (!took) return 0;
   return (
     SUPERCHARGED_FINISHERS.pointsPerCharge +
     (talentRankOf(unit, SUPERCHARGED_FINISHERS.bonusTalentSpellId) > 0
@@ -89,8 +85,27 @@ export function castParamAt(
   auraId: string,
   atMs: number,
 ): number | null {
+  const p = castParamPartsAt(caster, auraId, atMs);
+  return p === null ? null : p.read + p.inferred;
+}
+
+/**
+ * `castParamAt` in its two parts: `read` is what the log states (the empower
+ * level, the combo points on the bar), `inferred` what the presses add to it
+ * with no row of their own (a consumed supercharged point). The duration is
+ * priced on the sum; a measurement that reports the parameter keeps them
+ * apart (codex 85-tk-L1-T273-1 #5: `castParamDurationScan` listed a 7-point
+ * Between the Eyes under CP10).
+ */
+export function castParamPartsAt(
+  caster: CastParamCaster | undefined,
+  auraId: string,
+  atMs: number,
+): { read: number; inferred: number } | null {
   const cfg = CAST_PARAM_DURATIONS[auraId];
   if (!cfg || !caster) return null;
+  const read = (n: number | null) =>
+    n === null ? null : { read: n, inferred: 0 };
   if (cfg.param === "empower") {
     let best: { dt: number; level: number } | null = null;
     for (const e of caster.empowerEnds ?? []) {
@@ -99,7 +114,7 @@ export function castParamAt(
       if (dt >= 0 && dt <= CAST_PARAM_WINDOW_MS && (!best || dt < best.dt))
         best = { dt, level: e.level };
     }
-    if (best) return best.level >= 1 ? best.level : null;
+    if (best) return read(best.level >= 1 ? best.level : null);
     // Tip the Scales: no empower at all — the cast row and its effect, no
     // SPELL_EMPOWER_END in between, at the spell's maximum level
     for (const c of caster.spellCastEvents ?? []) {
@@ -114,7 +129,7 @@ export function castParamAt(
           e.logLine.timestamp >= c.logLine.timestamp &&
           e.logLine.timestamp <= atMs,
       );
-      if (!released) return level;
+      if (!released) return read(level);
     }
     return null;
   }
@@ -138,7 +153,9 @@ export function castParamAt(
     if (cp) {
       const n = Math.min(cp.current, cp.max);
       // a supercharged point counts on top of the points the bar held
-      return n >= 1 ? n + superchargedPointsAt(caster, castTs) : null;
+      return n >= 1
+        ? { read: n, inferred: superchargedPointsAt(caster, castTs) }
+        : null;
     }
   }
   return null;

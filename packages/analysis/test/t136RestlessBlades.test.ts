@@ -93,6 +93,22 @@ describe("Supercharger — the point in hand (codex 85-tk-CD-T136-1 #2 #3)", () 
     };
     expect(seconds(u, holds("470347", "470668"))).toEqual([10, 10, 7]);
   });
+  it("1ce02e10 r6: a rank-2 holder's Adrenaline Rush charges two points — Dispatch, then Between the Eyes (codex 85-tk-L1-T273-1 #3)", () => {
+    const u = {
+      id: "r",
+      spellCastEvents: [cast(AR, 10), cast(DISPATCH, 11, 7), cast(BTE, 12, 5)],
+      auraEvents: [],
+    };
+    const h = holds("470347", "470668");
+    const rank2 = (t: string) => (t === "470347" ? 2 : h(t) ? 1 : 0);
+    const at = (r?: (t: string) => number) =>
+      powerSpendTriggers(u as never, rb, "260", h, r).map(
+        (g) => Math.round(g.seconds * 100) / 100,
+      );
+    expect(at(rank2)).toEqual([10, 8]);
+    // a rank the caller cannot read: one point
+    expect(at()).toEqual([10, 5]);
+  });
 });
 
 describe("Coup de Grace — counts 5 points more than its row states", () => {

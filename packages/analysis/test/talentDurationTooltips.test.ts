@@ -8,6 +8,7 @@ import { extractOwnerCDBuffExpiry } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { BUFF_DURATION_TALENT_MODIFIERS } from "../src/data/spellEffectData";
 import {
+  PRESS_OUTCOME_AURAS,
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
 } from "../src/data/talentDurationTooltips";
@@ -74,9 +75,15 @@ describe("TOOLTIP_PER_EVENT_DURATIONS — Spiritwalker's Momentum", () => {
       if (p.event !== "press") continue;
       // a talent that extends by being pressed (Keep It Rolling, pipeline
       // T273): its tooltip states one amount, which the generator reads as
-      // a fixed row — each press inside the aura adds it
+      // a fixed row on the press whose outcome the aura is (the roll) —
+      // each press inside the aura adds it, and no other press does (codex
+      // 85-tk-L1-T273-1 #6)
       if (p.qualifyingSpellIds.has(p.talentSpellId)) {
-        expect(entriesOf(p.talentSpellId, aura)).toMatchObject([
+        expect([...p.qualifyingSpellIds]).toEqual([p.talentSpellId]);
+        expect(p.capSeconds).toBeUndefined();
+        const press = p.endsAtCastIds?.[0] ?? aura;
+        expect(PRESS_OUTCOME_AURAS[press] ?? [aura]).toContain(aura);
+        expect(entriesOf(p.talentSpellId, press)).toMatchObject([
           { kind: "fixed", unit: "s", amount: p.addSecondsPerEvent },
         ]);
         continue;

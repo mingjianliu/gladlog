@@ -107,9 +107,18 @@ export const CAST_PARAM_DURATIONS: Record<string, ICastParamDuration> = {
  * 279 of 294 at the points spent. Every holder in both sets has both
  * Supercharger ranks and Forced Induction, so one point per rank is seen at
  * rank 2 only and the + 2 without Forced Induction rests on the tooltip.
- * Open: 2d4d9d9d r2, a Dispatch between the charge and the press left the
- * point unspent. Subtlety (Shadow Dance) and Assassination (Kingsbane) are
- * the same tooltip with no corpus split yet: not listed.
+ * A charging press with points in hand adds to them; counted as replacing
+ * them instead, the same presses fit (532 of 574 either way).
+ * Open, left flagged (codex 85-tk-L1-T273-1 #4): the points are counted
+ * from zero each round, and two presses read as if one had been carried
+ * over from the round before — 2d4d9d9d r2 and d9ed7bd2 r2, Adrenaline
+ * Rush, two finishers, then a Between the Eyes that ran 22 s. Carrying a
+ * surviving rogue's unused points into the next round fits those two and
+ * prices a third press 6 s long (e9306c04 r4): 533 of 574 against 532, on
+ * no tooltip sentence — not modelled. Subtlety (Shadow Dance) and
+ * Assassination (Kingsbane) are the same tooltip with no corpus split yet:
+ * not listed. The cooldown ledger reads this table and the same walk
+ * (`superchargedFinisherRows`; Restless Blades, talentScriptedCooldowns.ts).
  */
 export const SUPERCHARGED_FINISHERS = {
   talentSpellId: "470347",

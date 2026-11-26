@@ -271,6 +271,9 @@ export interface ITooltipPerPressDuration extends ITooltipPerEventBase {
   /** qualifying casts the game makes with no SPELL_CAST_SUCCESS row, read
    * off their effect rows (`hiddenCastRows`), by effect id */
   hiddenCastEffects?: Readonly<Record<string, IHiddenCastEffect>>;
+  /** the caster's next press of one of these ends the application as its
+   * REMOVED does: no later press extends it (a re-roll replaces the roll) */
+  endsAtCastIds?: readonly string[];
 }
 
 /** An effect row id whose rows can stand for casts the log did not write. */
@@ -372,6 +375,59 @@ const SHAMAN_CAST_TIME_SPELLS: ReadonlySet<string> = new Set([
   "458147",
 ]);
 
+/**
+ * What a Roll the Bones press (1214909) gives: one combat enhancement per
+ * roll, the aura its length is read from (`PRESS_OUTCOME_AURAS`). Raw rows
+ * of the 605 and the 285-file 12.1.5 set (pipeline T273): 402 of 402 rolls
+ * are followed by exactly one APPLIED of these within 0.3 s.
+ */
+export const ROLL_THE_BONES_CAST_ID = "1214909";
+export const ROLL_ENHANCEMENT_AURA_IDS = [
+  "1214933", // One of a Kind
+  "1214934", // Double Trouble
+  "1214935", // Triple Threat
+  "1214937", // Jackpot
+] as const;
+
+/**
+ * A press whose length is that of another aura it gives, not of the aura
+ * under its own id: cast id → those auras. Roll the Bones' own 1214909 is a
+ * marker that Keep It Rolling does not always extend (1ce02e10 r3: the
+ * marker gone at 30.0 s, One of a Kind at 60.0 s). Read by
+ * `pressAuraCandidates`, so the [PRESS] line and its gate follow the same
+ * row. Registered in curatedIdRegistry.
+ */
+export const PRESS_OUTCOME_AURAS: Readonly<Record<string, readonly string[]>> =
+  { [ROLL_THE_BONES_CAST_ID]: ROLL_ENHANCEMENT_AURA_IDS };
+
+// Keep It Rolling 381989 — live 12.1.5 tooltip: "Increase the remaining
+// duration of your active Roll the Bones combat enhancement by ${$s1/1000}
+// sec" (effect 0 dummy, bp 30000); a press of its own, so the talent is the
+// cast. It extends the enhancement the roll gave (DB2 30 s each), and the
+// next roll replaces that enhancement: a press after it extends the new one
+// (52816a5f r1: One of a Kind at 23.3 s, re-rolled into Jackpot at 45.4 s,
+// Keep It Rolling at 47.4 s — the first roll ran its 30 s share only).
+// Pipeline T273, raw rows of the 605 and the 285-file 12.1.5 set, each
+// roll's enhancement from its APPLIED to its REMOVED against 30 s + 30 s
+// per press inside it and before the next roll (84 | 302 with a REMOVED):
+// at the model 48 | 114, ended sooner (a re-roll, a death, the round's
+// end) 36 | 187, longer 0 | 1 (9af1eba3 r1: a re-roll removed it at 31.3 s).
+const ROLL_ENHANCEMENT_ROWS: Record<string, ITooltipPerPressDuration> =
+  Object.fromEntries(
+    ROLL_ENHANCEMENT_AURA_IDS.map((id) => [
+      id,
+      {
+        event: "press" as const,
+        talentSpellId: "381989",
+        untalentedBaseSeconds: 30,
+        addSecondsPerEvent: 30,
+        specs: ["260"],
+        qualifyingSpellIds: new Set(["381989"]),
+        endsAtCastIds: [ROLL_THE_BONES_CAST_ID],
+      },
+    ]),
+  );
+
 /** aura id → its per-event extension */
 export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   Record<string, ITooltipPerEventDuration>
@@ -408,29 +464,7 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     specs: ["72", "73"],
     qualifyingSpellIds: new Set(["435222"]),
   },
-  // Keep It Rolling 381989 — live 12.1.5 tooltip: "Increase the remaining
-  // duration of your active Roll the Bones combat enhancement by ${$s1/1000}
-  // sec" (effect 0 dummy, bp 30000); a press of its own, so the talent is
-  // the cast. Pipeline T273, raw rows of the 605 and the 285-file 12.1.5
-  // set, Roll the Bones 1214909 from its APPLIED / REFRESH to a REMOVED no
-  // re-roll or death made: no press inside 129 of 192 at 30.0 s and none
-  // longer; one press inside 5 of 13 at 60.0 s and none longer (the short
-  // ones end with the round). A re-roll ends it early in 137 of 138.
-  // What the press always extends is the enhancement the roll gave (One
-  // of a Kind 1214933, Double Trouble 1214934, Triple Threat 1214935,
-  // Jackpot 1214937): on the 22 archives of the T273 repro, 7 of 7 such
-  // runs neither a re-roll nor the round's end cut ran 60.0 s. The 1214909
-  // row itself followed in 5 and was removed at 30.0 s in 3 (1ce02e10 r3:
-  // 1214909 gone at 30.0 s, One of a Kind at 60.0 s) — the length here is
-  // the enhancement's, which is what `lasts` on the press states.
-  "1214909": {
-    event: "press",
-    talentSpellId: "381989",
-    untalentedBaseSeconds: 30,
-    addSecondsPerEvent: 30,
-    specs: ["260"],
-    qualifyingSpellIds: new Set(["381989"]),
-  },
+  ...ROLL_ENHANCEMENT_ROWS,
   // Burn to Ash 446663: 「真理觉醒爆击时，其持续时间延长$s1秒」 (effect 0
   // dummy, bp 2) on Truth's Wake 403695, Wake of Ashes' DoT (DB2 9 s). GH
   // #183, 2026-11-03, raw ticks of 605-file subsets: non-holders 54 of 54

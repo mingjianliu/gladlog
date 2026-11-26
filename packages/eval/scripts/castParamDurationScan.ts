@@ -10,7 +10,8 @@
  *    advanced sample at the finisher's SPELL_CAST_SUCCESS timestamp (the
  *    cast snapshot is taken BEFORE the cost, and the combo-point ledger
  *    closes 97.2 % — docs/log-observability-audit.md direction 3), capped by
- *    that sample's max.
+ *    that sample's max. Points the presses add with no row of their own (a
+ *    consumed supercharged point) are listed apart: `CP7+3`.
  * Segments: clean APPLIED → REMOVED, no REFRESH / DOSE (buffDurationScan's
  * rule). Output per aura: parameter value → lifetime histogram (top 3).
  *
@@ -24,7 +25,7 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import {
   CAST_PARAM_WINDOW_MS,
-  castParamAt,
+  castParamPartsAt,
 } from "@gladlog/analysis/src/utils/castParam";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
@@ -72,9 +73,11 @@ const repro = new Map<
 >();
 
 function paramAt(caster: ICombatUnit, auraId: string, t: number): string {
-  const p = castParamAt(caster, auraId, t);
+  const p = castParamPartsAt(caster, auraId, t);
   if (p === null) return "?";
-  return `${AURAS[auraId]!.param === "empower" ? "L" : "CP"}${p}`;
+  // what the log states, then what the presses add with no row of their
+  // own (a supercharged point): `CP7+3` is 7 points on the bar priced as 10
+  return `${AURAS[auraId]!.param === "empower" ? "L" : "CP"}${p.read}${p.inferred ? `+${p.inferred}` : ""}`;
 }
 
 for (const f of files) {

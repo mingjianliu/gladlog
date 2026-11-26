@@ -1,10 +1,21 @@
-import { CombatUnitPowerType, CombatUnitSpec } from "@gladlog/parser-compat";
+import {
+  CombatUnitPowerType,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { SUPERCHARGED_FINISHERS } from "../src/data/castParamDurations";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { buffFullDurationForCaster } from "../src/utils/buffDuration";
 import { castParamAt, superchargedPointsAt } from "../src/utils/castParam";
-import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
+import { pressAuraCandidates, pressDuration } from "../src/utils/offListPress";
+import { superchargedFinisherRows } from "../src/utils/superchargedPoints";
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 /**
  * Pipeline T273: `lasts Ns` printed on an aura the log shows running longer.
@@ -27,6 +38,8 @@ const BTE = "315341";
 const DISPATCH = "2098";
 const ROLL_THE_BONES = "1214909";
 const KEEP_IT_ROLLING = "381989";
+const ONE_OF_A_KIND = "1214933";
+const JACKPOT = "1214937";
 const EARTH_ELEMENTAL = "198103";
 
 beforeAll(async () => {
@@ -144,7 +157,45 @@ describe("T273: Supercharger — a consumed supercharged point counts as combo p
   });
 });
 
-describe("T273: Keep It Rolling adds 30 s to the Roll the Bones it is pressed in", () => {
+describe("T273: one walk of the supercharged points for the press and the cooldown ledger", () => {
+  it("1ce02e10 r6: Adrenaline Rush, Dispatch, a 5-point Between the Eyes — 18 s, and the ledger counts the same 8 points", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [SUPERCHARGER(2), FORCED_INDUCTION],
+      [
+        [AR, 0],
+        [DISPATCH, 1, 7],
+        [BTE, 2, 5],
+      ],
+    );
+    expect(buffFullDurationForCaster(BTE, u, at(2))).toBe(18);
+    const used = superchargedFinisherRows(
+      u.spellCastEvents,
+      SUPERCHARGED_FINISHERS.bySpec["260"]!.chargeCastIds,
+      SUPERCHARGED_FINISHERS.bySpec["260"]!.finisherCastIds,
+      2,
+    );
+    expect([...used].map((c) => c.spellId)).toEqual([DISPATCH, BTE]);
+  });
+
+  it("a second charging press with a point in hand adds to it", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [SUPERCHARGER(1)],
+      [
+        [AR, 0],
+        [AR, 1],
+        [DISPATCH, 2, 7],
+        [BTE, 3, 7],
+        [BTE, 4, 7],
+      ],
+    );
+    expect(superchargedPointsAt(u, at(3))).toBe(2);
+    expect(superchargedPointsAt(u, at(4))).toBe(0);
+  });
+});
+
+describe("T273: Keep It Rolling adds 30 s to the enhancement of the roll it is pressed in", () => {
   it("0cf7193d r1: pressed 1.3 s into the roll, 60 s", () => {
     const u = unit(
       CombatUnitSpec.Rogue_Outlaw,
@@ -154,7 +205,7 @@ describe("T273: Keep It Rolling adds 30 s to the Roll the Bones it is pressed in
         [KEEP_IT_ROLLING, 1.3],
       ],
     );
-    expect(buffFullDurationForCaster(ROLL_THE_BONES, u, T0)).toBe(60);
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, T0)).toBe(60);
   });
 
   it("no press inside the roll: 30 s; a press after it ran out adds nothing", () => {
@@ -166,6 +217,49 @@ describe("T273: Keep It Rolling adds 30 s to the Roll the Bones it is pressed in
         [KEEP_IT_ROLLING, 31],
       ],
     );
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, T0)).toBe(30);
+  });
+
+  it("52816a5f r1: re-rolled at 22.1 s, Keep It Rolling 2 s later — the first roll is not extended, the second is (codex 85-tk-L1-T273-1 #1)", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [],
+      [
+        [ROLL_THE_BONES, 0],
+        [ROLL_THE_BONES, 22.138],
+        [KEEP_IT_ROLLING, 24.107],
+      ],
+    );
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, T0)).toBe(30);
+    expect(buffFullDurationForCaster(JACKPOT, u, at(22.138))).toBe(60);
+    // …also when the re-roll gives the same enhancement again (the rows
+    // merge into one run)
+    expect(buffFullDurationForCaster(JACKPOT, u, T0)).toBe(30);
+  });
+
+  it("1ce02e10 r3: the press reads the enhancement's row, not the Roll the Bones marker's (codex 85-tk-L1-T273-1 #2)", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [],
+      [
+        [ROLL_THE_BONES, 0],
+        [KEEP_IT_ROLLING, 5],
+      ],
+    );
+    const row = (id: string, ms: number) =>
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, id, T0 + ms, "r", "r");
+    (u as { auraEvents: unknown[] }).auraEvents = [
+      row(ROLL_THE_BONES, 0),
+      row(ONE_OF_A_KIND, 1),
+    ];
+    const cast = u.spellCastEvents[0]!;
+    const picked = pressAuraCandidates(u, cast, [u]);
+    expect(picked.map((c) => c.row.spellId)).toEqual([ONE_OF_A_KIND]);
+    expect(pressDuration(u, cast, [u], u.spellCastEvents)).toMatchObject({
+      durationSeconds: 60,
+      row: picked[0]!.row,
+    });
+    // the marker is a plain 30 s aura
     expect(buffFullDurationForCaster(ROLL_THE_BONES, u, T0)).toBe(30);
   });
 });

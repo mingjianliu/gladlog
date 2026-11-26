@@ -459,7 +459,22 @@ function perEventExtensionSeconds(
   // walks from the time it was given, as before.
   const run = ownAuraRunNear(caster, spellId, atMs);
   const fromMs = run?.fromMs ?? atMs;
-  const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
+  // …and it ends at the press that replaces it (`endsAtCastIds`: the next
+  // roll), whatever the aura rows merge into — a re-roll into the same
+  // enhancement is one REMOVED → APPLIED pair, read as one run
+  const replacedAt =
+    "endsAtCastIds" in p && p.endsAtCastIds
+      ? (caster.spellCastEvents ?? []).find(
+          (c) =>
+            c.logLine.event === "SPELL_CAST_SUCCESS" &&
+            p.endsAtCastIds!.includes(c.spellId ?? "") &&
+            c.logLine.timestamp > fromMs + OWN_AURA_PAIR_MS,
+        )?.logLine.timestamp
+      : undefined;
+  const toMs = Math.min(
+    run?.toMs ?? Number.POSITIVE_INFINITY,
+    replacedAt ?? Number.POSITIVE_INFINITY,
+  );
   // a press in the APPLIED's own ms but logged before it is not inside the
   // run (codex B25 #2)
   const beforeRun = (c: IWalkRow) => {

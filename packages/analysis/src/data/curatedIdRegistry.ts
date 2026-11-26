@@ -353,6 +353,7 @@ import spellIdLists, {
 import { HAND_UNPARRYABLE_SPELL_IDS } from "./spellParry";
 import { trinketSpellIds } from "./spellTags";
 import {
+  PRESS_OUTCOME_AURAS,
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
 } from "./talentDurationTooltips";
@@ -693,7 +694,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       // the casts that extend it (`SHAMAN_CAST_TIME_SPELLS`, weekly review
       // 2026-10-24: hand-kept, decides Spiritwalker's Momentum's length)
       ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) =>
-        p.event === "press" ? [...p.qualifyingSpellIds] : [],
+        p.event === "press"
+          ? [...p.qualifyingSpellIds, ...(p.endsAtCastIds ?? [])]
+          : [],
       ),
       // the effect rows read as casts with no cast row, and what sends them
       // (T246 review: a renumbered effect id would rot unseen)
@@ -1486,6 +1489,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CAST_PARAM_DURATIONS.castIds", "data/castParamDurations.ts", "cast", () =>
     Object.values(CAST_PARAM_DURATIONS).flatMap((c) => c.castIds),
   ),
+  // pipeline T273: a press whose length another aura it gives carries (a
+  // Roll the Bones' combat enhancement)
+  t("PRESS_OUTCOME_AURAS", "data/talentDurationTooltips.ts", "mixed", () => [
+    ...Object.keys(PRESS_OUTCOME_AURAS),
+    ...Object.values(PRESS_OUTCOME_AURAS).flat(),
+  ]),
   // pipeline T273: the presses that charge and spend a supercharged combo
   // point (Supercharger)
   t("SUPERCHARGED_FINISHERS", "data/castParamDurations.ts", "cast", () =>

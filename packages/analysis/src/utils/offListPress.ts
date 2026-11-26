@@ -39,6 +39,7 @@ import {
   PRISMATIC_BARRIER_PVP_MAGIC_DURATION_MULT,
 } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
+import { PRESS_OUTCOME_AURAS } from "../data/talentDurationTooltips";
 import {
   timeSpiralEchoMs,
   UNPRICED_COOLDOWN_TALENTS,
@@ -431,7 +432,14 @@ export function pressAuraCandidates(
 ): Array<{ unit: ICombatUnit; row: ICombatUnit["auraEvents"][number] }> {
   const release = empowerReleaseMs(caster, cast, untilMs);
   const at = release ?? cast.logLine.timestamp;
-  const auraIds = new Set([cast.spellId!, ...effectAurasOfCast(cast.spellId!)]);
+  // a press whose length another aura carries reads that aura only
+  // (`PRESS_OUTCOME_AURAS`: a roll's enhancement, not its marker)
+  const auraIds = new Set(
+    PRESS_OUTCOME_AURAS[cast.spellId!] ?? [
+      cast.spellId!,
+      ...effectAurasOfCast(cast.spellId!),
+    ],
+  );
   if (onlyAuraIds)
     for (const id of [...auraIds]) if (!onlyAuraIds.has(id)) auraIds.delete(id);
   // an empowered press's own id on the caster is the empower channel (Fire

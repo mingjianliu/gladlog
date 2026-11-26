@@ -37,7 +37,9 @@ import {
   PATCH_1215_ZONE_BAND_TAKES,
 } from "../utils/logEra";
 import { isResyncBatchAt } from "../utils/resyncBatch";
+import { superchargedFinisherRows } from "../utils/superchargedPoints";
 import { PATCH_1215_GOLIVE_EPOCH_MS } from "../utils/talents";
+import { SUPERCHARGED_FINISHERS } from "./castParamDurations";
 import {
   type ISetBonusEventCredit,
   setBonusHeld,
@@ -336,7 +338,7 @@ export interface IPowerSpendTrigger {
     addWith?: { talentId: string; pct: number };
   }>;
   /** Supercharged combo points (Supercharger 470347, T136): a press of
-   * `byCastIds` supercharges `points` combo points; the holder's next
+   * `byCastIds` supercharges `points` combo points per rank of the talent; the holder's next
    * finisher of `finisherIds` (a damaging one) consumes one and counts as
    * `extra` more points spent (+ `extraWith.extra` for a holder of that
    * talent). The log shows no aura of it: the press and the finisher rows
@@ -1547,14 +1549,18 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
       // (7) between them under Jackpot — 18.6 s given back, 1.8 s short;
       // with the 5 more, 25.3 s.
       extraSpends: [{ castIds: ["441776"], extra: 5 }],
+      // the ids and the amounts are the duration model's table
+      // (`SUPERCHARGED_FINISHERS`): one fact, two readers
       supercharged: {
-        talentId: "470347",
-        byCastIds: ["13750"],
+        talentId: SUPERCHARGED_FINISHERS.talentSpellId,
+        byCastIds: SUPERCHARGED_FINISHERS.bySpec["260"]!.chargeCastIds,
         points: 1,
-        // Dispatch, Between the Eyes, Killing Spree, Coup de Grace
-        finisherIds: ["2098", "315341", "51690", "441776"],
-        extra: 2,
-        extraWith: { talentId: "470668", extra: 1 },
+        finisherIds: SUPERCHARGED_FINISHERS.bySpec["260"]!.finisherCastIds,
+        extra: SUPERCHARGED_FINISHERS.pointsPerCharge,
+        extraWith: {
+          talentId: SUPERCHARGED_FINISHERS.bonusTalentSpellId,
+          extra: SUPERCHARGED_FINISHERS.bonusPoints,
+        },
       },
       // GH #198 (user ruling 2026-11-07): a Fang Strike Dispatch (Outlaw
       // 12.1 4pc 1296589, buff 1301405) logs no combo-point cost; counted
@@ -2066,7 +2072,13 @@ export function eventTriggersFor(
               ),
             })),
             ...(r.triggerPowerSpend
-              ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
+              ? powerSpendTriggers(
+                  unit,
+                  r.triggerPowerSpend,
+                  holderSpec,
+                  holds,
+                  rankOf,
+                )
               : []),
             ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
             ...(r.triggerOwnAuraStacksLost
@@ -2518,6 +2530,9 @@ export function powerSpendTriggers(
   p: IPowerSpendTrigger,
   holderSpec: string | undefined,
   holds?: (talentSpellId: string) => boolean,
+  /** the holder's purchased rank of a talent (a charging press
+   * supercharges one point per rank); absent → rank 1 for a holder */
+  rankOf?: (talentSpellId: string) => number,
 ): IEventTrigger[] {
   const units =
     (holderSpec !== undefined
@@ -2533,11 +2548,19 @@ export function powerSpendTriggers(
     ? sc.extra +
       (sc.extraWith && holds?.(sc.extraWith.talentId) ? sc.extraWith.extra : 0)
     : 0;
-  let charged = 0;
+  // the finishers that took a point: the one walk the duration model
+  // reads too (`superchargedFinisherRows`)
+  const scUsed = sc
+    ? superchargedFinisherRows(
+        unit.spellCastEvents,
+        sc.byCastIds,
+        sc.finisherIds,
+        sc.points * Math.max(1, rankOf?.(sc.talentId) ?? 1),
+      )
+    : undefined;
   for (const e of unit.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const id = String(e.spellId);
-    if (sc?.byCastIds.includes(id)) charged += sc.points;
     if (
       p.exclude?.castIds.includes(id) &&
       holderSpec !== undefined &&
@@ -2546,8 +2569,7 @@ export function powerSpendTriggers(
       continue;
     // a damaging finisher takes its supercharged point whether or not its
     // cost can be read (codex 85-tk-CD-T136-1 #2)
-    const superchargedUse = !!sc && charged > 0 && sc.finisherIds.includes(id);
-    if (superchargedUse) charged--;
+    const superchargedUse = !!scUsed?.has(e);
     const stated =
       e.powerCosts?.find((c) => c.type === p.powerType)?.cost ||
       freeSpendMax(unit, p, id, e.logLine.timestamp);
