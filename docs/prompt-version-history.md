@@ -8722,7 +8722,7 @@ captures (605 | 1215, contexts 3,519 | 2,955): +9 | +6 [ENEMY DEF] Frenzied
 Regeneration [no press logged] lines; KILL ATTEMPTS 'popped Frenzied
 Regeneration' clauses 81 | 72 all became 'self-saved (Frenzied Regeneration)' (75 | 66
 with the bare name, 6 | 6 with its '[up since m:ss]' inside the parentheses);
-+14 | +24 [PROC] lines; the `self-saved (X)` legend line rewritten (ctx files
++14 | +24 [PROC] lines (11 | 15 timestamped events, 3 | 9 legend lines); the `self-saved (X)` legend line rewritten (ctx files
 changed 223 | 204); no menu row moved. Legend (B202 / B204 / B205 / B207 reviews): [PROC] = an effect with no press of
 that button paired to it in the round's log, and the [PROC] line itself is not a
 press. `(no press)` = no press inside the round put that aura up: a talent or
