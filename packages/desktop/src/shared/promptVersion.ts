@@ -1950,5 +1950,13 @@
  *  talent's proc, not a press: it no longer prints a [YOU] [CAST] line
  *  beside the Fade.
  *  See docs/prompt-version-history.md.
+ *
+ * v671 (2026-11-25; pipeline batch B211, T259; was B202 / PV 667): A Frenzied Regeneration
+ *  that Well-Honed Instincts put up (its fresh 382912 marker, no press) now
+ *  gets its own [ENEMY DEF] line tagged [no press logged], and KILL
+ *  ATTEMPTS says the druid self-saved with it instead of popping it, unless
+ *  the druid's own press of it follows in the span (then popped, stamped at
+ *  the press). A re-listed proc aura is up only within its life.
+ *  See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 670;
+export const PROMPT_VERSION = 671;

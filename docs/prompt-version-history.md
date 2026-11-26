@@ -8711,3 +8711,31 @@ Measured per part (parent = the T253 tree, candidate = T245 on it): 605: 15
 in 16 contexts; sum 48. Nothing else moved; gates 0 failures; scan5
 castLineNoButton / Spectral Illusion 13 -> 0 (605) and 31 -> 0 (12.1.5), no
 kind rose; in-total 390 -> 377 and 588 -> 557.
+
+v671 (pipeline batch B211, T259; first assembled as B202, PV 667, rebased onto B254): a Well-Honed Instincts activation of
+Frenzied Regeneration is stated by its fresh 382912 marker. It gets its own
+[ENEMY DEF] line tagged [no press logged]; KILL ATTEMPTS words it self-saved,
+or popped and stamped at the press when the druid's own press of it follows in
+the span; the friendly timeline keeps such a proc's [PROC] line beside a real
+press within a second. Measured on dev c711793af vs candidate 20435c804, same
+captures (605 | 1215, contexts 3,519 | 2,955): +9 | +6 [ENEMY DEF] Frenzied
+Regeneration [no press logged] lines; KILL ATTEMPTS 'popped Frenzied
+Regeneration' clauses 81 | 72 all became 'self-saved (Frenzied Regeneration)' (75 | 66
+with the bare name, 6 | 6 with its '[up since m:ss]' inside the parentheses);
++14 | +24 [PROC] lines; the `self-saved (X)` legend line rewritten (ctx files
+changed 223 | 204); no menu row moved. Legend (B202 / B204 / B205 / B207 reviews): [PROC] = an effect with no press of
+that button paired to it in the round's log, and the [PROC] line itself is not a
+press. `(no press)` = no press inside the round put that aura up: a talent or
+another spell, or a press outside the round's start or end (0a7730e7 r4 0:55,
+b81efd46 r3 0:00, pre-existing); the same button pressed in the same second or
+elsewhere in the round keeps its own [CD] line (4474203d r1 0:23, 85a6cad9 r4
+0:56). `(with X)` = within PROC_TRIGGER_LEAD_MS (50 ms) of X's press (5c6aa69a r4
+1:11, 1 ms apart). The legend makes no claim that every press has its own line:
+Void Metamorphosis printed as a form [PROC] although pressed (605 | 1215 228 | 201
+lines) and two Frenzied Regeneration presses within 2 s merged into one line
+(6 | 9 contexts) are pre-existing and ticketed separately (user 2026-11-25). Scans: 642 | 638 violation kinds, 0 rose, 1
+fell (procActivationNoLine / Frenzied Regeneration 9 -> 0 | 6 -> 0); in-total
+20,482 -> 20,473 on the 605; gates identical on both. scan5 pressEffect
+noPressButPressed reads the producer's event behind each line (procOwned): 605
+9 / 2,283 -> 9 / 2,292, 1215 0 / 1,671 -> 0 / 1,677 (the new lines checked,
+none flagged).
