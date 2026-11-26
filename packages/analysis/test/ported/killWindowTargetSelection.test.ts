@@ -288,6 +288,31 @@ describe("killWindowTargetSelection — main analysis", () => {
     expect(result[0].betterTargetName).toBe("Mage");
   });
 
+  it("a dead enemy is no alternative, prime or not (T278, codex 85-tk-L5-T278-1 #1)", () => {
+    const e1 = makeUnit("e1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      advancedActions: [makeAdvancedAction(MATCH_START, 0, 0, 100, 100)],
+    });
+    // the prime Mage of the case above, dead before the window starts
+    const e2 = makeUnit("e2", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Frost,
+      advancedActions: [makeAdvancedAction(MATCH_START, 0, 0, 100, 30)],
+      spellCastEvents: [makeSpellCastEvent("336126", MATCH_START + 500, "e2")],
+      deathRecords: [{ timestamp: MATCH_START + 800 }] as any,
+    });
+    const windows = [
+      { fromSeconds: 1, toSeconds: 10, targetUnitId: "e1", durationSeconds: 9 },
+    ] as any;
+    const result = analyzeKillWindowTargetSelection(
+      windows,
+      [e1, e2],
+      makeCombat(),
+    );
+    expect(result.every((r) => !r.betterTargetExists)).toBe(true);
+  });
+
   it("gated: trinket burned but Barkskin in hand (kit evidence + off CD) → no prime claim", () => {
     const e1 = makeUnit("e1", { name: "Warrior" });
     // Trinket burned at 0.5s; Barkskin cast at 1s (kit evidence), 60s CD →

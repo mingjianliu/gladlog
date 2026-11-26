@@ -810,8 +810,13 @@ function ccFirstReachSecond(
   const blockers = ccTargetBlockerIntervals(healer, combat, spellId);
   const immuneAt = (t: number) =>
     blockers.some((iv) => iv.fromS < t + 1 && t < iv.toS);
+  // …and the healer was alive to take it (codex 85-tk-L5-T278-1 #2: a
+  // healer dead at 3:24.845 drew a Psychic Scream at 3:25 once its wiped
+  // Adaptation lockout read on cooldown, T278)
+  const deathMs = firstDeathMs(healer);
   for (let t = Math.floor(seg.fromSeconds); t < seg.toSeconds; t++)
     if (
+      combat.startTime + Math.max(t, seg.fromSeconds) * 1000 < deathMs &&
       usableAt(Math.max(t, seg.fromSeconds)) &&
       !immuneAt(t) &&
       ccReachAt(owner, healer, reach, zone, combat.startTime + t * 1000).ok

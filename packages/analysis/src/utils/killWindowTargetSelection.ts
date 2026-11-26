@@ -4,6 +4,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { isDeadAt } from "./unitDeath";
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -737,7 +739,13 @@ export function analyzeKillWindowTargetSelection(
     const focusedEnemy = enemies.find((e) => e.id === window.targetUnitId);
     if (!focusedEnemy) continue;
 
-    const otherEnemies = enemies.filter((e) => e.id !== window.targetUnitId);
+    // a dead enemy is no alternative (codex 85-tk-L5-T278-1 #1: a monk
+    // dead at 3:24.845 ranked "prime" for a 3:30 window once his wiped
+    // Adaptation lockout read on cooldown, T278)
+    const windowStartMs = combat.startTime + window.fromSeconds * 1000;
+    const otherEnemies = enemies.filter(
+      (e) => e.id !== window.targetUnitId && !isDeadAt(e, windowStartMs),
+    );
     if (otherEnemies.length === 0) continue;
 
     const focusedSnapshot = snapshotEnemy(

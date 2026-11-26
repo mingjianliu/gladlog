@@ -6,10 +6,14 @@
  * `[DEATH]` "PvP Trinket available"), against the log's own lockout rows.
  *
  * Truth from the rows: the lockout 336139 APPLIED at or ≤ 1 s after the
- * trigger 283167, its first REMOVED after that, the unit's UNIT_DIED; the
- * lockout's length is DB2's (`spellEffectData` 336139, 60 s — lookups are
- * fine). A REMOVED logged at the unit's death (≤ `AT_DEATH_MS` before its
- * UNIT_DIED) is the death wipe, not the trinket coming back.
+ * trigger 283167, its first REMOVED after that; the lockout's length is
+ * DB2's (`spellEffectData` 336139, 60 s — lookups are fine), and the
+ * expected return is APPLIED + that length, read here. Whether a REMOVED is
+ * the holder's death wipe, and whether it ran its length, are the product's
+ * own readings of the holder's rows (`removedInDeathTeardown` /
+ * `auraRanItsLength`, unitDeath.ts — codex 85-tk-L5-T278-1 #3: a private
+ * "250 ms before UNIT_DIED" and a 500 ms slack disagreed with them both
+ * ways).
  *
  *  - `adaptationReadyAtDeathWipe` (in total): the lockout was removed at the
  *    unit's death before its length ran, and the product's `readyAtMs` is
@@ -21,6 +25,11 @@
  */
 import { spellEffectData } from "@gladlog/analysis/src/data/spellEffectData";
 import {
+  auraRanItsLength,
+  deathTeardownWindowsMs,
+  removedInDeathTeardown,
+} from "@gladlog/analysis/src/utils/unitDeath";
+import {
   ADAPTATION_LOCKOUT_AURA_ID,
   ADAPTATION_TRIGGER_AURA_ID,
   pvpTrinketUses,
@@ -30,10 +39,6 @@ import { APPLIED, ev, type IRoundCtx, REMOVED, tsOf } from "./ctx";
 
 const C = "adaptationReadyAtDeathWipe";
 export const CHECKS = [C] as const;
-/** a REMOVED this close before the unit's UNIT_DIED is the death wipe */
-const AT_DEATH_MS = 250;
-/** a lockout that ran this close to its DB2 length ran it */
-const RAN_SLACK_MS = 500;
 const RAN = "ran its length";
 const EARLY_NO_DEATH = "removed early, no death beside it";
 const STILL_UP = "still up at the round's end";
@@ -50,7 +55,7 @@ export function run(ctx: IRoundCtx): void {
     const rows = ((u.auraEvents ?? []) as any[]).filter(
       (a) => a.srcUnitId === u.id || a.destUnitId === u.id,
     );
-    const deaths = ((u.deathRecords ?? []) as any[]).map((d) => d.timestamp);
+    const teardowns = deathTeardownWindowsMs(u);
     const uses = pvpTrinketUses(u).filter((x) => x.kind === "adaptation");
     for (const a of rows) {
       if (String(a.spellId) !== ADAPTATION_TRIGGER_AURA_ID) continue;
@@ -85,14 +90,11 @@ export function run(ctx: IRoundCtx): void {
         continue;
       }
       const offMs = tsOf(off);
-      if (offMs >= fullEnd - RAN_SLACK_MS) {
+      if (offMs >= fullEnd || auraRanItsLength(offMs, fullEnd)) {
         ctx.violate(C, RAN, t, key, `${u.name} ran ${offMs - tsOf(on)}ms`);
         continue;
       }
-      const atDeath = deaths.some(
-        (d) => d >= offMs && d - offMs <= AT_DEATH_MS,
-      );
-      if (!atDeath) {
+      if (!removedInDeathTeardown(teardowns, offMs, fullEnd)) {
         ctx.violate(
           C,
           EARLY_NO_DEATH,
@@ -103,7 +105,7 @@ export function run(ctx: IRoundCtx): void {
         continue;
       }
       const ready = use?.readyAtMs;
-      if (ready !== undefined && ready >= fullEnd - RAN_SLACK_MS) {
+      if (ready !== undefined && Math.abs(ready - fullEnd) <= 1) {
         ctx.violate(
           C,
           DEATH_OK,
