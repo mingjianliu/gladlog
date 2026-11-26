@@ -14,7 +14,7 @@ import {
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { parryStopsAttack } from "../data/spellParry";
-import { immunityMechanics } from "../data/spellSchools";
+import { immunityCoversSpell, immunityMechanics } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
@@ -39,7 +39,6 @@ import {
 import { spellNameKey } from "./damagePress";
 import {
   drWallMissesSpellSchool,
-  immunityLastsItsAura,
   immunityStopsDamageSpell,
   immunityStopsSpellSchool,
   wallStopsEveryHit,
@@ -503,7 +502,6 @@ export function buildOffensiveWasteSummary(
                     window.unit,
                     allUnits,
                     landing.spellId ?? e.spellId,
-                    e.spellName,
                     landing.atMs,
                     landing.lineIndex,
                   ),
@@ -702,47 +700,43 @@ export function landedBeforeWallRow(
 }
 
 /**
- * Pipeline T281: the auras up on `target` at a refusal row that stop THIS
- * spell — the cast line's own cause reading (`setup.ts` `ccImmuneCauseOf`):
- * `ccAvoidanceBuffsUpAt` in log order up to the row, kept to the ones that
- * stop the spell — a control by the avoidance table or the aura's DB2
- * mechanic immunity (`applicableCCAvoidanceIds`, `immunityMechanics`), a
- * damage spell by its school (`immunityStopsDamageSpell`, or an immunity
- * that lasts its aura with no table row, `immunityLastsItsAura`) — and that can
- * write an IMMUNE at all (`avoidanceExplainsMissType`). One reader for the
- * section and its gate (scan5 `singles14b`): the aura state is the same on
- * both sides (codex 85-tk-L6-T281-2 #6).
+ * Pipeline T281: the auras up on `target` at a refusal row that the data
+ * says stop THIS spell — positive evidence only, three readings of the
+ * aura itself:
+ *  - a wall the signed table gives every hit of the spell's school to
+ *    (`immunityStopsDamageSpell`: Ice Block, Blessing of Protection against
+ *    a physical attack);
+ *  - DB2's SCHOOL_IMMUNITY on the aura covering the spell's schools
+ *    (`immunityCoversSpell`: Time Stop, Imprison 221527, Freezing Trap
+ *    203337 — no table row);
+ *  - DB2's mechanic immunity on the aura listing the spell's mechanic
+ *    (`immunityMechanics`: Dispersion against a root, Icebound Fortitude
+ *    against a stun).
+ * The auras up are `ccAvoidanceBuffsUpAt`'s, in log order up to the row,
+ * kept to those three and to the ones that can write an IMMUNE at all
+ * (`avoidanceExplainsMissType`). The control-avoidance table is not asked:
+ * it lists movement out of a ground effect (Hover, Blessing of Freedom),
+ * which refuses nothing on the target (codex 85-tk-L6-T281-3 #4, #5). The
+ * cast line's `[IMMUNE — X was up]` names its cause by a narrower reading
+ * of its own (`setup.ts` `ccImmuneCauseOf`). One reader for the section and
+ * its gate (scan5 `singles14b`): the aura state is the same on both sides.
  */
 export function aurasRefusingSpellAt(
   target: Pick<ICombatUnit, "auraEvents"> &
     Partial<Pick<ICombatUnit, "info" | "spellCastEvents">>,
   units: readonly ICombatUnit[],
   spellId: string,
-  spellName: string | null | undefined,
   atMs: number,
   atLine: number | undefined,
 ): string[] {
   const mech = ccMechanicOf(spellId);
-  const control = isControlCast(spellId) || mech !== undefined;
-  const applicable = applicableCCAvoidanceIds(
-    spellId,
-    getEnglishSpellName(spellId, spellName ?? ""),
-  );
   const stops = (auraId: string): boolean =>
-    control
-      ? applicable.has(auraId) ||
-        (mech !== undefined && !!immunityMechanics(auraId)?.includes(mech))
-      : immunityStopsDamageSpell(auraId, spellId) ||
-        // an immunity that holds while its aura is up and has no table row
-        // (Time Stop, Guardian of the Forgotten Queen: DB2 SCHOOL_IMMUNITY
-        // on the aura — cf909ac1 r1: Mutilate and Envenom refused under
-        // Time Stop, counted into the Astral Shift beside it)
-        (immunityLastsItsAura(auraId) &&
-          immunityStopsSpellSchool(auraId, spellId) !== false);
+    immunityStopsDamageSpell(auraId, spellId) ||
+    immunityCoversSpell(auraId, spellId) === true ||
+    (mech !== undefined && !!immunityMechanics(auraId)?.includes(mech));
   return ccAvoidanceBuffsUpAt(target, atMs, {
     ...(atLine === undefined ? {} : { atLine }),
     judgedIsMiss: true,
-    withForms: true,
     casterOf: (id) => units.find((u) => u.id === id),
     also: stops,
     units,
@@ -758,12 +752,15 @@ export function aurasRefusingSpellAt(
  * Block went up, counted into the Ironbark under it): was this press refused
  * outright by ANOTHER aura than the wall — its landing an IMMUNE with no hit
  * of the press beside it (`IPressLanding.immune`), while an aura that stops
- * this spell and is not the wall was up on the target (`refusingAurasUp`,
- * `aurasRefusingSpellAt`: Ice Block, Time Stop) or a damage-immune control
- * was (`immuneControlUp`: Cyclone)? Then the cast went into that, not into
- * the wall. A wall that stops this spell itself — an immunity, Dispersion
- * against a root — keeps the cast whatever else is up, and so does a
- * refusal the log shows no cause for (codex 85-tk-L6-T281-1 #4, -2 #4).
+ * this spell was up on the target (`refusingAurasUp`,
+ * `aurasRefusingSpellAt`) or a damage-immune control was (`immuneControlUp`:
+ * Cyclone), and the wall is not one of them? Then the cast went into that,
+ * not into the wall. A wall that stops the spell itself keeps the cast
+ * whatever else is up (an immunity; Dispersion against a root), a wall that
+ * does not gives it up even when it is an immunity of other schools
+ * (Blessing of Spellwarding and a physical stun Icebound Fortitude refused),
+ * and a refusal the log shows no cause for stays (codex 85-tk-L6-T281-1 #4,
+ * -2 #4, -3 #2).
  */
 export function refusedByAnotherAura(
   wallAuraId: string,
@@ -773,7 +770,6 @@ export function refusedByAnotherAura(
 ): boolean {
   return (
     landing.immune === true &&
-    !wallStopsEveryHit(wallAuraId) &&
     !refusingAurasUp.includes(wallAuraId) &&
     (immuneControlUp || refusingAurasUp.length > 0)
   );
@@ -888,15 +884,20 @@ export function pressLandingRows<T extends LandingPress>(
       // a refused component beside a hit of the press is the press landing:
       // the hit row is where it landed (Rake's stun 163505 IMMUNE, its
       // damage 16 ms later — codex 85-tk-L6-T281-1 #1, -2 #5)
-      const beside = row.immune
-        ? rows.find(
-            (o) =>
+      // …an unclaimed one: a row after this one (a hit of the same
+      // millisecond sorts before the refusal and is taken as the row itself)
+      const besideAt = row.immune
+        ? rows.findIndex(
+            (o, k) =>
+              k > next &&
               o.hit &&
               Math.abs(o.atMs - row.atMs) <= PRESS_LANDED_SAME_INSTANT_MS,
           )
-        : undefined;
-      landed.set(press, beside ?? row);
-      next++;
+        : -1;
+      landed.set(press, besideAt >= 0 ? rows[besideAt]! : row);
+      // both rows are this press's: the next press of the spell takes
+      // neither (codex 85-tk-L6-T281-3 #1)
+      next = Math.max(next, besideAt) + 1;
     } else landed.set(press, { atMs, spellId: null, hit: false });
     taken.set(key, next);
   }

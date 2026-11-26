@@ -166,7 +166,7 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
   it("a landing that is no outright refusal stays the wall's", () => {
     expect(refusedByAnotherAura(IRONBARK, {}, [ICE_BLOCK], true)).toBe(false);
   });
-  it("an immunity keeps its own refusals", () => {
+  it("an immunity among the refusing auras keeps its own refusals", () => {
     expect(
       refusedByAnotherAura(ICE_BLOCK, { immune: true }, [ICE_BLOCK], false),
     ).toBe(false);
@@ -183,8 +183,15 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       ),
     ).toBe(false);
   });
+  it("a school-limited immunity wall gives up a refusal only another aura explains", () => {
+    // Blessing of Spellwarding 204018 and Icebound Fortitude 48792 up,
+    // Intimidation's physical stun 24394 refused: only Fortitude stops it
+    expect(
+      refusedByAnotherAura("204018", { immune: true }, ["48792"], false),
+    ).toBe(true);
+  });
   it("DB2 and the tables: Ice Block stops a Starsurge, Blessing of Protection no root, Dispersion a root", () => {
-    const up = (auraId: string, spellId: string, name: string) =>
+    const up = (auraId: string, spellId: string, _name: string) =>
       aurasRefusingSpellAt(
         {
           auraEvents: [
@@ -207,7 +214,6 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
         } as never,
         [],
         spellId,
-        name,
         2_000,
         undefined,
       );
@@ -217,6 +223,15 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
     expect(up(IRONBARK, "78674", "Starsurge")).toEqual([]);
     // Time Stop: no table row, DB2's all-school immunity on the aura
     expect(up("378441", "1329", "Mutilate")).toEqual(["378441"]);
+    // Imprison 221527: DB2's all-school immunity on the debuff itself
+    expect(up("221527", "356995", "Disintegrate")).toEqual(["221527"]);
+    // movement out of a ground effect refuses nothing on the target
+    expect(up("358267", "187650", "Freezing Trap")).toEqual([]); // Hover
+    // Precognition's mechanic list has no bleed (Barbed Shot, mechanic 15)
+    expect(up("377362", "217200", "Barbed Shot")).toEqual([]);
+    // Spellwarding stops no physical stun; Fortitude stops a stun
+    expect(up("204018", "24394", "Intimidation")).toEqual([]);
+    expect(up("48792", "24394", "Intimidation")).toEqual(["48792"]);
   });
 });
 
@@ -259,6 +274,38 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
   it("the stun's IMMUNE with the damage 16 ms later: the press landed, at the damage row", () => {
     expect(landing(12_066)).toMatchObject({ atMs: 12_066, hit: true });
     expect(landing(12_066).immune).toBeUndefined();
+  });
+  it("the hit row beside a refusal is taken once: a second press does not land on it", () => {
+    // codex 85-tk-L6-T281-3 #1: two presses, one refusal, one damage row
+    const second = { ...press };
+    const got = pressLandingRows(
+      [press, second],
+      (p) => (p === press ? 12_000 : 12_001),
+      {
+        id: "C",
+        damageOut: [
+          {
+            spellId: "1822",
+            spellName: "Rake",
+            destUnitId: "T",
+            logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: 12_066 },
+          },
+        ],
+        missesOut: [
+          {
+            spellId: "163505",
+            spellName: "Rake",
+            destUnitId: "T",
+            missType: "IMMUNE",
+            timestamp: 12_050,
+            logLine: { event: LogEvent.SPELL_MISSED, timestamp: 12_050 },
+          },
+        ],
+      } as never,
+      [],
+    );
+    expect(got.get(press)).toMatchObject({ atMs: 12_066, hit: true });
+    expect(got.get(second)).toMatchObject({ atMs: 12_001, hit: false });
   });
   it("the IMMUNE alone, or with a hit a second later: refused outright", () => {
     expect(landing(null).immune).toBe(true);

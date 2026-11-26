@@ -617,17 +617,20 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           while (next < rows.length && rows[next]!.t < t - 50) next++;
           const first = rows[next];
           const matched = first !== undefined && first.t <= t + 1500;
-          if (matched) next++;
           // a refused component beside a hit of the press: the hit row is
-          // where the press landed (the product's `pressLandingRows`, T281)
-          const row =
+          // where the press landed, and both rows are this press's (the
+          // product's `pressLandingRows`, T281)
+          const besideAt =
             matched && first.immune
-              ? (rows.find(
-                  (o) =>
+              ? rows.findIndex(
+                  (o, k) =>
+                    k > next &&
                     o.hit &&
                     Math.abs(o.t - first.t) <= PRESS_LANDED_SAME_INSTANT_MS,
-                ) ?? first)
-              : first;
+                )
+              : -1;
+          const row = besideAt >= 0 ? rows[besideAt] : first;
+          if (matched) next = Math.max(next, besideAt) + 1;
           const at = matched ? row!.t : t;
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
@@ -656,7 +659,6 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 target,
                 ctx.units,
                 row!.spellId ?? String(rowsOfSpell[0]?.spellId ?? ""),
-                spell,
                 row!.t,
                 row!.lineIndex,
               ),
