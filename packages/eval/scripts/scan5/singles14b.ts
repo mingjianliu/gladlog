@@ -48,7 +48,10 @@ import {
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
-import { officialDurationS } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  auraCloseRow,
+  officialDurationS,
+} from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { empowerSpans } from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
@@ -471,7 +474,13 @@ function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
         fromMs: open.get(k)!,
         toMs: tsOf(a),
         fromLine: openLine.get(k),
-        toLine: a.logLine?.lineIndex,
+        // the product's closing row: a death teardown closes past the
+        // lethal hit (`auraCloseRow`; codex 85-tk-L6-T281-10 #3, 1f72854f
+        // r3: Touch of Death logged below Ironbark's REMOVED)
+        toLine: auraCloseRow(
+          { timestamp: tsOf(a), lineIndex: a.logLine?.lineIndex },
+          target,
+        )?.lineIndex,
       });
       open.delete(k);
     }
@@ -629,6 +638,14 @@ function checkIntoDefense(ctx: IRoundCtx): void {
         const wallAuraId = iv.key.split("|")[0]!;
         let next = 0;
         let inside = 0;
+        // each press's own row in the log (a press with no row on the
+        // target lands at it)
+        const pressLineAt = new Map<number, number | undefined>(
+          rowsOfSpell.map((c: any) => [
+            tsOf(c) as number,
+            c.logLine?.lineIndex as number | undefined,
+          ]),
+        );
         for (const t of presses) {
           while (next < rows.length && rows[next]!.t < t - 50) next++;
           const first = rows[next];
@@ -641,6 +658,11 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           const row = claim ? rows[claim.landing] : first;
           if (claim) next = claim.cursor;
           const at = matched ? row!.t : t;
+          // the landing, in log order: its row, or with none the press's
+          // own row (the product's fallback, T281)
+          const landing = matched
+            ? { atMs: row!.t, lineIndex: row!.lineIndex }
+            : { atMs: t, lineIndex: pressLineAt.get(t) };
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
           // a hit through a wall that stops every hit went through it, it
@@ -650,18 +672,13 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           // wall's APPLIED row in one millisecond, and a press another aura
           // refused under the wall
           if (
-            matched &&
-            (landedBeforeWallRow(
-              { atMs: row!.t, lineIndex: row!.lineIndex },
-              fromMs,
-              iv.fromLine,
-            ) ||
-              landedAfterWallRow(
-                { atMs: row!.t, lineIndex: row!.lineIndex },
-                iv.toLine === undefined
-                  ? undefined
-                  : { ms: toMs, lineIndex: iv.toLine },
-              ))
+            landedBeforeWallRow(landing, fromMs, iv.fromLine) ||
+            landedAfterWallRow(
+              landing,
+              iv.toLine === undefined
+                ? undefined
+                : { ms: toMs, lineIndex: iv.toLine },
+            )
           )
             continue;
           if (

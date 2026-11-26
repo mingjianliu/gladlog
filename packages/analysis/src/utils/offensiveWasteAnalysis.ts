@@ -624,6 +624,9 @@ type LandingPress = {
   spellId: string | null;
   spellName: string | null;
   destUnitId: string;
+  /** the press's own row: a press with no row of its own on the target
+   * lands at it, in log order (`landedAfterWallRow`) */
+  logLine?: { lineIndex?: number };
 };
 
 /**
@@ -883,11 +886,12 @@ export function refusedByAnotherAura(
  * Pipeline T281: which of a press's rows is its landing, and where the next
  * press of the spell starts reading. `rows` are the spell's rows on the
  * target in time order, `next` the first one this press can own.
- *  - a refusal with a hit beside it (`PRESS_LANDED_SAME_INSTANT_MS`) landed
+ *  - a row that is no hit (a refusal, the press's aura row, a miss) with a
+ *    hit beside it (`PRESS_LANDED_SAME_INSTANT_MS`) landed
  *    at the hit (Rake's stun 163505 IMMUNE, its damage 16 ms later), unless
  *    a later press of the spell went off between the two — the hit is that
  *    one's; both rows are consumed;
- *  - a hit takes the refusals of its own millisecond with it (a hit sorts
+ *  - a hit takes the other rows of its own millisecond with it (a hit sorts
  *    before them).
  * One cursor for the section (`pressLandingRows`) and its gate (scan5
  * `singles14b`) — codex 85-tk-L6-T281-3 #1, -4 #1, #5.
@@ -904,7 +908,11 @@ export function claimLandingRow<
 ): { landing: number; cursor: number } {
   const row = rows[next]!;
   const at = atOf(row);
-  if (row.immune) {
+  // a row that is no hit — a refusal, the press's aura going on, a miss —
+  // with a hit of the press beside it landed at the hit (Wildfire Bomb's
+  // aura refreshed 12 ms before its 83k hit: 69372d87 r4, codex
+  // 85-tk-L6-T281-10 #1)
+  if (!row.hit) {
     const beside = rows.findIndex(
       (o, k) =>
         k > next &&
@@ -920,8 +928,8 @@ export function claimLandingRow<
       : { landing: next, cursor: next + 1 };
   }
   let cursor = next + 1;
-  if (row.hit)
-    while (rows[cursor]?.immune && atOf(rows[cursor]!) === at) cursor++;
+  while (rows[cursor] && !rows[cursor]!.hit && atOf(rows[cursor]!) === at)
+    cursor++;
   return { landing: next, cursor };
 }
 
@@ -1092,7 +1100,18 @@ export function pressLandingRows<T extends LandingPress>(
       );
       landed.set(press, rows[claim.landing]!);
       next = claim.cursor;
-    } else landed.set(press, { atMs, spellId: null, hit: false });
+    } else {
+      // no row of its own: it lands at its press, in the log's order (an
+      // Incinerate cast logged two rows below Divine Protection's REMOVED,
+      // its bolt 1.6 s later: 429a3735 r0, codex 85-tk-L6-T281-10 #2)
+      const lineIndex = press.logLine?.lineIndex;
+      landed.set(press, {
+        atMs,
+        spellId: null,
+        hit: false,
+        ...(lineIndex === undefined ? {} : { lineIndex }),
+      });
+    }
     taken.set(key, next);
   }
   return landed;

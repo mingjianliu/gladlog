@@ -243,6 +243,16 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       cursor: 2,
     });
   });
+  it("the cursor: an aura row with a hit beside it landed at the hit", () => {
+    // Wildfire Bomb's aura refreshed 12 ms before its hit — -10 #1
+    const rows = [
+      { atMs: 139_058, hit: false },
+      { atMs: 139_070, hit: true },
+    ];
+    expect(claimLandingRow(rows, 0, (r) => r.atMs, 139_000, [139_000])).toEqual(
+      { landing: 1, cursor: 2 },
+    );
+  });
   it("the cursor: a hit takes the refusal of its own millisecond with it", () => {
     // Rake damage and stun refusal both at 12.050, damage first — -4 #5
     const rows = [
