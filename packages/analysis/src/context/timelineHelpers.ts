@@ -1354,6 +1354,7 @@ export function extractOwnerCDBuffExpiry(
             holder,
             endAuraId,
             cd.spellId,
+            castMs,
             span.removedMs,
             new Set(friends.map((f) => f.id)),
           );

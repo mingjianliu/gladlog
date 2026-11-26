@@ -318,4 +318,53 @@ describe("[BUFF FADED] — a Vanish its opener took (T192)", () => {
       ).endedByOwnPress,
     ).toBeUndefined();
   });
+
+  it("a missed Blind is an attempt, not a hit: only an ABSORB miss row counts (codex 85-tk-L5-T192-2d #1)", () => {
+    const blind = (missType: string): Opener => ({
+      id: "2094",
+      name: "Blind",
+      atS: 30.9,
+      damage: true,
+      missType,
+    });
+    for (const m of ["MISS", "IMMUNE", "DODGE", "REFLECT"])
+      expect(fade(rogue(30.95, [blind(m)])).endedByOwnPress).toBeUndefined();
+  });
+
+  it("an application from an older use is not this press's (2d #2)", () => {
+    // the current APPLIED row is missing; the last one is 24 s older
+    const e = fade(
+      rogue(
+        30.081,
+        [{ id: EVISCERATE, name: "Eviscerate", atS: 29.92, damage: true }],
+        6,
+      ),
+    );
+    expect(e.endedByOwnPress).toBeUndefined();
+  });
+
+  it("a REMOVED→APPLIED re-broadcast just before the removal is not the removal (2d #3)", () => {
+    // Garrote in the real removal's ms, the re-broadcast pair 1 ms before
+    const u = rogue(31.0, [{ id: "703", name: "Garrote", atS: 31.0 }]);
+    u.auraEvents.push(
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_REMOVED,
+        VANISH_AURA,
+        T0 + 30_999,
+        ME,
+        ME,
+        "BUFF",
+      ) as never,
+      makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED,
+        VANISH_AURA,
+        T0 + 30_999,
+        ME,
+        ME,
+        "BUFF",
+      ) as never,
+    );
+    u.auraEvents.sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    expect(fade(u).endedByOwnPress).toBe("Garrote");
+  });
 });

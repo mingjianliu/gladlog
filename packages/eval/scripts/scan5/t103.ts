@@ -264,6 +264,7 @@ export function run(ctx: IRoundCtx): void {
       holder,
       auraId,
       id,
+      castMs,
       removedMs,
       new Set(friends.map((f) => f.id as string)),
     );

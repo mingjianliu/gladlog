@@ -15,6 +15,7 @@ import {
 } from "../data/spellIdLists";
 import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "../data/spellStateAttrsGenerated";
 import { buildAuraIntervals, SAVE_CAST_AURA_PAIR_S } from "./auraIntervals";
+import { dropAuraRebroadcasts } from "./auraRebroadcast";
 import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 
@@ -416,8 +417,12 @@ const loggedBefore = (a: RowAt, b: RowAt): boolean =>
  * ruling R121) — or undefined when the log shows none. It is a
  * SPELL_CAST_SUCCESS of the holder
  *  - logged after the stealth's APPLIED row (the last one before the REMOVED
- *    row: this application) and before the REMOVED row, rows in one ms by
- *    their source line, and at most `STEALTH_OPENER_CAST_MS` before it
+ *    row and no earlier than `AURA_BEFORE_CAST_ROW_MAX_MS` before the press
+ *    at `pressMs`: this application, never an older use's — 2d #2) and
+ *    before the REMOVED row, rows in one ms by their source line, and at
+ *    most `STEALTH_OPENER_CAST_MS` before it. The rows are the producer's:
+ *    the holder's own, re-broadcasts dropped (`dropAuraRebroadcasts`), the
+ *    removal at its exact ms (2d #3)
  *    (codex 85-tk-L5-T192-2b #2, 68160220 r6: an Eviscerate 56 ms BEFORE
  *    the Vanish was named; 2c #3: a Garrote logged one row after the
  *    removal);
@@ -425,9 +430,11 @@ const loggedBefore = (a: RowAt, b: RowAt): boolean =>
  *    Vial, Shadow Dance, Evasion are no openers (2b #1, 4fb9ee24:
  *    `ended by your own Stealth` beside the Shadowstrike that landed);
  *  - of a spell stealth does not allow (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`,
- *    DB2) — or, allowed, one that resolved on that same unit: the holder's
- *    damage or miss row of the spell (a fully absorbed hit is a miss row —
- *    2c #1, 45e12c2b r6 / 7308d15a r3) logged after the cast and within
+ *    DB2) — or, allowed, one that hit that same unit: the holder's damage
+ *    row of the spell, or its ABSORB miss row (a fully absorbed hit — 2c
+ *    #1, 45e12c2b r6 / 7308d15a r3; a MISS / IMMUNE / DODGE / REFLECT row
+ *    is an attempt, not a hit: a missed Blind ends nothing, 2d #1, 7ab0339e
+ *    kept its Vanish 933 ms past one), logged after the cast and within
  *    `STEALTH_OPENER_CAST_MS` of it (2c #2: a hit on another unit proves
  *    nothing). Shadowstrike and Ambush need stealth and end it; Shadowstep,
  *    Sap and Blind deal nothing and do not.
@@ -443,30 +450,37 @@ export function stealthOpenerAtRemoval(
     Partial<Pick<ICombatUnit, "damageOut" | "missesOut">>,
   auraId: string,
   pressSpellId: string,
+  pressMs: number,
   removedMs: number,
   sameSideIds: ReadonlySet<string>,
 ): ICombatUnit["spellCastEvents"][number] | undefined {
   if (!STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId)) return undefined;
-  const auraRows = (holder.auraEvents ?? []).filter(
-    (a) => a.spellId === auraId,
+  const auraRows = dropAuraRebroadcasts(holder.auraEvents ?? []).filter(
+    (a) => a.spellId === auraId && a.srcUnitId === holder.id,
   );
-  const removed = auraRows.find(
-    (a) =>
-      (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED &&
-      // the producer's ms is rebuilt from seconds: allow its rounding
-      Math.abs(a.logLine.timestamp - removedMs) <= 1,
-  )?.logLine;
+  const removed = auraRows
+    .filter(
+      (a) =>
+        (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED &&
+        a.logLine.timestamp === removedMs,
+    )
+    .at(-1)?.logLine;
   if (!removed) return undefined;
   const applied = auraRows
     .filter(
       (a) =>
         (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED &&
+        a.logLine.timestamp >= pressMs - AURA_BEFORE_CAST_ROW_MAX_MS &&
         loggedBefore(a.logLine, removed),
     )
     .at(-1)?.logLine;
   if (!applied) return undefined;
+  const hits = [
+    ...(holder.damageOut ?? []),
+    ...(holder.missesOut ?? []).filter((m) => m.missType === "ABSORB"),
+  ];
   const resolved = (cast: ICombatUnit["spellCastEvents"][number]) =>
-    [...(holder.damageOut ?? []), ...(holder.missesOut ?? [])].some(
+    hits.some(
       (d) =>
         d.spellId === cast.spellId &&
         d.destUnitId === cast.destUnitId &&
