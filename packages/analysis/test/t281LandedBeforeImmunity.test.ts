@@ -326,6 +326,10 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
     expect(up("433874", "88625", "Holy Word: Chastise")).toEqual([]);
     expect(up("433874", "200200", "Holy Word: Chastise")).toEqual(["433874"]);
     expect(up("377362", "390171", "Snowdrift")).toEqual([]);
+    // a horror no category table holds (Sin and Punishment) — -7 #3
+    expect(up("377362", "87204", "Sin and Punishment")).toEqual(["377362"]);
+    // Obsidian Scales stops a silence only with Obsidian Mettle — -7 #1
+    expect(up("363916", "47476", "Strangulate")).toEqual([]);
     // area damage lands through Vanish (-5 #3)
     expect(up("11327", "81297", "Consecration")).toEqual([]);
     // Blessing of Freedom stops no stun

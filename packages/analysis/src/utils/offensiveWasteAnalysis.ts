@@ -19,6 +19,7 @@ import { parryStopsAttack } from "../data/spellParry";
 import { immunityCoversSpell, immunityMechanics } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
+import { isHardCcAura } from "./cannotCastIntervals";
 import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
 import { isControlCast, PRESS_LANDED_SAME_INSTANT_MS } from "./castMissRows";
 import {
@@ -35,6 +36,7 @@ import {
   CC_AVOIDANCE_BUFF_SPELLS,
   ccAvoidanceBuffsUpAt,
 } from "./ccTrinketAnalysis";
+import { auraBlocksInterrupt } from "./combatStates";
 import {
   hpTroughInEventSpan,
   PRESS_EFFECT_LEAD_MS,
@@ -53,6 +55,7 @@ import { isAutomaticCastRow } from "./pressRow";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 import { ccMechanicOf } from "./spellMechanics";
+import { unitAuraBlocksInterrupt } from "./talentBehaviors";
 
 /**
  * 2026-08-17:两张手打名单(IMMUNITY_AURAS 4 条 / MAJOR_DR_AURAS 5 条)已删除,
@@ -730,21 +733,34 @@ const LOSS_OF_CONTROL_MECHANICS: ReadonlySet<number> = new Set([
  *    (`immunityMechanics`: Dispersion against a root, Icebound Fortitude
  *    against a stun, Precognition against an interrupt, Sanctified Ground
  *    against a silence, Master's Call against a snare). The mechanic is a
- *    label of the spell: a row no table calls a control that carries a
- *    loss-of-control label is no control (Snowdrift's pulse 390171,
- *    "stunned", applied under Precognition) and is not matched;
+ *    label of the spell: a row no table calls a control (`SPELL_CATEGORIES`,
+ *    `isHardCcAura`) that carries a loss-of-control label is no control
+ *    (Snowdrift's pulse 390171, "stunned", applied under Precognition) and
+ *    is not matched; an interrupt or silence immunity a talent decides
+ *    answers by the holder's talent (`unitAuraBlocksInterrupt`: Obsidian
+ *    Scales). A snare label on a damage row is matched all the same
+ *    (Pistol Shot under Blessing of Freedom — recorded, not told apart from
+ *    Stormbind's refused snare);
  *  - for a control or root aura whose mechanic DB2 knows (`SPELL_CATEGORIES`
  *    cc / roots; Holy Word: Chastise's damage 88625 is typed cc, has none,
  *    and landed under Deep Breath and Bladestorm), a listed control immunity
  *    that covers it (`CC_AVOIDANCE_BUFF_SPELLS` with `avoidanceBuffCoversCc`:
- *    Deep Breath's flight, Ultimate Penitence) — unless the aura's own DB2
+ *    Deep Breath's flight, Ultimate Penitence — "can explain this IMMUNE
+ *    row", not "always refuses": 64 % of controls into Ultimate Penitence
+ *    logged IMMUNE) — unless the aura's own DB2
  *    list names loss-of-control mechanics, which then is the whole answer
  *    (Precognition). Movement out of a ground effect (Hover, Blessing of
  *    Freedom — `applicableCCAvoidanceIds`' other half) refuses nothing on
  *    the target and is not asked.
  * Codex 85-tk-L6-T281-3 #4 #5, -4 #2 #3, -5 #2 #3, -6 #1–#3.
  */
-export function auraStopsSpell(auraId: string, spellId: string): boolean {
+export function auraStopsSpell(
+  auraId: string,
+  spellId: string,
+  /** the aura's holder, when known: a talent decides some interrupt
+   * immunities (`unitAuraBlocksInterrupt`) */
+  holder?: { info?: { pvpTalents?: string[] } | null },
+): boolean {
   const mech = ccMechanicOf(spellId);
   const kind = SPELL_CATEGORIES[spellId]?.type;
   const auraMechs = immunityMechanics(auraId);
@@ -756,7 +772,19 @@ export function auraStopsSpell(auraId: string, spellId: string): boolean {
       immunityStopsSpellSchool(auraId, spellId) !== false) ||
     (mech !== undefined &&
       !!auraMechs?.includes(mech) &&
-      !(kind === undefined && LOSS_OF_CONTROL_MECHANICS.has(mech))) ||
+      !(
+        kind === undefined &&
+        LOSS_OF_CONTROL_MECHANICS.has(mech) &&
+        !isHardCcAura(spellId)
+      ) &&
+      // an interrupt / silence immunity a talent decides (Obsidian Scales
+      // without Obsidian Mettle: DB2 carries the row in every state)
+      !(
+        holder !== undefined &&
+        (mech === 9 || mech === 26) &&
+        auraBlocksInterrupt(auraId) &&
+        !unitAuraBlocksInterrupt(holder, auraId)
+      )) ||
     ((kind === "cc" || kind === "roots") &&
       mech !== undefined &&
       CC_AVOIDANCE_BUFF_SPELLS.has(auraId) &&
@@ -782,7 +810,8 @@ export function aurasRefusingSpellAt(
   atMs: number,
   atLine: number | undefined,
 ): string[] {
-  const stops = (auraId: string): boolean => auraStopsSpell(auraId, spellId);
+  const stops = (auraId: string): boolean =>
+    auraStopsSpell(auraId, spellId, target);
   return ccAvoidanceBuffsUpAt(target, atMs, {
     ...(atLine === undefined ? {} : { atLine }),
     judgedIsMiss: true,
