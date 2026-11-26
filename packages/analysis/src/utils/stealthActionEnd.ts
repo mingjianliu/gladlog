@@ -392,18 +392,65 @@ export function isMeleeSwingRow(d: {
   );
 }
 
+/** How long before a stealth's removal the press that ended it is logged
+ * (`stealthOpenerAtRemoval`; scan5/t103 imports it). */
+export const STEALTH_OPENER_CAST_MS = 100;
+
 /**
- * Does a press of `spellId` end the stealth `auraId`
- * (`STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`)? Every press stealth does not allow
- * (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`, DB2) does — the split measured in
- * that set's header (openers without the attribute ended the run in their
- * own instant). False for an aura that is no such stealth. The
- * `[BUFF FADED]` cause of a Vanish its opener took reads it
- * (`extractOwnerCDBuffExpiry`, pipeline T192, user ruling R121).
+ * The holder's own press that ended the stealth `auraId`
+ * (`STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`) removed at `removedMs` — the opener
+ * of a `[BUFF FADED]` Vanish (pipeline T192, user ruling R121) — or
+ * undefined when the log shows none. It is a SPELL_CAST_SUCCESS of the
+ * holder
+ *  - logged after the stealth went up (`appliedMs`) and at most
+ *    `STEALTH_OPENER_CAST_MS` before it came off (codex 85-tk-L5-T192-2b
+ *    #2, 68160220 r6: an Eviscerate 56 ms BEFORE the Vanish was named);
+ *  - at a unit that is not of the holder's side: the Stealth button, Crimson
+ *    Vial, Shadow Dance, Evasion are no openers (same review #1, 4fb9ee24:
+ *    `ended by your own Stealth` beside the Shadowstrike that landed);
+ *  - of a spell stealth does not allow (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`,
+ *    DB2) — or, allowed, one whose own damage row the holder dealt within
+ *    that window of the cast: Shadowstrike and Ambush need stealth and end
+ *    it; Shadowstep, Sap and Blind land no damage and do not.
+ * Measured on every cast made while 11327 was up (605 + 285 12.1.5 files;
+ * aura off ≤ 100 ms after the cast / still up): Cheap Shot 329 / 0, Garrote
+ * 151 / 0, Kidney Shot 15 / 0, Gouge 4 / 0, Rupture 4 / 0; Shadowstrike
+ * 26 / 23; Shadowstep 12 / 46, Sprint 1 / 23, Blind 0 / 15, Sap 0 / 11,
+ * Crimson Vial 1 / 29, Stealth 3 / 16, Evasion 0 / 4. The last such press
+ * before the removal is the one named.
  */
-export const pressEndsStealth = (auraId: string, spellId: string): boolean =>
-  STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId) &&
-  !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(spellId);
+export function stealthOpenerAtRemoval(
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
+  auraId: string,
+  pressSpellId: string,
+  appliedMs: number,
+  removedMs: number,
+  sameSideIds: ReadonlySet<string>,
+): ICombatUnit["spellCastEvents"][number] | undefined {
+  if (!STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId)) return undefined;
+  const dealt = (spellId: string, castMs: number) =>
+    (holder.damageOut ?? []).some(
+      (d) =>
+        d.spellId === spellId &&
+        d.logLine.timestamp >= castMs &&
+        d.logLine.timestamp - castMs <= STEALTH_OPENER_CAST_MS,
+    );
+  return (holder.spellCastEvents ?? [])
+    .filter((c) => {
+      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) return false;
+      const t = c.logLine.timestamp;
+      if (!(t > appliedMs && t <= removedMs)) return false;
+      if (removedMs - t > STEALTH_OPENER_CAST_MS) return false;
+      if (!c.spellId || c.spellId === pressSpellId) return false;
+      const dest = c.destUnitId;
+      if (!dest || dest === NO_TARGET_GUID || dest === holder.id) return false;
+      if (sameSideIds.has(dest)) return false;
+      return (
+        !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(c.spellId) || dealt(c.spellId, t)
+      );
+    })
+    .at(-1);
+}
 
 const stealthAllowsPress =
   (auraId: string | undefined) =>

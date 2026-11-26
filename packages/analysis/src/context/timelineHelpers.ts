@@ -91,7 +91,7 @@ import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
 import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
 import { getSpellSchoolName } from "../utils/spellSchools";
-import { pressEndsStealth } from "../utils/stealthActionEnd";
+import { stealthOpenerAtRemoval } from "../utils/stealthActionEnd";
 import { type SummonKindWord, summonKindWord } from "../utils/summonKind";
 import {
   type INonPlayerUnitKill,
@@ -519,8 +519,8 @@ export function runsWithHaste(spellId: string): boolean {
 }
 
 /** How long before a charge aura's dose row or removal the holder's cast
- * that spent it is logged (`cdExpiry`: `charges_spent`, and the cast that
- * took a Vanish's stealth, pipeline T192). scan5/t103 imports it. */
+ * that spent it is logged (`cdExpiry`: `charges_spent`). scan5/t103 imports
+ * it (it had a hand copy). */
 export const CHARGE_CAST_MS = 100;
 
 /** How close to a buff's removal the holder's own press counts as taking it,
@@ -1339,28 +1339,37 @@ export function extractOwnerCDBuffExpiry(
         )
           cause = "charges_spent";
         // pipeline T192 (user ruling R121, 2026-11-25): the stealth a
-        // Vanish leaves (11327; `pressEndsStealth`) that came off
-        // ≤ `CHARGE_CAST_MS` after its holder pressed something stealth does
-        // not allow was ended by that press — the opener. The line read
-        // `ended after 0.4 of 1.5s — no dispel logged`. A press stealth
-        // allows ends nothing: a Shadowstep in the millisecond an enemy
-        // Flare took the aura is not what ended it (review
-        // 85-tk-L5-T192-2, a real round), and with no such press at the
-        // removal the line stays as it was. The press named is the last one
-        // logged before the removal.
+        // Vanish leaves (11327) that came off right after its holder's
+        // opener was ended by that press (`stealthOpenerAtRemoval`: a cast
+        // at an enemy, after the stealth went up, that stealth does not
+        // allow or that dealt its own damage). The line read `ended after
+        // 0.4 of 1.5s — no dispel logged`; with no such press at the removal
+        // it stays as it was.
         if (
           cause === "ended_early" &&
           !endedByOwnPress &&
           holder.id === ownerId
         ) {
-          const opener = castRowsBefore(span.removedMs)
+          // the stealth's own APPLIED row (the press's span starts a little
+          // before the cast line; the aura can go up after it)
+          const appliedMs = holder.auraEvents
             .filter(
-              (c) =>
-                !!c.spellId &&
-                c.spellId !== cd.spellId &&
-                pressEndsStealth(endAuraId, c.spellId),
+              (a) =>
+                a.spellId === endAuraId &&
+                (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED &&
+                (a.logLine.timestamp as number) >= span.fromMs &&
+                (a.logLine.timestamp as number) <= span.removedMs,
             )
+            .map((a) => a.logLine.timestamp as number)
             .at(-1);
+          const opener = stealthOpenerAtRemoval(
+            holder,
+            endAuraId,
+            cd.spellId,
+            appliedMs ?? castMs,
+            span.removedMs,
+            new Set(friends.map((f) => f.id)),
+          );
           if (opener)
             endedByOwnPress = getEnglishSpellName(
               opener.spellId!,

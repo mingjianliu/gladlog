@@ -5242,13 +5242,13 @@ const INDEX: PredicateRow[] = [
   // pipeline T192: the press that ends a stealth, and its window
   {
     file: `${A}/utils/stealthActionEnd.ts`,
-    symbol: "pressEndsStealth",
+    symbol: "stealthOpenerAtRemoval",
     mod: stealthActionEnd,
   },
   {
-    file: `${A}/context/timelineHelpers.ts`,
-    symbol: "CHARGE_CAST_MS",
-    mod: timelineHelpers,
+    file: `${A}/utils/stealthActionEnd.ts`,
+    symbol: "STEALTH_OPENER_CAST_MS",
+    mod: stealthActionEnd,
   },
   {
     file: `${A}/context/timelineHelpers.ts`,

@@ -24,14 +24,13 @@
  *    before the removal with no such dose seen is out of the total (`no
  *    spender seen`).
  *    Pipeline T192 (ruling R121): in the total too, as `stealth taken by
- *    the holder's opener` — a stealth of `STEALTH_AURA_IDS` (Vanish's 11327)
- *    removed ≤ `CHARGE_CAST_MS` after its holder's cast of a spell DB2 does
- *    not allow while stealthed: that cast ended it.
+ *    the holder's opener` — the product's `stealthOpenerAtRemoval`
+ *    (stealthActionEnd.ts) finds an opener on the log's own rows (the
+ *    stealth's APPLIED and REMOVED, the holder's casts and damage) and the
+ *    line gives no cause.
  *  - `ownPressEndWithoutCast`: the reverse — a line reading `ended by your
- *    own X` on such a stealth where the log does not carry it: no cast of X
- *    by the holder in that window, X is the press itself or a spell stealth
- *    allows, or an enemy's aura landed on the holder in the removal's
- *    window (a reveal: the enemy took it).
+ *    own X` on such a stealth where that reading of the rows names another
+ *    press or none.
  *  - `earlyEndReadExpired`: printed `(expired)` / `(expired; …)` on a
  *    removal more than the slack (`JITTER_MS`, at most half the length, as
  *    the producer) before the full length ends. Only buffs the producer
@@ -51,11 +50,13 @@ import {
   runsWithHaste,
 } from "@gladlog/analysis/src/context/timelineHelpers";
 import { ownEffectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
-import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
-import { STEALTH_KEPT_BY_ALLOWED_PRESS_IDS } from "@gladlog/analysis/src/utils/stealthActionEnd";
+import {
+  STEALTH_KEPT_BY_ALLOWED_PRESS_IDS,
+  stealthOpenerAtRemoval,
+} from "@gladlog/analysis/src/utils/stealthActionEnd";
 import {
   TOUCH_OF_KARMA_ABSORB_ID,
   TOUCH_OF_KARMA_ID,
@@ -93,12 +94,6 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ...BUCKETS.map((b) => `fadeOffset|${b}`),
 ]);
 
-/** the stealths a press stealth does not allow ends: the producer's table */
-const STEALTH_AURA_IDS = STEALTH_KEPT_BY_ALLOWED_PRESS_IDS;
-/** a cast that ends such a stealth: not the press, not one DB2 allows
- * while stealthed */
-const endsStealth = (pressId: string) => (castId: string) =>
-  castId !== pressId && !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(castId);
 /** in the total: a stealth its holder's opener took, read as an early end
  * with no cause (pipeline T192) */
 const OPENER_KIND = "stealth taken by the holder's opener";
@@ -264,38 +259,38 @@ export function run(ctx: IRoundCtx): void {
     // the reverse of the one-charge reading: `ended by your own X` on a
     // DB2 charge aura needs X cast by the holder at the removal
     const own = /^ended by your own (.+?)(;|$)/.exec(claim);
-    if (own && STEALTH_AURA_IDS.has(auraId)) {
-      ctx.bump("ownPressEndWithoutCast");
-      const at = ((holder.spellCastEvents ?? []) as any[]).filter(
-        (c) =>
-          ev(c) === SUCCESS &&
-          tsOf(c) <= removedMs &&
-          removedMs - tsOf(c) <= CHARGE_CAST_MS &&
-          nameOf(c.spellId, c.spellName ?? "") === own[1],
-      );
-      // an enemy's aura landing on the holder as the stealth goes (Flare)
-      const reveal = ((holder.auraEvents ?? []) as any[]).find(
+    // the stealth's APPLIED row of this press, read off the log
+    const appliedMs = ((holder.auraEvents ?? []) as any[])
+      .filter(
         (a) =>
           ev(a) === APPLIED &&
-          a.auraType === "DEBUFF" &&
-          !friends.some((f) => f.id === a.srcUnitId) &&
-          Math.abs(tsOf(a) - removedMs) <= AURA_REBROADCAST_GAP_MS,
-      );
-      const why =
-        at.length === 0
-          ? `no such cast by the holder within ${CHARGE_CAST_MS} ms before the removal`
-          : at.every((c) => !endsStealth(id)(String(c.spellId ?? "")))
-            ? "the cast is the press itself or one stealth allows"
-            : reveal
-              ? `an enemy's ${nameOf(reveal.spellId, reveal.spellName ?? "")} landed on the holder at the removal`
-              : undefined;
-      if (why)
+          String(a.spellId) === auraId &&
+          tsOf(a) <= removedMs &&
+          tsOf(a) >= castMs - 1000,
+      )
+      .map(tsOf)
+      .at(-1);
+    // the product's own selection of the opener, on those rows
+    const opener = stealthOpenerAtRemoval(
+      holder,
+      auraId,
+      id,
+      appliedMs ?? castMs,
+      removedMs,
+      new Set(friends.map((f) => f.id as string)),
+    );
+    const openerName = opener
+      ? nameOf(opener.spellId, opener.spellName ?? "")
+      : undefined;
+    if (own && STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId)) {
+      ctx.bump("ownPressEndWithoutCast");
+      if (openerName !== own[1])
         ctx.violate(
           "ownPressEndWithoutCast",
           name,
           removedMs,
           key,
-          `${name} reads ended by ${own[1]}; ${why}`,
+          `${name} reads ended by ${own[1]}; the log's opener at the removal is ${openerName ?? "none"}`,
           line.trim(),
         );
     }
@@ -336,22 +331,15 @@ export function run(ctx: IRoundCtx): void {
           `${name} removed ${removedMs - Math.max(...casts.filter((c) => String(c.spellId) === spent && tsOf(c) <= removedMs).map(tsOf))} ms after ${nameOf(spent, spent)}, which spends its doses`,
           line.trim(),
         );
-      else if (
-        // pipeline T192 (ruling R121): the holder's cast of a spell stealth
-        // does not allow, at the removal of its stealth
-        STEALTH_AURA_IDS.has(auraId) &&
-        holder.id === owner.id &&
-        finals.some(endsStealth(id))
-      )
+      else if (openerName && holder.id === owner.id)
+        // pipeline T192 (ruling R121): the stealth came off at its holder's
+        // opener, and the line gives no cause
         ctx.violate(
           "chargeSpentReadEarly",
           OPENER_KIND,
           removedMs,
           key,
-          `${name} (aura ${auraId}) removed after ${finals
-            .filter(endsStealth(id))
-            .map((x) => nameOf(x, x))
-            .join(", ")}`,
+          `${name} (aura ${auraId}) removed after ${openerName}`,
           line.trim(),
         );
       else if (finals.length > 0)
