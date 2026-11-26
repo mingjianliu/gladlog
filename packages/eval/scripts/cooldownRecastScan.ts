@@ -67,7 +67,10 @@ import {
   empowerSpans,
   pressRidesAlong,
 } from "@gladlog/analysis/src/utils/castCommitSpans";
-import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
+import {
+  OFF_GCD_SPELL_IDS,
+  ON_GCD_SPELL_IDS,
+} from "@gladlog/analysis/src/data/offGcdGenerated";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -102,9 +105,11 @@ const minCd = Number(arg("--min-cd", "8"));
  * cooldown's, not the spell's (the longest unhasted GCD plus the row slack) */
 const REJECT_GCD_MS = 1600;
 /** a "not ready" refusal this soon before a success of the same spell is
- * that press, queued (the client's default spell queue window, 400 ms):
- * 6cc00636 r59, Teleport refused 16 ms and 1 ms before it went out */
-const REJECT_QUEUED_MS = 400;
+ * that press, queued: 6cc00636 r59, Teleport refused 16 ms and 1 ms before
+ * it went out, its cooldown long over. Refusals the cooldown explains sit
+ * further out (codex -7 #1: fddc9b24 249 ms, 389530da 77 ms before the
+ * success, both just short of the modelled return) */
+const REJECT_QUEUED_MS = 50;
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
@@ -463,15 +468,16 @@ for (const f of files) {
           // its cooldown 0.8 s after a Shadow kick, dca02448 r5); and a
           // charge spell, whose refusal says nothing of one charge's return
           // (Conflagrate refused with a charge spent, 41243fd2 r6)
-          // its casts that start the global cooldown: an off-GCD one
-          // (DB2, `OFF_GCD_SPELL_IDS`) starts none (codex -6: Teleport
-          // refused twice after Soulburn, 41243fd2 r6; Combustion after
-          // Fire Blast, cf6c4474 r1)
+          // its casts that start the global cooldown: DB2's on-GCD ones
+          // (`ON_GCD_SPELL_IDS`) only — an off-GCD one starts none (codex
+          // -6: Teleport refused twice after Soulburn, 41243fd2 r6;
+          // Combustion after Fire Blast, cf6c4474 r1), nor a passive's row
+          // in neither set (-7 #2: Crusading Strikes, f55b2412 r4)
           const ownCastMs: number[] = [];
           for (const c of u.spellCastEvents ?? [])
             if (
               c.logLine.event === "SPELL_CAST_SUCCESS" &&
-              !OFF_GCD_SPELL_IDS.has(String(c.spellId))
+              ON_GCD_SPELL_IDS.has(String(c.spellId))
             )
               ownCastMs.push(c.logLine.timestamp);
           // its cast bars, start to the row that ended them (the shared
@@ -531,7 +537,13 @@ for (const f of files) {
           for (const ms of rejected.get(u.id)?.get(id) ?? []) {
             if ((entry.charges ?? 1) > 1) break;
             if (ms < legacy.startTime || ms > endMs) continue;
-            if (ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS))
+            // the global cooldown refuses only an on-GCD spell (codex -7 #3:
+            // Unending Resolve refused 916 ms after a Conflagrate, its own
+            // cooldown 0.45 s from its end, fddc9b24)
+            if (
+              !OFF_GCD_SPELL_IDS.has(id) &&
+              ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS)
+            )
               continue;
             if (
               (u.spellCastEvents ?? []).some(
