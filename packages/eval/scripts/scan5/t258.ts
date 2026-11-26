@@ -36,6 +36,7 @@
  *    Counted: every enemy cooldown press of a caster that died before the
  *    press's effect was due to end.
  */
+import { analysisDataReady } from "@gladlog/analysis";
 import {
   ANTI_MAGIC_SHELL_ANSWER_IDS,
   BURST_RESPONSE_PRE_MS,
@@ -185,9 +186,16 @@ export function run(ctx: IRoundCtx): void {
   if (isHealerSpec(owner.spec)) {
     // the producer's own selection: the whole candidate pass (the builder's
     // rows less whatever the pass drops after it), not the builder alone
+    // the tables the pass reads are loaded: the entry that runs this
+    // module (verify/run.ts, verify/scan.ts) awaits ensureAnalysisData
+    // first; a menu built before them is a degraded one, so refuse
+    if (!analysisDataReady())
+      throw new Error("scan5/t258: await ensureAnalysisData() first");
     let rows: ReturnType<typeof extractCandidateFindings> = [];
     try {
-      rows = extractCandidateFindings(ctx.legacy, owner.id);
+      // with the round's raw streams, the menu as the app builds it
+      // (eval/test/rawStreamsEntrypoints.test.ts)
+      rows = extractCandidateFindings(ctx.legacy, owner.id, ctx.rawStreams());
     } catch {
       return;
     }
