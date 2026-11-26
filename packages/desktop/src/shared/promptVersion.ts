@@ -1969,7 +1969,8 @@
  *
  * v673 (2026-11-26; pipeline batch B222, T192): The prompt owner's own
  *  Vanish that read as ended early names the own press that ended it
- *  ("ended by your own Cheap Shot") instead of "no dispel logged". See
+ *  ("ended by your own Cheap Shot") instead of "no dispel logged" when the
+ *  log shows a qualifying opener at the removal. See
  *  docs/prompt-version-history.md.
  */
 export const PROMPT_VERSION = 673;

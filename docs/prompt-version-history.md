@@ -8769,15 +8769,18 @@ prompt owner's own Vanish (the player whose prompt it is) whose stealth (aura
 its full duration, with no logged break read for it) names the press that ended
 it: the [BUFF FADED] line reads "ended by your own X" instead of "ended after N
 of M s — no dispel logged". The press is the owner's last SPELL_CAST_SUCCESS
-logged after this application's APPLIED row and at most 100 ms before the
-stealth's removal (the holder's own first REMOVED row of it, rebroadcast REMOVED
-/ APPLIED pairs dropped), rows of one ms in source order (an archive without
-line indices takes them in either order), at a unit that is not one of the
-owner's side's players, of a spell not on the DB2-generated
+logged after this application's APPLIED row (the last one logged before the
+removal and no earlier than 150 ms before the Vanish press) and at most 100 ms
+before the stealth's removal (the holder's own first REMOVED row of it,
+rebroadcast REMOVED / APPLIED pairs dropped), rows of one ms in source order (an
+archive without line indices takes them in either order), at a unit that is not
+one of the owner's side's players, of a spell not on the DB2-generated
 allowed-while-stealthed list (built over the observed spell ids), or of an
 allowed spell with a damage row or ABSORB miss row of that spell on that same
 unit within 100 ms after the cast (Shadowstrike, Ambush). With no such press the
-line stays as it was. Measured by the lane on c711793af vs 80aaccf75 (605 |
+line stays as it was, and a dispel of the aura logged at the removal's moment
+still prints its own reading ("a dispel of this spell is logged at that moment")
+ahead of the opener. Measured by the lane on c711793af vs 80aaccf75 (605 |
 1215): early ends named 0 -> 266 | 228 (605: Cheap Shot 145, Garrote 95,
 Shadowstrike 13, Rupture 4, Gouge 3, Kidney Shot 2, Kick / Envenom / Pistol Shot
 / Dispatch 1; 1215: Cheap Shot 158, Garrote 40, Shadowstrike 14, Kidney Shot 7,
