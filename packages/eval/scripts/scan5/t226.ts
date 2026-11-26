@@ -18,7 +18,9 @@
  *    no kite / attacker-moved answer) that are `responded` while every
  *    press that reached the pressured unit is such a response NOT ignored
  *    today. Kind = judged by the candidate / not judged | the spell(s).
- *    Counted: every window with a pressured friendly.
+ *    Counted: every window with a pressured friendly. A team healing CD
+ *    (`TEAM_HEAL_CD_IDS`: Emerald Communion, whose overflow heal is another
+ *    id) is the product's signed exception, not a violation (T277).
  */
 import {
   burstWindowDecisionPoints,
@@ -27,7 +29,10 @@ import {
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import { HEALING_VERDICTS } from "@gladlog/analysis/src/data/healingVerdicts";
-import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  isHealerSpec,
+  TEAM_HEAL_CD_IDS,
+} from "@gladlog/analysis/src/utils/cooldowns";
 
 import { type IRoundCtx } from "./ctx";
 
@@ -70,7 +75,17 @@ export function run(ctx: IRoundCtx): void {
         `window at ${p.tSec}s: ${r.casterName} ${r.spellName} ${r.latencySec}s; pressured ${pr.name}`,
       );
     }
-    const live = mine.filter((r) => !pressDidNotReachPressured(pr, r));
+    // A team healing cooldown whose own DB2 row heals only its caster is
+    // not self-only for the product (`TEAM_HEAL_CD_IDS`, read by its
+    // `healsOnlyItsCaster`): Emerald Communion re-casts its overhealing as
+    // 370984 on an injured ally (user ruling 2026-09-30, A9-1), and a
+    // teammate's Communion answers the window (assembly review B155). Not
+    // a violation (T277: the 21 facts of 1215 were all Communion; in 6 of
+    // its 7 windows 370984 healed the pressured unit 150k–640k).
+    const live = mine.filter(
+      (r) =>
+        !pressDidNotReachPressured(pr, r) && !TEAM_HEAL_CD_IDS.has(r.spellId),
+    );
     if (live.length === 0 || !p.responded) continue;
     if (p.responses.kite || p.responses.attackerMoved) continue;
     const others = p.responseCasts.filter(

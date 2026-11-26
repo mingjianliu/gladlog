@@ -255,13 +255,6 @@ function duringExternalShare(ctx: IRoundCtx): void {
     // name, or a re-broadcast, can open first (55-3 0:24: own Obsidian Scales
     // 24.647, the ally's 24.976)
     const caster = ctx.unitOfPid(ENEMY_DEF_CASTER.exec(line)?.[1]);
-    const press = successesOf(caster ?? {}).find(
-      (c) =>
-        tsOf(c) >= lo &&
-        tsOf(c) < lo + 1000 &&
-        nameOf(c.spellId, c.spellName) === m[3],
-    );
-    const anchor = press ? tsOf(press) : lo;
     const named = ((target.auraEvents ?? []) as any[]).filter(
       (a) =>
         (ev(a) === APPLIED || ev(a) === REFRESH) &&
@@ -270,9 +263,42 @@ function duringExternalShare(ctx: IRoundCtx): void {
         nameOf(a.spellId, a.spellName) === m[3],
     );
     const fromCaster = named.filter((a) => a.srcUnitId === caster?.id);
-    const applied = (fromCaster.length > 0 ? fromCaster : named).sort(
-      (a, b) => Math.abs(tsOf(a) - anchor) - Math.abs(tsOf(b) - anchor),
-    )[0];
+    const openingNear = (anchor: number): any =>
+      [...(fromCaster.length > 0 ? fromCaster : named)].sort(
+        (a, b) => Math.abs(tsOf(a) - anchor) - Math.abs(tsOf(b) - anchor),
+      )[0];
+    // two presses of the name in the printed second (a second charge of Pain
+    // Suppression 144 ms after the first, T277 820bc81e r3 1:21) print two
+    // lines, the first closed at the second's REFRESH: each line is the
+    // press whose opening row + printed length lands nearest a closing row
+    // of the aura (its REMOVED, the next press's REFRESH) — the first press
+    // read for both put the first line's slice into the second's span
+    const presses = successesOf(caster ?? {}).filter(
+      (c) =>
+        tsOf(c) >= lo &&
+        tsOf(c) < lo + 1000 &&
+        nameOf(c.spellId, c.spellName) === m[3],
+    );
+    const closeGap = (c: any): number => {
+      const open = openingNear(tsOf(c));
+      if (open === undefined) return Infinity;
+      const end = tsOf(open) + +m[5]! * 1000;
+      let best = Infinity;
+      for (const a of (target.auraEvents ?? []) as any[])
+        if (
+          (ev(a) === REMOVED || ev(a) === REFRESH) &&
+          tsOf(a) > tsOf(open) &&
+          nameOf(a.spellId, a.spellName) === m[3]
+        )
+          best = Math.min(best, Math.abs(tsOf(a) - end));
+      return best;
+    };
+    const press =
+      presses.length > 1
+        ? [...presses].sort((a, b) => closeGap(a) - closeGap(b))[0]
+        : presses[0];
+    const anchor = press ? tsOf(press) : lo;
+    const applied = openingNear(anchor);
     // an APPLIED inside the target's re-stating batch (≥ 6 APPLIED rows on
     // it within 5 ms: the target seen again) only showed an aura its press
     // had put up (fact9 D19, 36-12 r12 1:09: Life Cocoon cast on a vanished

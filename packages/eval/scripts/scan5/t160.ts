@@ -70,9 +70,19 @@ export function run(ctx: IRoundCtx): void {
   const unitById = new Map<string, any>();
   for (const u of ctx.units as any[]) unitById.set(u.id, u);
 
-  // where an aura of the shield's spell was at `ms`
-  const stateCache = new Map<string, Array<{ t: number; up: boolean }>>();
-  const eventsOf = (u: any, id: string): Array<{ t: number; up: boolean }> => {
+  // where an aura of the shield's spell was at `ms`. Each aura id keeps its
+  // own state: two ids of one name can sit on a unit at once (Reversion
+  // 366155 and its Echo copy 367364), and the REMOVED of one does not end
+  // the other (T277: 21 `says more` facts on one 1215 match were exactly
+  // that, the name-merged stream ending the Echo copy that absorbed).
+  const stateCache = new Map<
+    string,
+    Array<{ t: number; up: boolean; id: string }>
+  >();
+  const eventsOf = (
+    u: any,
+    id: string,
+  ): Array<{ t: number; up: boolean; id: string }> => {
     const key = `${u.id}|${id}`;
     let out = stateCache.get(key);
     if (out) return out;
@@ -84,8 +94,9 @@ export function run(ctx: IRoundCtx): void {
       if (xid !== id && !(name && nameOf(xid, x.spellName ?? "") === name))
         continue;
       const e = ev(x);
-      if (e === APPLIED || e === REFRESH) out.push({ t: tsOf(x), up: true });
-      else if (e === REMOVED) out.push({ t: tsOf(x), up: false });
+      if (e === APPLIED || e === REFRESH)
+        out.push({ t: tsOf(x), up: true, id: xid });
+      else if (e === REMOVED) out.push({ t: tsOf(x), up: false, id: xid });
     }
     out.sort((a, b) => a.t - b.t);
     stateCache.set(key, out);
@@ -93,20 +104,21 @@ export function run(ctx: IRoundCtx): void {
   };
   const carried = (u: any, id: string, ms: number): boolean => {
     if (!u) return false;
-    let last: { t: number; up: boolean } | undefined;
+    const last = new Map<string, { t: number; up: boolean }>();
     for (const e of eventsOf(u, id)) {
       if (e.t > ms) break;
-      last = e;
+      last.set(e.id, e);
     }
-    return !!last && (last.up || ms - last.t <= AURA_GONE_SLACK_MS);
+    for (const e of last.values())
+      if (e.up || ms - e.t <= AURA_GONE_SLACK_MS) return true;
+    return false;
   };
   const sideOf = (victim: any, a: any): string => {
     const id = String(a.spellId ?? "");
     const ms = tsOf(a);
     const onVictim = carried(victim, id, ms);
     const onAttacker =
-      a.attackerId !== victim.id &&
-      carried(unitById.get(a.attackerId), id, ms);
+      a.attackerId !== victim.id && carried(unitById.get(a.attackerId), id, ms);
     return onVictim
       ? onAttacker
         ? "on both"

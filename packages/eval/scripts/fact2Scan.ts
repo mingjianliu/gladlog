@@ -229,6 +229,7 @@ import {
   hpReadingRows,
 } from "@gladlog/analysis/src/utils/advancedActions";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
@@ -258,7 +259,11 @@ import {
   isAttackerSideAbsorb,
   isDeferralAbsorb,
 } from "@gladlog/analysis/src/utils/incomingPressure";
-import { pressIsSelfBuffNamingEnemy } from "@gladlog/analysis/src/utils/killAttempts";
+import {
+  extractKillAttempts,
+  pressIsSelfBuffNamingEnemy,
+} from "@gladlog/analysis/src/utils/killAttempts";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
@@ -1237,6 +1242,27 @@ function runRound(ctx: IContext): void {
         miss("riderAsCleanse", `${where} ${l.slice(0, 110)}`);
     }
   }
+  // the product's attempts, for their raw spans (T277: a bracket's printed
+  // `m:ss` + 1 s + 5 s held a form 122 ms past the attempt's own 5 s)
+  let sorAttempts: ReturnType<typeof extractKillAttempts> | undefined;
+  const sorAttemptOf = (targetName: string, a: number, b: number) => {
+    sorAttempts ??= extractKillAttempts(
+      players.filter((u) => u.reaction === owner.reaction),
+      players.filter((u) => u.reaction !== owner.reaction),
+      legacy,
+    );
+    return sorAttempts.find(
+      (x) =>
+        x.targetName === targetName &&
+        Math.floor(x.fromSeconds) === a &&
+        Math.floor(x.toSeconds) === b,
+    );
+  };
+  // the round ends at its deciding death (`roundEndMs`): a form that went up
+  // after it is no part of the round, and the product prints no line for it
+  // (T277: 11333a32 r5, a priest's Spirit of Redemption 83 ms after the
+  // shaman's UNIT_DIED that ended the round)
+  const sorRoundEnd = Math.min(legacy.endTime, roundEndMs(legacy));
   for (const u of players) {
     if (u.reaction === owner.reaction) continue;
     const me = pidOf.get(u.name);
@@ -1245,7 +1271,7 @@ function runRound(ctx: IContext): void {
       if (a.spellId !== "215769" || a.destUnitId !== u.id) continue;
       if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
       const ts = a.logLine.timestamp;
-      if (ts < start || ts > legacy.endTime) continue;
+      if (ts < start || ts > sorRoundEnd) continue;
       const t = fmtS((ts - start) / 1000);
       bump("sorImmune");
       if (
@@ -1265,8 +1291,13 @@ function runRound(ctx: IContext): void {
             l,
           );
         if (!km || km[3] !== u.name) continue;
-        const from = start + secOf(km[1]!) * 1000;
-        const to = start + (secOf(km[2]!) + 1 + 5) * 1000;
+        // the attempt's own span and its 5 s after (`KILL_CREDIT_SLACK_S`,
+        // the span the outcome reads), else the printed seconds' reach
+        const att = sorAttemptOf(u.name, secOf(km[1]!), secOf(km[2]!));
+        const from = start + (att?.fromSeconds ?? secOf(km[1]!)) * 1000;
+        const to = att
+          ? start + (att.toSeconds + KILL_CREDIT_SLACK_S) * 1000
+          : start + (secOf(km[2]!) + 1 + KILL_CREDIT_SLACK_S) * 1000;
         if (ts >= from && ts < to) {
           bump("sorImmune");
           miss(

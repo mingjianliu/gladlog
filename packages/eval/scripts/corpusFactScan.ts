@@ -120,6 +120,7 @@ import {
   REFLECT_DIRECT_RETURN_MS,
   REFLECT_MIN_DAMAGE_PCT,
   REFLECT_OWN_ID_LEAD_MS,
+  reflectedSpellDealsDamage,
   reflectOwnIdRowGap,
   spellReflectionNamedSpells,
   unrowedSpellReflections,
@@ -1232,8 +1233,16 @@ function runRound(ctx: IContext): void {
         const landed = ((caster.damageIn ?? []) as any[])
           .filter((d) => d.spellId === NETHER_WARD_ID && d.srcUnitId === src)
           .map(tsOf);
+        // the product's chains (`reflectedSpells`): only a reflect that can
+        // own a damage return takes part in the pairing — a reflected
+        // Counterspell between a Pyroblast and its return took the 141k row
+        // here and handed it to the Fire Blast beside it (T277 6cc00636 r1
+        // 1:34, 48a28de0 r1)
         const wardGroups = groups.filter(
-          (g) => g.g && g.first.destUnitId === src,
+          (g) =>
+            g.g &&
+            g.first.destUnitId === src &&
+            reflectedSpellDealsDamage(String(g.first.spellId), caster, units),
         );
         const ownRows: number[] = [
           ...landed,
