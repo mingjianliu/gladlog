@@ -1964,7 +1964,7 @@
  *  kicker's side dropped as a target inside it (Shadowmeld / Feign Death /
  *  Transfer), nor when the stop is logged more than 300 ms after the
  *  interrupt; Touch of Karma stacks print once, freeing the cap's slots the
- *  duplicates held; Cheetah's second phase reads the hunter's own 16 s where
- *  it printed 12 s (Aspect of the Fox). See docs/prompt-version-history.md.
+ *  duplicates held; a Cheetah press reads the hunter's own 16 s (Aspect of
+ *  the Fox) where it printed 12 s. See docs/prompt-version-history.md.
  */
 export const PROMPT_VERSION = 672;
