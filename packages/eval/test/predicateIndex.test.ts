@@ -2144,6 +2144,21 @@ const INDEX: PredicateRow[] = [
     mod: spellOutcomeLines,
   },
   {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectOwnIdRowGap",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "spellReflectionNamedSpells",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectChainNamed",
+    mod: spellOutcomeLines,
+  },
+  {
     file: `${A}/data/channeledGenerated.ts`,
     symbol: "HASTE_DURATION_SPELL_IDS",
     mod: channeledGenerated,

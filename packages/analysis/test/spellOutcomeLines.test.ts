@@ -232,6 +232,52 @@ describe("reflectedSpells (0051f0c9)", () => {
     const [r] = reflectedSpells([caster, unit("Player-W")], T0);
     expect(r!.damageBack).toBe(112_000);
   });
+  it("T285: a Spell Reflection return whose millisecond names the reflected spell (BROKEN_SPELL breaker) goes to that spell's reflect, not the nearest", () => {
+    // 41243fd2 r5 3:17.914 / 3:18.033: Fireball and Pyroblast reflected;
+    // returns under 23920 at 3:18.338 (it broke Earthgrab "by Fireball")
+    // and 3:18.560 — both went to the nearer Pyroblast row
+    const at = (ms: number) => ({ timestamp: T0 + ms });
+    const reflect = (spellId: string, ms: number) => ({
+      spellId,
+      spellName: "x",
+      missType: "REFLECT",
+      destUnitId: "Player-W",
+      logLine: at(ms),
+    });
+    const back = (amt: number, ms: number) => ({
+      spellId: "23920",
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: at(ms),
+    });
+    const broken = (breaker: string, ms: number) => ({
+      spellId: "64695",
+      srcUnitId: "Player-P",
+      destUnitId: "Player-P",
+      logLine: {
+        event: LogEvent.SPELL_AURA_BROKEN_SPELL,
+        ...at(ms),
+        parameters: ["", "", "", "", "", "", "", "", "", "", "", breaker, "x"],
+      },
+    });
+    const caster = (named: boolean) =>
+      unit("Player-P", {
+        missesOut: [reflect("133", 4_914), reflect("11366", 5_033)],
+        damageIn: [back(178_109, 5_338), back(178_533, 5_560)],
+        auraEvents: named ? [broken("133", 5_338)] : [],
+        advancedActions: advanced(900_000),
+      });
+    const by = (out: ReturnType<typeof reflectedSpells>) =>
+      Object.fromEntries(out.map((r) => [r.spellId, r.damageBack]));
+    expect(by(reflectedSpells([caster(true), unit("Player-W")], T0))).toEqual({
+      "133": 178_109,
+      "11366": 178_533,
+    });
+    // no naming: the nearest row, as before
+    expect(by(reflectedSpells([caster(false), unit("Player-W")], T0))).toEqual({
+      "11366": 356_642,
+    });
+  });
   it("a scripted damage spell the profile misses (Fel Lance) owns the reflector's own-id return when its caster's hits of it are in the round", () => {
     const FEL_LANCE = "206966";
     const caster = unit("Player-P", {

@@ -121,6 +121,7 @@ import {
   REFLECT_MIN_DAMAGE_PCT,
   REFLECT_OWN_ID_LEAD_MS,
   reflectOwnIdRowGap,
+  spellReflectionNamedSpells,
   unrowedSpellReflections,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
@@ -1270,7 +1271,10 @@ function runRound(ctx: IContext): void {
       return pairs;
     };
     const rowGap = (g: (typeof groups)[number], ownId: string, ts: number) =>
-      reflectOwnIdRowGap(ownId, ts, g.rows, wardPairsOf(g.first.destUnitId));
+      reflectOwnIdRowGap(ownId, ts, g.rows, wardPairsOf(g.first.destUnitId), {
+        spells: spellReflectionNamedSpells(caster, g.first.destUnitId, ts),
+        chainIds: [String(g.first.spellId)],
+      });
     const ownCands = (ownId: string, src: string, ts: number) =>
       groups
         .filter(

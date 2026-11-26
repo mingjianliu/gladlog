@@ -368,16 +368,68 @@ export function netherWardPressedSpells(
 }
 
 /**
+ * The spells a Spell Reflection own-id row's own millisecond names (T285):
+ * `netherWardNamedSpells`' reading (the return's absorbed part kept under
+ * the reflected spell's id, the reflector's aura of it going up on the
+ * caster) and the spell a `SPELL_AURA_BROKEN_SPELL` row on the caster in
+ * that millisecond says broke the aura — the return under 23920 breaks a
+ * root and the row names the reflected spell (41243fd2 r5 3:18.338: Fireball
+ * and Pyroblast reflected 119 ms apart, the first 178k return broke
+ * Earthgrab "by Fireball"; the nearest REFLECT row, Pyroblast's, took both
+ * returns: 357k on the Pyroblast line, no Fireball line). Shared by
+ * `reflectedSpells` and corpusFactScan `reflectReturn`.
+ */
+export function spellReflectionNamedSpells(
+  caster: Pick<ICombatUnit, "absorbsIn" | "auraEvents">,
+  reflectorId: string | undefined,
+  ts: number,
+): Set<string> {
+  const out = netherWardNamedSpells(caster, reflectorId, ts);
+  for (const e of caster.auraEvents ?? [])
+    if (
+      e.logLine.timestamp === ts &&
+      e.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      const breaker = String(e.logLine.parameters?.[11] ?? "");
+      if (breaker) out.add(breaker);
+    }
+  return out;
+}
+
+/** Is one of `chainIds` (a reflect chain's spell ids) among `spells`, by id
+ * or English name (a cast id and its damage id: Frostbolt 116 / 228597)? */
+export function reflectChainNamed(
+  chainIds: Iterable<string>,
+  spells: ReadonlySet<string>,
+): boolean {
+  const names = new Set(
+    [...spells].map((s) => getEnglishSpellName(s, "")).filter((n) => n !== ""),
+  );
+  for (const id of chainIds) {
+    if (spells.has(id)) return true;
+    const n = getEnglishSpellName(id, "");
+    if (n !== "" && names.has(n)) return true;
+  }
+  return false;
+}
+
+/**
  * The gap that decides which reflect a row under the reflector's own id came
  * back from, by the chain's REFLECT rows: the nearest one (Spell Reflection's
  * rows lead theirs), or for Nether Ward the chain holding the row it paired
- * with (`pairNetherWardReturns`).
+ * with (`pairNetherWardReturns`). A Spell Reflection row whose millisecond
+ * names a spell (`spellReflectionNamedSpells`) goes to a chain of that spell
+ * — the nearest of them — before any other (T285; 605 | 1215, own-id rows
+ * with two or more reflected spells in reach and one of them named: the
+ * nearest row was the named one 25 of 26 | 23 of 36 times, one row per
+ * REFLECT row in order 12 | 13, the latest free row behind it 24 | 17).
  */
 export function reflectOwnIdRowGap(
   ownId: string | null | undefined,
   ts: number,
   rows: readonly number[],
   netherWardPairs?: ReadonlyMap<number, number>,
+  named?: { spells: ReadonlySet<string>; chainIds: Iterable<string> },
 ): number {
   const gap = Math.min(
     ...rows
@@ -386,7 +438,16 @@ export function reflectOwnIdRowGap(
   );
   const paired =
     ownId === NETHER_WARD_ID ? netherWardPairs?.get(ts) : undefined;
-  if (paired === undefined) return gap;
+  if (paired === undefined) {
+    if (
+      ownId !== NETHER_WARD_ID &&
+      named &&
+      named.spells.size > 0 &&
+      !reflectChainNamed(named.chainIds, named.spells)
+    )
+      return REFLECT_DAMAGE_WINDOW_S * 1000 + gap;
+    return gap;
+  }
   return rows.includes(paired) ? 0 : REFLECT_DAMAGE_WINDOW_S * 1000 + gap;
 }
 /** How long after its REFLECT row a reflected hit can land: the projectile's
@@ -780,6 +841,7 @@ export function reflectedSpells(
     ) => {
       let best: (typeof chains)[number] | undefined;
       let bestGap = Infinity;
+      let namedAt: Set<string> | undefined;
       for (const c of chains) {
         if (c.first.destUnitId !== src) continue;
         const t0 = c.first.logLine.timestamp;
@@ -789,7 +851,10 @@ export function reflectedSpells(
         // Wicked Reapings reflected 1.1 s apart are one chain, and the
         // second's 59.5k under Nether Ward in its own row's ms went to a
         // Demonbolt reflected 335 ms before it (50-1 2:17)
-        const rowGap = reflectOwnIdRowGap(ownId, ts, c.rows, wardPairsOf(src));
+        const rowGap = reflectOwnIdRowGap(ownId, ts, c.rows, wardPairsOf(src), {
+          spells: (namedAt ??= spellReflectionNamedSpells(caster, src, ts)),
+          chainIds: c.ids,
+        });
         // a reflected spell that deals no damage owns no damage return —
         // a control (codex 20-F16-03 #3) or anything else (fact3 D6 / D25:
         // a Spellsteal reflected 0.6 s after a Pyroblast took its 145k)
