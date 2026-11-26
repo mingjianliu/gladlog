@@ -67,6 +67,7 @@ import {
   empowerSpans,
   pressRidesAlong,
 } from "@gladlog/analysis/src/utils/castCommitSpans";
+import { OFF_GCD_SPELL_IDS } from "@gladlog/analysis/src/data/offGcdGenerated";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -100,6 +101,10 @@ const minCd = Number(arg("--min-cd", "8"));
 /** a "not ready" refusal this soon after a cast of the unit's is its global
  * cooldown's, not the spell's (the longest unhasted GCD plus the row slack) */
 const REJECT_GCD_MS = 1600;
+/** a "not ready" refusal this soon before a success of the same spell is
+ * that press, queued (the client's default spell queue window, 400 ms):
+ * 6cc00636 r59, Teleport refused 16 ms and 1 ms before it went out */
+const REJECT_QUEUED_MS = 400;
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
@@ -458,9 +463,16 @@ for (const f of files) {
           // its cooldown 0.8 s after a Shadow kick, dca02448 r5); and a
           // charge spell, whose refusal says nothing of one charge's return
           // (Conflagrate refused with a charge spent, 41243fd2 r6)
+          // its casts that start the global cooldown: an off-GCD one
+          // (DB2, `OFF_GCD_SPELL_IDS`) starts none (codex -6: Teleport
+          // refused twice after Soulburn, 41243fd2 r6; Combustion after
+          // Fire Blast, cf6c4474 r1)
           const ownCastMs: number[] = [];
           for (const c of u.spellCastEvents ?? [])
-            if (c.logLine.event === "SPELL_CAST_SUCCESS")
+            if (
+              c.logLine.event === "SPELL_CAST_SUCCESS" &&
+              !OFF_GCD_SPELL_IDS.has(String(c.spellId))
+            )
               ownCastMs.push(c.logLine.timestamp);
           // its cast bars, start to the row that ended them (the shared
           // pairing: an interrupt, a stop, a superseding bar or press; an
@@ -520,6 +532,19 @@ for (const f of files) {
             if ((entry.charges ?? 1) > 1) break;
             if (ms < legacy.startTime || ms > endMs) continue;
             if (ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS))
+              continue;
+            if (
+              (u.spellCastEvents ?? []).some(
+                (c: {
+                  spellId?: string;
+                  logLine: { event: string; timestamp: number };
+                }) =>
+                  c.logLine.event === "SPELL_CAST_SUCCESS" &&
+                  String(c.spellId) === id &&
+                  c.logLine.timestamp >= ms &&
+                  c.logLine.timestamp - ms <= REJECT_QUEUED_MS,
+              )
+            )
               continue;
             if (!ridesAlong && casting.some(([a, b]) => a <= ms && ms < b))
               continue;
