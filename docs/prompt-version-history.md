@@ -8764,19 +8764,24 @@ into it), gates identical. Stack check on 2df0d5a07: identical rendered diffs,
 same scan movement, gates diff 0 (B214 artifacts).
 
 v673 (pipeline batch B222, T192; first assembled as B215; user ruling R121): the
-recorder's own Vanish whose stealth (aura 11327) came off before its full
-duration names the press that ended it: the [BUFF FADED] line reads "ended by
-your own X" instead of "ended after N of M s — no dispel logged". The press is
-the recorder's last SPELL_CAST_SUCCESS logged after this application's APPLIED
-row and at most 100 ms before the stealth's first REMOVED row (rows of one ms in
-source order), at a unit not on the recorder's side, of a spell stealth does not
-allow (DB2) or of an allowed spell whose damage row or ABSORB miss row on that
-same unit is logged within 100 ms after the cast (Shadowstrike, Ambush). With no
-such press the line stays as it was. Measured by the lane on c711793af vs
-80aaccf75 (605 | 1215): early ends named 0 -> 266 | 228 (605: Cheap Shot 145,
-Garrote 95, Shadowstrike 13, Rupture 4, Gouge 3, Kidney Shot 2, Kick / Envenom /
-Pistol Shot / Dispatch 1; 1215: Cheap Shot 158, Garrote 40, Shadowstrike 14,
-Kidney Shot 7, Eviscerate 3, Ambush 2, Kick 2, Gouge 2). Stack check b99904a02
-vs e29e35df1 (the code of 1a452ded8 and of this batch): 266 | 228 [BUFF FADED]
-lines changed and no other line; scan5 chargeSpentReadEarly / stealth taken by
-the holder's opener 265 | 227 -> 0, no violation kind rose, gates identical.
+prompt owner's own Vanish (the player whose prompt it is) whose stealth (aura
+11327) read as ended early (removed more than the 0.2 s fade tolerance before
+its full duration, with no logged break read for it) names the press that ended
+it: the [BUFF FADED] line reads "ended by your own X" instead of "ended after N
+of M s — no dispel logged". The press is the owner's last SPELL_CAST_SUCCESS
+logged after this application's APPLIED row and at most 100 ms before the
+stealth's removal (the holder's own first REMOVED row of it, rebroadcast REMOVED
+/ APPLIED pairs dropped), rows of one ms in source order (an archive without
+line indices takes them in either order), at a unit that is not one of the
+owner's side's players, of a spell not on the DB2-generated
+allowed-while-stealthed list (built over the observed spell ids), or of an
+allowed spell with a damage row or ABSORB miss row of that spell on that same
+unit within 100 ms after the cast (Shadowstrike, Ambush). With no such press the
+line stays as it was. Measured by the lane on c711793af vs 80aaccf75 (605 |
+1215): early ends named 0 -> 266 | 228 (605: Cheap Shot 145, Garrote 95,
+Shadowstrike 13, Rupture 4, Gouge 3, Kidney Shot 2, Kick / Envenom / Pistol Shot
+/ Dispatch 1; 1215: Cheap Shot 158, Garrote 40, Shadowstrike 14, Kidney Shot 7,
+Eviscerate 3, Ambush 2, Kick 2, Gouge 2). Stack check b99904a02 vs e29e35df1
+(the code of 1a452ded8 and of this batch): 266 | 228 [BUFF FADED] lines changed
+and no other line; scan5 chargeSpentReadEarly / stealth taken by the holder's
+opener 265 | 227 -> 0, no violation kind rose, gates identical.

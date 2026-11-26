@@ -1967,9 +1967,9 @@
  *  duplicates held; a Cheetah press reads the hunter's own 16 s (Aspect of
  *  the Fox) where it printed 12 s. See docs/prompt-version-history.md.
  *
- * v673 (2026-11-26; pipeline batch B222, T192): The recorder's own Vanish
- *  that ended early names the own press that ended it ("ended by your own
- *  Cheap Shot") instead of "no dispel logged". See
+ * v673 (2026-11-26; pipeline batch B222, T192): The prompt owner's own
+ *  Vanish that read as ended early names the own press that ended it
+ *  ("ended by your own Cheap Shot") instead of "no dispel logged". See
  *  docs/prompt-version-history.md.
  */
 export const PROMPT_VERSION = 673;
