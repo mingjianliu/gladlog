@@ -198,6 +198,7 @@ import {
 import { groundingRedirects } from "@gladlog/analysis/src/utils/groundingRedirects";
 import { PRESS_ONLY_TAG } from "@gladlog/analysis/src/utils/killWindowFacts";
 import { logInstantOf } from "@gladlog/analysis/src/utils/logEra";
+import { isGuardianRowOf } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { isOffListPressId } from "@gladlog/analysis/src/utils/offListPress";
 import {
   OVERRIDE_VARIANT_SHARES_BY_ERA,
@@ -525,8 +526,15 @@ function intoImmunityLanded(ctx: IRoundCtx): void {
       ctx.bump("intoImmunityLanded");
       // the target's direct rows of this spell by the player, in order
       const rows = [
+        // a guardian's same-named hit merged into its owner's damageOut is
+        // no row of the player's cast (`isGuardianRowOf`, T281: an Arcane
+        // Phoenix's Pyroblast 450461 inside Aspect of the Turtle, the
+        // mage's own Pyroblast a MISS; 91864a9e)
         ...((player.damageOut ?? []) as any[]).filter(
-          (d) => ev(d) !== ABSORBED && ev(d) !== PERIODIC_DAMAGE,
+          (d) =>
+            ev(d) !== ABSORBED &&
+            ev(d) !== PERIODIC_DAMAGE &&
+            !isGuardianRowOf(player.id, d.srcUnitId),
         ),
         ...((player.missesOut ?? []) as any[]).filter(
           (x) => ev(x) !== PERIODIC_MISSED,
