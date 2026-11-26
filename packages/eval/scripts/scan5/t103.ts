@@ -23,14 +23,15 @@
  *    cast, the only cast id in that window) anywhere in the round. A cast
  *    before the removal with no such dose seen is out of the total (`no
  *    spender seen`).
- *    Pipeline T192 (ruling R121): in the total too, as `one-charge aura,
- *    holder's cast at the removal` — a DB2 charge aura
- *    (`PROC_CHARGE_AURA_IDS`, SpellAuraOptions.ProcCharges) with no dose row
- *    during the application and the holder's cast of another spell
- *    ≤ `CHARGE_CAST_MS` before its removal: that cast ended it (Vanish's
- *    opener).
+ *    Pipeline T192 (ruling R121): in the total too, as `stealth taken by
+ *    the holder's opener` — a stealth of `STEALTH_AURA_IDS` (Vanish's 11327)
+ *    removed ≤ `CHARGE_CAST_MS` after its holder's cast of a spell DB2 does
+ *    not allow while stealthed: that cast ended it.
  *  - `ownPressEndWithoutCast`: the reverse — a line reading `ended by your
- *    own X` on such an aura with no cast of X by the holder in that window.
+ *    own X` on such a stealth where the log does not carry it: no cast of X
+ *    by the holder in that window, X is the press itself or a spell stealth
+ *    allows, or an enemy's aura landed on the holder in the removal's
+ *    window (a reveal: the enemy took it).
  *  - `earlyEndReadExpired`: printed `(expired)` / `(expired; …)` on a
  *    removal more than the slack (`JITTER_MS`, at most half the length, as
  *    the producer) before the full length ends. Only buffs the producer
@@ -50,10 +51,11 @@ import {
   runsWithHaste,
 } from "@gladlog/analysis/src/context/timelineHelpers";
 import { ownEffectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
-import { PROC_CHARGE_AURA_IDS } from "@gladlog/analysis/src/data/procChargeAurasGenerated";
+import { ALLOWED_WHILE_STEALTHED_SPELL_IDS } from "@gladlog/analysis/src/data/spellStateAttrsGenerated";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { unitCooldownEntry } from "@gladlog/analysis/src/utils/cooldowns";
+import { STEALTH_KEPT_BY_ALLOWED_PRESS_IDS } from "@gladlog/analysis/src/utils/stealthActionEnd";
 import {
   TOUCH_OF_KARMA_ABSORB_ID,
   TOUCH_OF_KARMA_ID,
@@ -91,9 +93,15 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ...BUCKETS.map((b) => `fadeOffset|${b}`),
 ]);
 
-/** in the total: a DB2 charge aura the holder's own cast ended, read as an
- * early end with no cause (pipeline T192) */
-const ONE_CHARGE_KIND = "one-charge aura, holder's cast at the removal";
+/** the stealths a press stealth does not allow ends: the producer's table */
+const STEALTH_AURA_IDS = STEALTH_KEPT_BY_ALLOWED_PRESS_IDS;
+/** a cast that ends such a stealth: not the press, not one DB2 allows
+ * while stealthed */
+const endsStealth = (pressId: string) => (castId: string) =>
+  castId !== pressId && !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(castId);
+/** in the total: a stealth its holder's opener took, read as an early end
+ * with no cause (pipeline T192) */
+const OPENER_KIND = "stealth taken by the holder's opener";
 
 const FADE_LINE = /^\s*(\d+:\d\d)\s+\[BUFF FADED\]\s+(.+?) \((.+)\)\s*$/;
 /** a removal this far before the full length is no log jitter: the
@@ -256,22 +264,38 @@ export function run(ctx: IRoundCtx): void {
     // the reverse of the one-charge reading: `ended by your own X` on a
     // DB2 charge aura needs X cast by the holder at the removal
     const own = /^ended by your own (.+?)(;|$)/.exec(claim);
-    if (own && PROC_CHARGE_AURA_IDS.has(auraId)) {
+    if (own && STEALTH_AURA_IDS.has(auraId)) {
       ctx.bump("ownPressEndWithoutCast");
-      const at = ((holder.spellCastEvents ?? []) as any[]).some(
+      const at = ((holder.spellCastEvents ?? []) as any[]).filter(
         (c) =>
           ev(c) === SUCCESS &&
           tsOf(c) <= removedMs &&
           removedMs - tsOf(c) <= CHARGE_CAST_MS &&
           nameOf(c.spellId, c.spellName ?? "") === own[1],
       );
-      if (!at)
+      // an enemy's aura landing on the holder as the stealth goes (Flare)
+      const reveal = ((holder.auraEvents ?? []) as any[]).find(
+        (a) =>
+          ev(a) === APPLIED &&
+          a.auraType === "DEBUFF" &&
+          !friends.some((f) => f.id === a.srcUnitId) &&
+          Math.abs(tsOf(a) - removedMs) <= AURA_REBROADCAST_GAP_MS,
+      );
+      const why =
+        at.length === 0
+          ? `no such cast by the holder within ${CHARGE_CAST_MS} ms before the removal`
+          : at.every((c) => !endsStealth(id)(String(c.spellId ?? "")))
+            ? "the cast is the press itself or one stealth allows"
+            : reveal
+              ? `an enemy's ${nameOf(reveal.spellId, reveal.spellName ?? "")} landed on the holder at the removal`
+              : undefined;
+      if (why)
         ctx.violate(
           "ownPressEndWithoutCast",
           name,
           removedMs,
           key,
-          `${name} reads ended by ${own[1]}; no such cast by the holder within ${CHARGE_CAST_MS} ms before the removal`,
+          `${name} reads ended by ${own[1]}; ${why}`,
           line.trim(),
         );
     }
@@ -302,13 +326,6 @@ export function run(ctx: IRoundCtx): void {
           }),
       );
       const finals = castsBefore(removedMs).filter((x) => x);
-      const doseSeen = ((holder.auraEvents ?? []) as any[]).some(
-        (a) =>
-          ev(a) === REMOVED_DOSE &&
-          String(a.spellId) === auraId &&
-          tsOf(a) >= castMs &&
-          tsOf(a) <= removedMs,
-      );
       const spent = finals.find((x) => spenders.has(x));
       if (spent)
         ctx.violate(
@@ -320,20 +337,19 @@ export function run(ctx: IRoundCtx): void {
           line.trim(),
         );
       else if (
-        // pipeline T192 (ruling R121): a one-charge aura (DB2 ProcCharges,
-        // no dose row of it this round) with the holder's cast of another
-        // spell at its removal was ended by that cast
-        PROC_CHARGE_AURA_IDS.has(auraId) &&
-        !doseSeen &&
-        finals.some((x) => x !== id)
+        // pipeline T192 (ruling R121): the holder's cast of a spell stealth
+        // does not allow, at the removal of its stealth
+        STEALTH_AURA_IDS.has(auraId) &&
+        holder.id === owner.id &&
+        finals.some(endsStealth(id))
       )
         ctx.violate(
           "chargeSpentReadEarly",
-          ONE_CHARGE_KIND,
+          OPENER_KIND,
           removedMs,
           key,
-          `${name} (aura ${auraId}, DB2 ProcCharges) removed after ${finals
-            .filter((x) => x !== id)
+          `${name} (aura ${auraId}) removed after ${finals
+            .filter(endsStealth(id))
             .map((x) => nameOf(x, x))
             .join(", ")}`,
           line.trim(),

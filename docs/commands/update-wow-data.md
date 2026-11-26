@@ -304,9 +304,6 @@ npx tsx packages/analysis/scripts/datagen/genSpellParry.ts
 # 6f1a. spells that cannot target their caster (SpellMisc Attributes_1 bit 19 "Exclude Caster", observed
 #      universe) — the forward check of SELF_CAST_NOOP_EXTERNAL_IDS (test/selfCastNoopForward.test.ts, GH #167).
 npx tsx packages/analysis/scripts/datagen/genExcludeCaster.ts
-# 6f1a1. auras removed when their charges are spent (SpellAuraOptions.ProcCharges > 0, observed universe) —
-#      `PROC_CHARGE_AURA_IDS`: which buffs a holder's own cast can end (`cdExpiry`, pipeline T192, ruling R121).
-npx tsx packages/analysis/scripts/datagen/genProcChargeAuras.ts
 # 6f1a2. press → the id its effect triggers as a second SPELL_CAST_SUCCESS at the target (SpellEffect Effect 96
 #      CHARGE / 149 CHARGE_DEST with an EffectTriggerSpell, both ends observed) — `PRESS_TRIGGERED_CAST_IDS`
 #      (castMissRows.ts / castPress.ts; GH #167.21). A new edge changes which follow-up row is read as the

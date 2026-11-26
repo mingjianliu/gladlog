@@ -392,6 +392,19 @@ export function isMeleeSwingRow(d: {
   );
 }
 
+/**
+ * Does a press of `spellId` end the stealth `auraId`
+ * (`STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`)? Every press stealth does not allow
+ * (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`, DB2) does — the split measured in
+ * that set's header (openers without the attribute ended the run in their
+ * own instant). False for an aura that is no such stealth. The
+ * `[BUFF FADED]` cause of a Vanish its opener took reads it
+ * (`extractOwnerCDBuffExpiry`, pipeline T192, user ruling R121).
+ */
+export const pressEndsStealth = (auraId: string, spellId: string): boolean =>
+  STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId) &&
+  !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(spellId);
+
 const stealthAllowsPress =
   (auraId: string | undefined) =>
   (spellId: string): boolean =>

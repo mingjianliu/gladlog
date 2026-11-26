@@ -16,7 +16,6 @@ import {
   HASTE_DURATION_SPELL_IDS,
 } from "../data/channeledGenerated";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
-import { PROC_CHARGE_AURA_IDS } from "../data/procChargeAurasGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   auraEndFromLog,
@@ -92,6 +91,7 @@ import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
 import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
 import { getSpellSchoolName } from "../utils/spellSchools";
+import { pressEndsStealth } from "../utils/stealthActionEnd";
 import { type SummonKindWord, summonKindWord } from "../utils/summonKind";
 import {
   type INonPlayerUnitKill,
@@ -520,8 +520,7 @@ export function runsWithHaste(spellId: string): boolean {
 
 /** How long before a charge aura's dose row or removal the holder's cast
  * that spent it is logged (`cdExpiry`: `charges_spent`, and the cast that
- * ended a one-charge aura, pipeline T192). scan5/t103 and scan5/t192 import
- * it. */
+ * took a Vanish's stealth, pipeline T192). scan5/t103 imports it. */
 export const CHARGE_CAST_MS = 100;
 
 /** How close to a buff's removal the holder's own press counts as taking it,
@@ -1339,23 +1338,28 @@ export function extractOwnerCDBuffExpiry(
             (onLastCharge && spenders.size > 0))
         )
           cause = "charges_spent";
-        // pipeline T192 (user ruling R121, 2026-11-25): a charge aura (DB2
-        // SpellAuraOptions.ProcCharges, `PROC_CHARGE_AURA_IDS`) that never
-        // logged a dose — one charge, so no row names what spends it — and
-        // came off ≤ `CHARGE_CAST_MS` after its holder's own cast was ended
-        // by that cast: Vanish's 11327 goes with the opener. 605 + 12.1.5
-        // captures: 762 `ended after N of M s — no dispel logged` lines had
-        // such a cast, 504 of them Vanish, the only one of their 22 buffs
-        // with the field set. The press's own cast is no opener; with no
-        // cast at the removal the line stays as it was.
+        // pipeline T192 (user ruling R121, 2026-11-25): the stealth a
+        // Vanish leaves (11327; `pressEndsStealth`) that came off
+        // ≤ `CHARGE_CAST_MS` after its holder pressed something stealth does
+        // not allow was ended by that press — the opener. The line read
+        // `ended after 0.4 of 1.5s — no dispel logged`. A press stealth
+        // allows ends nothing: a Shadowstep in the millisecond an enemy
+        // Flare took the aura is not what ended it (review
+        // 85-tk-L5-T192-2, a real round), and with no such press at the
+        // removal the line stays as it was. The press named is the last one
+        // logged before the removal.
         if (
           cause === "ended_early" &&
           !endedByOwnPress &&
-          doseRows.length === 0 &&
-          PROC_CHARGE_AURA_IDS.has(endAuraId)
+          holder.id === ownerId
         ) {
           const opener = castRowsBefore(span.removedMs)
-            .filter((c) => !!c.spellId && c.spellId !== cd.spellId)
+            .filter(
+              (c) =>
+                !!c.spellId &&
+                c.spellId !== cd.spellId &&
+                pressEndsStealth(endAuraId, c.spellId),
+            )
             .at(-1);
           if (opener)
             endedByOwnPress = getEnglishSpellName(

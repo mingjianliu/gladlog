@@ -185,10 +185,6 @@ export async function main(): Promise<void> {
       "excludeCasterGenerated.ts": {
         entries: countQuotedIds("excludeCasterGenerated.ts"),
       },
-      // pipeline T192: auras a holder's cast spends (SpellAuraOptions.ProcCharges)
-      "procChargeAurasGenerated.ts": {
-        entries: countQuotedIds("procChargeAurasGenerated.ts"),
-      },
       // GH #167.21: press → triggered impact (SpellEffect charge effects)
       "pressTriggeredCastsGenerated.ts": {
         edges: countMapEntries("pressTriggeredCastsGenerated.ts"),
