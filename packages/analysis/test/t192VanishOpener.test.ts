@@ -367,4 +367,25 @@ describe("[BUFF FADED] — a Vanish its opener took (T192)", () => {
     u.auraEvents.sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
     expect(fade(u).endedByOwnPress).toBe("Garrote");
   });
+
+  it("a duplicate removal after a press in the removal's ms does not make that press the cause (2e)", () => {
+    const rows = { appliedLi: 5, removedLi: 50 };
+    const u = rogue(
+      31.0,
+      [{ id: "703", name: "Garrote", atS: 31.0, li: 52 }],
+      30,
+      rows,
+    );
+    const dup = makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      VANISH_AURA,
+      T0 + 31_000,
+      ME,
+      ME,
+      "BUFF",
+    ) as never as (typeof u.auraEvents)[number];
+    dup.logLine.lineIndex = 53;
+    u.auraEvents.push(dup);
+    expect(fade(u).endedByOwnPress).toBeUndefined();
+  });
 });

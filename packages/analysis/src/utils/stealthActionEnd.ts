@@ -422,7 +422,7 @@ const loggedBefore = (a: RowAt, b: RowAt): boolean =>
  *    before the REMOVED row, rows in one ms by their source line, and at
  *    most `STEALTH_OPENER_CAST_MS` before it. The rows are the producer's:
  *    the holder's own, re-broadcasts dropped (`dropAuraRebroadcasts`), the
- *    removal at its exact ms (2d #3)
+ *    removal at its exact ms, the first such row (2d #3, 2e)
  *    (codex 85-tk-L5-T192-2b #2, 68160220 r6: an Eviscerate 56 ms BEFORE
  *    the Vanish was named; 2c #3: a Garrote logged one row after the
  *    removal);
@@ -464,7 +464,9 @@ export function stealthOpenerAtRemoval(
         (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED &&
         a.logLine.timestamp === removedMs,
     )
-    .at(-1)?.logLine;
+    // the first in source order: the one the producer pairs with the press
+    // (a duplicate after it is no later end — codex 85-tk-L5-T192-2e)
+    .at(0)?.logLine;
   if (!removed) return undefined;
   const applied = auraRows
     .filter(
