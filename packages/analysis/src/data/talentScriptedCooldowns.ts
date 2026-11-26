@@ -44,6 +44,7 @@ import {
   wearsSetBonus,
 } from "./classSetBonuses";
 import { isWeaponClassAttackRow } from "./spellDamageClass";
+import { SUPPRESS_TARGET_PROCS_SPELL_IDS } from "./spellDamageClassGenerated";
 import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 import { ccSpellIds } from "./spellTags";
@@ -925,8 +926,19 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // impossible, 605 archives + the 285 12.1.5 files (`cooldownRecastScan
   // --spells 48020`; 909 + 962 model presses): Physical school alone 5 + 6;
   // weapon class alone 1 + 3, two of them presses the Physical school had
-  // explained; either one 1 + 2. The three left are open (gaps 20.0, 20.3
-  // and 18.7 s; the 5 s lockout's phase decides them) and stay counted.
+  // explained; either one 1 + 2. The three left are open and stay counted:
+  // the 605 one was impossible before, the two 1215 ones are NEW (codex
+  // 85-tk-L6-T266-1 #1: 4dd0c954 r3 127.9, 820bc81e r3 108.5 — a newly
+  // admitted hit took the 5 s lockout just before a proc the press needed;
+  // the lockout's phase decides them). Tried and rejected (review round,
+  // 2026-11-26): "a hit while Teleport is off cooldown neither procs nor
+  // takes the lockout" explains all three (0 + 0), but it makes the model
+  // early — of the "Not yet recovered" Teleport refusals inside the
+  // unreduced 30 s, the model calls ready 14 + 13 with this entry and
+  // 14 + 28 with that rule. Suppress Target Procs spells are left out (see
+  // `hostileTakenTriggers`). The Physical-school leg (the parent's reading)
+  // also admits a class-1 attack DB2's mask does not (Flurry Strikes
+  // 450617, codex -1 #3); weapon class alone is 1 + 3, so it stays.
   "409835": {
     targets: ["48020"],
     triggerCastIds: [],
@@ -2150,6 +2162,17 @@ export function hostileTakenTriggers(
     damageSchoolId?: string;
   }): boolean => {
     if (!damageOnly) return true;
+    // a hit whose spell carries DB2's "Suppress Target Procs"
+    // (SpellMisc.Attributes_3 bit 17: Divine Storm 224239) procs nothing on
+    // the unit it hits — pipeline T266, codex 85-tk-L6-T266-1 #2. It moved
+    // no count of the scan (Teleport model-impossible 1 | 2 with or
+    // without it).
+    if (
+      h.weaponClassAttacks &&
+      e.spellId &&
+      SUPPRESS_TARGET_PROCS_SPELL_IDS.has(String(e.spellId))
+    )
+      return false;
     if (
       h.weaponClassAttacks &&
       isWeaponClassAttackRow(e.logLine.event, e.spellId)

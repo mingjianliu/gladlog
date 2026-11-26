@@ -320,6 +320,20 @@ describe("Impish Instincts — weapon-class hits of any school (pipeline T266)",
       2_000, 9_000, 15_000,
     ]);
   });
+  it("a hit of a Suppress Target Procs spell procs nothing (Divine Storm 224239)", () => {
+    const unit: any = {
+      id: PID,
+      damageIn: [
+        hit(LogEvent.SPELL_DAMAGE, 2_000, "224239", "0x2"), // Divine Storm
+        hit(LogEvent.SPELL_DAMAGE, 9_000, "383328", "0x2"), // Final Verdict
+      ],
+      missesIn: [],
+      auraEvents: [],
+    };
+    expect(hostileTakenTriggers(unit, r).map((g) => g.atMs - T0)).toEqual([
+      9_000,
+    ]);
+  });
   it("the class alone (no school mask) drops the Physical magic-class hit", () => {
     const unit: any = {
       id: PID,

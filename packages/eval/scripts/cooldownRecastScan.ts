@@ -34,7 +34,9 @@
  * model's time to a charge back.
  * A press whose cooldown was started by an undated press (`timedAtLatest`: a
  * press no cast row dates, placed at the latest it can have been) is counted
- * as `modelUndatedAnchorAt`, not as impossible, and gives no model ratio: the
+ * as `modelUndatedAnchorAt`, not as impossible — when the model lets it
+ * through without the undated presses — and no model ratio is measured
+ * across an undated press: the
  * real press is at or before that time, so the gap from it reads short — the
  * rule scan5 `t16` already reads (T266: Demonic Circle placed in preparation
  * and re-stated by the round's opening batch, then moved 3.3 s in).
@@ -50,6 +52,7 @@
  * summary on stdout per (spell, spec, cooldown, charges) — `recastAggKey`.
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
@@ -63,6 +66,7 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import { parseRawTimestamp } from "@gladlog/analysis/src/utils/rawStreams";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
@@ -77,6 +81,9 @@ import { bumpEra, type LogEra, logEraOf } from "./lib/logEra";
 const manifest = arg("--manifest", "");
 const every = Number(arg("--every", "1"));
 const minCd = Number(arg("--min-cd", "8"));
+/** a "not ready" refusal this soon after a cast of the unit's is its global
+ * cooldown's, not the spell's (the longest unhasted GCD plus the row slack) */
+const REJECT_GCD_MS = 1600;
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
@@ -128,18 +135,29 @@ function freePressesBySource(
     }));
 }
 
-/** Is the press at `pt` judged against a cooldown an undated press started
- * (`timedAtLatest`)? Among the presses before it that spent the cooldown,
- * one of the last `charges` is undated. */
+/** Does the model's "impossible" for the press at `pt` rest on an undated
+ * press (`timedAtLatest`)? One lies before it, and with the undated presses
+ * taken out the model lets the press through. A press a dated spend still
+ * locks — its own, or the shared pool's — stays impossible, and so the
+ * question is put to the model, not to the last N presses (codex
+ * 85-tk-L6-T266-1 #4: a shared-pool spend; a third charge's recharge
+ * depending on a spend older than the last two). */
 function anchoredOnUndatedPress(
   entry: NonNullable<ReturnType<typeof unitCooldownEntry>>,
   pt: number,
 ): boolean {
-  return entry.casts
-    .filter((c) => c.timeSeconds < pt && !c.freeRecast)
-    .sort((x, y) => x.timeSeconds - y.timeSeconds)
-    .slice(-Math.max(1, entry.charges ?? 1))
-    .some((c) => c.timedAtLatest);
+  const before = entry.casts.filter((c) => c.timeSeconds < pt);
+  if (!before.some((c) => c.timedAtLatest)) return false;
+  const dated = {
+    ...entry,
+    casts: before.filter((c) => !c.timedAtLatest),
+    sharedCasts: (entry.sharedCasts ?? []).filter((c) => c.timeSeconds < pt),
+  };
+  return (
+    dated.casts.length + dated.sharedCasts.length === 0 ||
+    cdAvailableAt(dated, pt) ||
+    cdMaybeAvailableAt(dated, pt)
+  );
 }
 
 /** the presses the model says were impossible (the loop below, without its
@@ -242,7 +260,24 @@ for (const f of files) {
   } catch {
     continue;
   }
-  for (const line of text.split("\n")) parser.push(line);
+  // unit GUID → spell id → ms of its "not ready" SPELL_CAST_FAILED rows
+  // (the recorder's only; `--spells` runs)
+  const rejected = new Map<string, Map<string, number[]>>();
+  for (const line of text.split("\n")) {
+    parser.push(line);
+    if (!onlySpells.size || !line.includes("SPELL_CAST_FAILED,")) continue;
+    const sep = line.indexOf("  ");
+    const p = line.slice(sep + 2).split(",");
+    const id = p[9] ?? "";
+    if (!onlySpells.has(id)) continue;
+    if (!NOT_READY_REASONS.has((p[12] ?? "").replace(/"/g, "").trim()))
+      continue;
+    const at = sep < 0 ? null : parseRawTimestamp(line.slice(0, sep));
+    if (at === null) continue;
+    const bySpellId = rejected.get(p[1] ?? "") ?? new Map<string, number[]>();
+    bySpellId.set(id, [...(bySpellId.get(id) ?? []), at]);
+    rejected.set(p[1] ?? "", bySpellId);
+  }
   parser.end();
   const lines: string[] = [];
   for (const m of items) {
@@ -337,6 +372,11 @@ for (const f of files) {
           : undefined;
         const modelImpossibleAt: number[] = [];
         const modelUndatedAnchorAt: number[] = [];
+        // the opposite error (pipeline T266): a press the game refused as
+        // "not ready" — no cast of the unit's in the 1.6 s before it, so no
+        // global cooldown — at a time the model calls the spell ready
+        const modelReadyAtRejected: number[] = [];
+        let rejectedOnCooldown = 0;
         const undated = new Set(
           (entry?.casts ?? [])
             .filter((c) => c.timedAtLatest)
@@ -371,9 +411,32 @@ for (const f of files) {
             }
             modelImpossibleAt.push(Math.round(pt * 10) / 10);
           }
+          const ownCastMs: number[] = [];
+          for (const c of u.spellCastEvents ?? [])
+            if (c.logLine.event === "SPELL_CAST_SUCCESS")
+              ownCastMs.push(c.logLine.timestamp);
+          for (const ms of rejected.get(u.id)?.get(id) ?? []) {
+            if (ms < legacy.startTime || ms > endMs) continue;
+            if (ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS))
+              continue;
+            const rt = (ms - legacy.startTime) / 1000;
+            const before = {
+              ...entry,
+              casts: entry.casts.filter((c) => c.timeSeconds < rt),
+              sharedCasts: (entry.sharedCasts ?? []).filter(
+                (c) => c.timeSeconds < rt,
+              ),
+            };
+            if (!before.casts.length && !before.sharedCasts.length) continue;
+            rejectedOnCooldown++;
+            if (cdAvailableAt(before, rt))
+              modelReadyAtRejected.push(Math.round(rt * 10) / 10);
+          }
           if ((entry.charges ?? 1) <= 1)
             for (let i = 1; i < presses.length; i++) {
-              if (undated.has(presses[i - 1]!)) continue;
+              // no ratio measured across an undated press (any before the
+              // pair's second press: a free press between them hides it)
+              if ([...undated].some((u) => u < presses[i]!)) continue;
               const back = pressReadyAgainAtSeconds(entry, presses[i - 1]!);
               const own = back === null ? null : back - presses[i - 1]!;
               if (own && own > 0)
@@ -393,6 +456,7 @@ for (const f of files) {
             for (const o of outs) {
               const next = presses.find((x) => x > o.atSeconds + 0.05);
               if (next === undefined) continue;
+              if ([...undated].some((u) => u < next)) continue;
               const upTo = (c: { timeSeconds: number }) =>
                 c.timeSeconds <= o.atSeconds + 0.05;
               const back = entryAvailabilityTransitions(
@@ -453,6 +517,8 @@ for (const f of files) {
             impossibleAt,
             modelImpossibleAt,
             modelUndatedAnchorAt,
+            rejectedOnCooldown,
+            modelReadyAtRejected,
             freeAt,
             modelPresses: entry?.casts.length ?? 0,
             ...(noGearImpossibleAt ? { noGearImpossibleAt } : {}),

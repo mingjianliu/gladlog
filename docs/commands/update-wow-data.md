@@ -306,8 +306,9 @@ npx tsx packages/analysis/scripts/datagen/genSpellStateAttrs.ts
 # 6f1-1. what a parry can stop (SpellCategories.DefenseType 2, SpellMisc Attributes_0 bit 21 "No Active Defense" clear,
 #      SpellMisc.Speed 0). Observed universe; an id in neither set falls to reach. fact7 r5, `parryStopsAttack`.
 npx tsx packages/analysis/scripts/datagen/genSpellParry.ts
-# 6f1-2. a spell's damage class (SpellCategories.DefenseType 2 Melee / 3 Ranged). Observed universe. What a
-#      "taken melee / ranged attack" proc reads, whatever the school (`isWeaponClassAttackRow`; Impish Instincts, T266).
+# 6f1-2. a spell's damage class (SpellCategories.DefenseType 2 Melee / 3 Ranged) and the spells that fire no
+#      target procs (SpellMisc Attributes_3 bit 17). Observed universe. What a "taken melee / ranged attack" proc
+#      reads, whatever the school (`isWeaponClassAttackRow`, `hostileTakenTriggers`; Impish Instincts, T266).
 npx tsx packages/analysis/scripts/datagen/genSpellDamageClass.ts
 # 6f1a. spells that cannot target their caster (SpellMisc Attributes_1 bit 19 "Exclude Caster", observed
 #      universe) — the forward check of SELF_CAST_NOOP_EXTERNAL_IDS (test/selfCastNoopForward.test.ts, GH #167).
