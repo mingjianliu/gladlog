@@ -86,10 +86,19 @@ export function damageImmuneControlUpAt(
   unit: Pick<ICombatUnit, "auraEvents">,
   atMs: number,
   fullSecondsFor: (spellId: string, srcUnitId: string) => number | undefined,
+  /** the asking row's `lineIndex`: an aura row logged below it in its own
+   * millisecond is after it (pipeline T281, codex 85-tk-L6-T281-4 #6) */
+  atLine?: number,
 ): { srcUnitId: string; sinceMs: number; spellId: string } | undefined {
   let on: { srcUnitId: string; sinceMs: number; spellId: string } | undefined;
   for (const a of unit.auraEvents ?? []) {
     if (a.timestamp > atMs) break;
+    if (
+      atLine !== undefined &&
+      a.timestamp === atMs &&
+      (a.logLine.lineIndex ?? -1) > atLine
+    )
+      continue;
     if (!isDamageImmuneControl(a.spellId)) continue;
     const ev = a.logLine.event;
     if (

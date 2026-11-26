@@ -14,6 +14,7 @@ import {
 } from "../src/utils/castMissRows";
 import {
   aurasRefusingSpellAt,
+  claimLandingRow,
   landedBeforeWallRow,
   pressLandingRows,
   refusedByAnotherAura,
@@ -146,29 +147,49 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
   const DISPERSION = "47585";
   it("a Starsurge refused under Ironbark while Ice Block was up went into the Ice Block", () => {
     expect(
-      refusedByAnotherAura(IRONBARK, { immune: true }, [ICE_BLOCK], false),
+      refusedByAnotherAura(
+        IRONBARK,
+        "78674",
+        { immune: true },
+        [ICE_BLOCK],
+        false,
+      ),
     ).toBe(true);
   });
   it("…or while a damage-immune control (Cyclone) was on the target", () => {
-    expect(refusedByAnotherAura(IRONBARK, { immune: true }, [], true)).toBe(
-      true,
-    );
+    expect(
+      refusedByAnotherAura(IRONBARK, "78674", { immune: true }, [], true),
+    ).toBe(true);
   });
   it("with nothing else up the refusal may be the wall's own: a root into Dispersion stays", () => {
     // codex 85-tk-L6-T281-1 #4 (05ea5983: Entangling Roots IMMUNE)
-    expect(refusedByAnotherAura(DISPERSION, { immune: true }, [], false)).toBe(
-      false,
-    );
     expect(
-      refusedByAnotherAura(DISPERSION, { immune: true }, [DISPERSION], false),
+      refusedByAnotherAura(DISPERSION, "339", { immune: true }, [], false),
+    ).toBe(false);
+    expect(
+      refusedByAnotherAura(
+        DISPERSION,
+        "339",
+        { immune: true },
+        [DISPERSION],
+        false,
+      ),
     ).toBe(false);
   });
   it("a landing that is no outright refusal stays the wall's", () => {
-    expect(refusedByAnotherAura(IRONBARK, {}, [ICE_BLOCK], true)).toBe(false);
+    expect(refusedByAnotherAura(IRONBARK, "78674", {}, [ICE_BLOCK], true)).toBe(
+      false,
+    );
   });
   it("an immunity among the refusing auras keeps its own refusals", () => {
     expect(
-      refusedByAnotherAura(ICE_BLOCK, { immune: true }, [ICE_BLOCK], false),
+      refusedByAnotherAura(
+        ICE_BLOCK,
+        "78674",
+        { immune: true },
+        [ICE_BLOCK],
+        false,
+      ),
     ).toBe(false);
   });
   it("the wall among the refusing auras keeps the cast whatever else is up", () => {
@@ -177,17 +198,65 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
     expect(
       refusedByAnotherAura(
         DISPERSION,
+        "339",
         { immune: true },
         [DISPERSION, "1022"],
         false,
       ),
     ).toBe(false);
   });
+  it("a wall that stops the spell keeps it though the reader shows it down (a rebroadcast between two rows)", () => {
+    // Aspect of the Turtle REMOVED, Aimed Shot IMMUNE, Turtle APPLIED in
+    // one millisecond, Blessing of Protection up — codex 85-tk-L6-T281-4 #4
+    expect(
+      refusedByAnotherAura(
+        "186265",
+        "19434",
+        { immune: true },
+        ["1022"],
+        false,
+      ),
+    ).toBe(false);
+  });
+  it("the cursor: a hit after another press of the spell is that press's", () => {
+    // presses 10.900 and 12.030; refusal 12.000, hit 12.070 — -4 #1
+    const rows = [
+      { atMs: 12_000, hit: false, immune: true as const },
+      { atMs: 12_070, hit: true },
+    ];
+    const at = (r: { atMs: number }) => r.atMs;
+    expect(claimLandingRow(rows, 0, at, [10_900, 12_030])).toEqual({
+      landing: 0,
+      cursor: 1,
+    });
+    expect(claimLandingRow(rows, 0, at, [10_900])).toEqual({
+      landing: 1,
+      cursor: 2,
+    });
+  });
+  it("the cursor: a hit takes the refusal of its own millisecond with it", () => {
+    // Rake damage and stun refusal both at 12.050, damage first — -4 #5
+    const rows = [
+      { atMs: 12_050, hit: true },
+      { atMs: 12_050, hit: false, immune: true as const },
+      { atMs: 12_180, hit: true },
+    ];
+    expect(claimLandingRow(rows, 0, (r) => r.atMs, [12_000, 12_010])).toEqual({
+      landing: 0,
+      cursor: 2,
+    });
+  });
   it("a school-limited immunity wall gives up a refusal only another aura explains", () => {
     // Blessing of Spellwarding 204018 and Icebound Fortitude 48792 up,
     // Intimidation's physical stun 24394 refused: only Fortitude stops it
     expect(
-      refusedByAnotherAura("204018", { immune: true }, ["48792"], false),
+      refusedByAnotherAura(
+        "204018",
+        "24394",
+        { immune: true },
+        ["48792"],
+        false,
+      ),
     ).toBe(true);
   });
   it("DB2 and the tables: Ice Block stops a Starsurge, Blessing of Protection no root, Dispersion a root", () => {
@@ -229,6 +298,13 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
     expect(up("358267", "187650", "Freezing Trap")).toEqual([]); // Hover
     // Precognition's mechanic list has no bleed (Barbed Shot, mechanic 15)
     expect(up("377362", "217200", "Barbed Shot")).toEqual([]);
+    // the pressed Spirit of Redemption form: an immunity that lasts its aura
+    expect(up("215769", "191037", "Starfall")).toEqual(["215769"]);
+    // Deep Breath's flight: a listed control immunity, for a control only
+    expect(up("433874", "3355", "Freezing Trap")).toEqual(["433874"]);
+    expect(up("433874", "78674", "Starsurge")).toEqual([]);
+    // Blessing of Freedom stops no stun
+    expect(up("1044", "118905", "Static Charge")).toEqual([]);
     // Spellwarding stops no physical stun; Fortitude stops a stun
     expect(up("204018", "24394", "Intimidation")).toEqual([]);
     expect(up("48792", "24394", "Intimidation")).toEqual(["48792"]);

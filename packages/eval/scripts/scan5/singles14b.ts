@@ -51,7 +51,6 @@ import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { officialDurationS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { empowerSpans } from "@gladlog/analysis/src/utils/castCommitSpans";
-import { PRESS_LANDED_SAME_INSTANT_MS } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   COMPANION_CAST_ROW_MS,
   COPY_CAST_IDS,
@@ -76,8 +75,9 @@ import {
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import {
-  EMPOWER_HOLD_ROW_MS,
   aurasRefusingSpellAt,
+  claimLandingRow,
+  EMPOWER_HOLD_ROW_MS,
   landedBeforeWallRow,
   landedThroughWall,
   pressLandingCaster,
@@ -617,20 +617,13 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           while (next < rows.length && rows[next]!.t < t - 50) next++;
           const first = rows[next];
           const matched = first !== undefined && first.t <= t + 1500;
-          // a refused component beside a hit of the press: the hit row is
-          // where the press landed, and both rows are this press's (the
-          // product's `pressLandingRows`, T281)
-          const besideAt =
-            matched && first.immune
-              ? rows.findIndex(
-                  (o, k) =>
-                    k > next &&
-                    o.hit &&
-                    Math.abs(o.t - first.t) <= PRESS_LANDED_SAME_INSTANT_MS,
-                )
-              : -1;
-          const row = besideAt >= 0 ? rows[besideAt] : first;
-          if (matched) next = Math.max(next, besideAt) + 1;
+          // which row is the landing, and the cursor: the product's own
+          // (`claimLandingRow`, T281)
+          const claim = matched
+            ? claimLandingRow(rows, next, (r) => r.t, presses)
+            : undefined;
+          const row = claim ? rows[claim.landing] : first;
+          if (claim) next = claim.cursor;
           const at = matched ? row!.t : t;
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
@@ -654,6 +647,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             row!.immune &&
             refusedByAnotherAura(
               wallAuraId,
+              row!.spellId ?? String(rowsOfSpell[0]?.spellId ?? ""),
               row!,
               aurasRefusingSpellAt(
                 target,
@@ -662,11 +656,15 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 row!.t,
                 row!.lineIndex,
               ),
-              damageImmuneControlUpAt(target, row!.t, (id, src) =>
-                ccFullDurationForCaster(
-                  id,
-                  ctx.players.find((p: any) => p.id === src),
-                ),
+              damageImmuneControlUpAt(
+                target,
+                row!.t,
+                (id, src) =>
+                  ccFullDurationForCaster(
+                    id,
+                    ctx.players.find((p: any) => p.id === src),
+                  ),
+                row!.lineIndex,
               ) !== undefined,
             )
           )
