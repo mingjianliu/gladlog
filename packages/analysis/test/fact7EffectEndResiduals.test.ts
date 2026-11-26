@@ -97,6 +97,29 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
       3.47,
     );
   });
+  it("a press before the first bolt, the bolts running on after it, ended nothing (T284: acc115f2 r0, Shadow Word: Death 1 ms in, bolts 1.08–5.88 s)", () => {
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("32379", 0.001), press("586", 6.2)],
+      damageOut: [bolt(1.08), bolt(3), bolt(5.88)],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(6.2));
+    expect(channelEndSeconds(unit, UP, 0, 6.5, T0, "Ultimate Penitence")).toBe(
+      5.88,
+    );
+  });
+  it("a press before the first bolt still ends it when nothing follows, or one bolt in the air (T284)", () => {
+    const cancelled = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("32379", 0.05)],
+      damageOut: [],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(cancelled, UP, ms(0))).toBe(ms(0.05));
+    const inFlight = { ...cancelled, damageOut: [bolt(0.9)] };
+    expect(nextPressEndingChannelMs(inFlight, UP, ms(0))).toBe(ms(0.05));
+  });
   it("Ultimate Penitence's aura is the 6.5 s shield: its last bolt ends the channel (7a404f6a: bolts to 5.05 s, Fade at 5.25 s)", () => {
     const unit = {
       id: "h",

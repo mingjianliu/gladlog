@@ -268,6 +268,40 @@ describe("two Gladiator's Badges — two items, a cooldown each (GH #176)", () =
   });
 });
 
+describe("[PRESS] lasts — a window the press's effect took over from (T284)", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REMOVED: REMOVED } = LogEvent;
+  const tricks = (windowEndsMs: number | undefined) => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", { spellCastEvents: [cast] });
+    const rows = [makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF")];
+    if (windowEndsMs !== undefined)
+      rows.push(
+        makeAuraEvent(REMOVED, "57934", T + windowEndsMs, "rog", "hun", "BUFF"),
+        makeAuraEvent(
+          APPLIED,
+          "221630",
+          T + windowEndsMs + 10,
+          "rog",
+          "hun",
+          "BUFF",
+        ),
+      );
+    const hun = makeUnit("hun", { auraEvents: rows });
+    return pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+  };
+
+  it("Tricks of the Trade: the 57934 window closed by the rogue's next hit hands off to 221630's 10 s (52816a5f r5)", () => {
+    const d = tricks(627);
+    expect(d?.row.spellId).toBe("221630");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
+  it("a window that ran its length keeps it", () => {
+    expect(tricks(undefined)?.durationSeconds).toBe(30);
+  });
+});
+
 describe("[PRESS] lasts — an effect that is a series of auras (pipeline T40)", () => {
   const T = 1_000_000;
   const { SPELL_AURA_APPLIED: APPLIED } = LogEvent;

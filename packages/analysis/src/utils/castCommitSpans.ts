@@ -167,14 +167,28 @@ export interface IChannelSpan {
  * Penitence stopped it at 19 of its 25 bolts). On-GCD presses with the bit
  * still end it here, as before (Soothing Mist, which allows them, is
  * measured by its aura and never reaches this reading).
+ *
+ * A press logged before the channel produced anything, after which its own
+ * effect rows (`lastChannelEffectMs`) run on more than
+ * `CHANNEL_PRESS_IN_FLIGHT_MS`, ended nothing (T284, audit-1215 02 D1:
+ * acc115f2 r0, a Shadow Word: Death 1 ms after Ultimate Penitence, its bolts
+ * from 1.1 s to 5.9 s after it — `channeled 0.0s`); the next press is read
+ * instead. A press after the first effect row keeps ending the channel, the
+ * rows behind it in the air (Arcane Missiles above). Read only on a unit
+ * that carries its effect rows.
  */
+export const CHANNEL_PRESS_IN_FLIGHT_MS = 1000;
+/** How far past its press a channel's own effect rows are read for that
+ * test, when no next press of the same channel comes first. */
+const CHANNEL_EFFECT_READ_MS = 15_000;
 export function nextPressEndingChannelMs(
-  unit: Pick<ICombatUnit, "spellCastEvents">,
+  unit: Pick<ICombatUnit, "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "id" | "damageOut" | "healOut" | "missesOut">>,
   spellId: string,
   afterMs: number,
 ): number {
   const casts = unit.spellCastEvents ?? [];
-  return [
+  const presses = [
     ...casts.filter((e) => rowIsPressEndingCast(e, casts)),
     ...(
       (unit as { castStartEvents?: typeof unit.spellCastEvents })
@@ -182,7 +196,32 @@ export function nextPressEndingChannelMs(
     ).filter((e) => !pressRidesAlong(e.spellId)),
   ]
     .filter((e) => e.spellId !== spellId && e.timestamp > afterMs)
-    .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
+    .map((e) => e.timestamp)
+    .sort((a, b) => a - b);
+  if (!presses.length) return Infinity;
+  if (unit.id === undefined || (!unit.damageOut && !unit.healOut))
+    return presses[0];
+  const effects = unit as Parameters<typeof lastChannelEffectMs>[0];
+  const name = getEnglishSpellName(spellId, "");
+  const nextSame = casts.find(
+    (e) =>
+      e.spellId === spellId &&
+      e.logLine.timestamp > afterMs &&
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+  )?.logLine.timestamp;
+  const untilMs = Math.min(
+    nextSame ?? Infinity,
+    afterMs + CHANNEL_EFFECT_READ_MS,
+  );
+  for (const p of presses) {
+    if (p >= untilMs) return p;
+    // the channel had produced something by this press: it ends it
+    if (lastChannelEffectMs(effects, name, afterMs, p) !== undefined) return p;
+    const after = lastChannelEffectMs(effects, name, p, untilMs, true);
+    if (after === undefined || after - p <= CHANNEL_PRESS_IN_FLIGHT_MS)
+      return p;
+  }
+  return Infinity;
 }
 
 /** Has DB2 a SpellCooldowns row for this cast id — on the global cooldown or

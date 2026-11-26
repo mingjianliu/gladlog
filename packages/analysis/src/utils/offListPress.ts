@@ -790,6 +790,52 @@ export function pressEffectCutShort(
     : undefined;
 }
 
+/**
+ * T284 (audit-1215 04 D2): the press's aura on `unit` that `row` handed off
+ * to — `row`'s aura REMOVED on that unit before its length (`lengthS`, less
+ * `BUFF_FADE_EARLY_TOLERANCE_S`), in the instant (`PRESS_CHAIN_HANDOVER_MS`)
+ * another aura of the press (its id or `effectAurasOfCast`) is APPLIED there
+ * by the caster. Tricks of the Trade's 57934 is the window the rogue's next
+ * hit closes (52816a5f r5: 0.6 s), its 221630 the 10 s it gives: the line
+ * printed `lasts 30s` off the window. Undefined when `row` ran on, or no
+ * aura of the press took over. A series (`PRESS_EFFECT_CHAIN_AURAS`) has
+ * its own reading.
+ */
+export function pressEffectHandoffRow(
+  caster: Pick<ICombatUnit, "id">,
+  unit: Pick<ICombatUnit, "auraEvents">,
+  castSpellId: string,
+  row: ICombatUnit["auraEvents"][number],
+  lengthS: number,
+): ICombatUnit["auraEvents"][number] | undefined {
+  if (PRESS_EFFECT_CHAIN_AURAS[row.spellId ?? ""]) return undefined;
+  const start = row.logLine.timestamp;
+  const events = unit.auraEvents ?? [];
+  const removed = events.find(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      a.spellId === row.spellId &&
+      a.srcUnitId === caster.id &&
+      a.logLine.timestamp >= start &&
+      a !== row,
+  );
+  if (!removed) return undefined;
+  const endMs = removed.logLine.timestamp;
+  if ((endMs - start) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
+    return undefined;
+  const ids = new Set([castSpellId, ...effectAurasOfCast(castSpellId)]);
+  ids.delete(row.spellId!);
+  return events.find(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.srcUnitId === caster.id &&
+      !!a.spellId &&
+      ids.has(a.spellId) &&
+      a.logLine.timestamp > start &&
+      Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS,
+  );
+}
+
 /** The duration a press's line prints, and the APPLIED row it is read
  * from: the first of `pressAuraCandidates` (bounded by the caster's next
  * press of the spell among `casterRows`) whose talented duration is at least
@@ -945,6 +991,17 @@ export function pressDuration(
       },
     );
     if (base === undefined || base < PRESS_LINE_MIN_DURATION_S) continue;
+    // a window the press's effect took over from: the effect's row is the
+    // press's (`pressEffectHandoffRow`)
+    const handoff =
+      cast.spellId !== undefined
+        ? pressEffectHandoffRow(caster, unit, cast.spellId, row, base)
+        : undefined;
+    if (handoff) {
+      candidates.splice(k, 1, { unit, row: handoff });
+      k--;
+      continue;
+    }
     // what the game did to this application (GH #179, 2026-11-05): an
     // Oppressing Roar on the unit lengthens a control / slow / root it
     // covers by 30 % (the CC lines' own `ccFullDurationForApplication`
