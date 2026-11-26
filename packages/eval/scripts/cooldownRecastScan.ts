@@ -58,6 +58,11 @@ import {
   enemySourceIds,
   spellPressBlockedAt,
 } from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import {
+  castBarOutcomesOf,
+  JUKE_LOOKBACK_MS,
+} from "@gladlog/analysis/src/utils/castBarOutcomes";
+import { channelSpans } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -91,8 +96,6 @@ const minCd = Number(arg("--min-cd", "8"));
 /** a "not ready" refusal this soon after a cast of the unit's is its global
  * cooldown's, not the spell's (the longest unhasted GCD plus the row slack) */
 const REJECT_GCD_MS = 1600;
-/** how long a cast with no closing row of its own counts as in progress */
-const CAST_IN_PROGRESS_MAX_MS = 10_000;
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
@@ -274,6 +277,11 @@ for (const f of files) {
   // quote-aware split: a spell name with a comma ("Invoke Chi-Ji, the Red
   // Crane") shifted every later field (codex 85-tk-L6-T266-2 #4).
   const rejected = new Map<string, Map<string, number[]>>();
+  // unit GUID → every SPELL_CAST_FAILED row of it, for its cast bars' ends
+  const failedRows = new Map<
+    string,
+    Array<{ absMs: number; spellId: number; spellName: string; reason: string }>
+  >();
   for (const line of text.split("\n")) {
     parser.push(line);
     if (!onlySpells.size) continue;
@@ -286,9 +294,18 @@ for (const f of files) {
     if (eventName !== "SPELL_CAST_FAILED") continue;
     // base units [0..7], spell id [8], the localized reason [11]
     const id = params[8] ?? "";
+    const reason = (params[11] ?? "").replace(/"/g, "").trim();
+    failedRows.set(params[0] ?? "", [
+      ...(failedRows.get(params[0] ?? "") ?? []),
+      {
+        absMs: at,
+        spellId: Number(id),
+        spellName: (params[9] ?? "").replace(/"/g, ""),
+        reason,
+      },
+    ]);
     if (!onlySpells.has(id)) continue;
-    if (!NOT_READY_REASONS.has((params[11] ?? "").replace(/"/g, "").trim()))
-      continue;
+    if (!NOT_READY_REASONS.has(reason)) continue;
     const bySpellId =
       rejected.get(params[0] ?? "") ?? new Map<string, number[]>();
     bySpellId.set(id, [...(bySpellId.get(id) ?? []), at]);
@@ -438,30 +455,41 @@ for (const f of files) {
           // charge spell, whose refusal says nothing of one charge's return
           // (Conflagrate refused with a charge spent, 41243fd2 r6)
           const ownCastMs: number[] = [];
-          const casting: Array<[number, number]> = [];
-          const ownRows = [...(u.spellCastEvents ?? [])].sort(
-            (a, b) => a.logLine.timestamp - b.logLine.timestamp,
-          );
-          for (const [k, c] of ownRows.entries()) {
+          for (const c of u.spellCastEvents ?? [])
             if (c.logLine.event === "SPELL_CAST_SUCCESS")
               ownCastMs.push(c.logLine.timestamp);
-            if (c.logLine.event !== "SPELL_CAST_START") continue;
-            const t0 = c.logLine.timestamp;
-            const close = ownRows
-              .slice(k + 1)
-              .find(
-                (o) =>
-                  String(o.spellId) === String(c.spellId) &&
-                  o.logLine.event !== "SPELL_CAST_START",
-              );
-            casting.push([
-              t0,
-              Math.min(
-                close ? close.logLine.timestamp : Infinity,
-                t0 + CAST_IN_PROGRESS_MAX_MS,
-              ),
-            ]);
-          }
+          // its cast bars, start to the row that ended them (the shared
+          // pairing: an interrupt, a stop, a superseding bar or press; an
+          // unexplained end at the cast-bar cap), and its channels
+          // (codex 85-tk-L6-T266-4 #1 #2: Haunt refused twice during
+          // Unstable Affliction bars, dca02448 r3; Teleport refused during
+          // a Dark Harvest channel, r2)
+          const casting: Array<[number, number]> = [
+            ...castBarOutcomesOf({
+              unit: u,
+              startMs: legacy.startTime,
+              failed: (failedRows.get(u.id) ?? []).map((r) => ({
+                tSeconds: (r.absMs - legacy.startTime) / 1000,
+                unitGuid: u.id,
+                spellId: r.spellId,
+                spellName: r.spellName,
+                reason: r.reason,
+              })),
+            }).map((b): [number, number] => {
+              const endS =
+                b.end.kind === "none"
+                  ? (b.end.superseded?.atS ?? b.t + JUKE_LOOKBACK_MS / 1000)
+                  : b.end.atS;
+              return [
+                legacy.startTime + b.t * 1000,
+                legacy.startTime + endS * 1000,
+              ];
+            }),
+            ...channelSpans(u).map((c): [number, number] => [
+              c.startMs,
+              c.endMs,
+            ]),
+          ];
           const units = Object.values(legacy.units ?? {}) as any[];
           const blockedAt = spellPressBlockedAt(
             u,
