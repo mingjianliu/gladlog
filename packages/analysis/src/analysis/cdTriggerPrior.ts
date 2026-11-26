@@ -41,9 +41,16 @@
  * (pipeline T230): an immunity-branch press that never switched to the wall
  * is no observation, and a paladin whose Aura Mastery is no wall this round
  * (`auraMasteryIsNoWallOf`) is not held against the wall's median. Counted
- * before the change — 605 files: 304 wall presses (median 54), 18 immunity
- * (median 57), 1 switched; 12.1.5 files: 92 / 1 / 0. The medians do not move
- * on either set (54, 56); the generated table is filtered at its next regen.
+ * before the change — 605 files: 304 wall presses (median 54), 19 immunity
+ * (median 57; one of them a press the ledger infers, d86164f1 r2 1:35), 1
+ * switched; 12.1.5 files: 92 / 1 / 0. The medians do not move on either set
+ * (54, 56). The generated table is filtered at its next regen, from a FRESH
+ * scan: `emit-table` stamps its own predicateVersion on whatever rows it is
+ * given, so a shard scanned before this change must not be reused (codex
+ * 85-tk-L3-T230-1 #2); until then the n a line quotes counts both buttons.
+ * The verdict is the round's (`auraMasteryIsNoWallOf`), not the dip's: a
+ * paladin who changes aura mid-round with no press is read by the round
+ * (no such round in either corpus; same review, #1).
  */
 import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
