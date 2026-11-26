@@ -168,22 +168,25 @@ export interface IChannelSpan {
  * still end it here, as before (Soothing Mist, which allows them, is
  * measured by its aura and never reaches this reading).
  *
- * A press in the channel's own instant (`CHANNEL_PRESS_SAME_INSTANT_MS`)
- * that the channel had produced nothing by — no effect row of it
- * (`lastChannelEffectMs`) from its own millisecond on — and after which its
- * effect rows run on more than `CHANNEL_PRESS_IN_FLIGHT_MS` ended nothing
- * (T284, audit-1215 02 D1: acc115f2, four Ultimate Penitences each with a
- * Shadow Word: Death 1–64 ms after it, the bolts from 0.8 s to 5.9 s —
- * `channeled 0.0s`); the next press is read instead. A cast start is a cast
- * begun and ends the channel whatever lands after it, and so does any press
- * later than that instant (codex 85-tk-L5-T284-1 #3: Penance's bolts past a
- * Void Blast begun 0.87 s in; Soothing Mist's heals after Transcendence),
- * or one after the channel's first effect row (#1: Spinning Crane Kick's
- * hit in its own millisecond, Roll 84 ms on). Read only on a unit that
- * carries its effect rows.
+ * A channel its effect rows measure — a press DB2 does not call a channel
+ * (`CHANNELED_SPELL_IDS`: Ultimate Penitence's 421453 is the shield, its
+ * bolts the channel, `channelEndSeconds`) — runs on through a press it had
+ * produced nothing by (no effect row of it, `lastChannelEffectMs`, from its
+ * own millisecond on) when its effect rows after that press are sustained:
+ * the first and the last of them more than `CHANNEL_PRESS_IN_FLIGHT_MS`
+ * apart, the last more than that past the press — the channel kept
+ * producing, which a stopped one does not (T284, audit-1215 02 D1:
+ * acc115f2, Shadow Word: Death 1–64 ms after the press, the bolts from 0.8
+ * s to 5.9 s — `channeled 0.0s`; codex 85-tk-L5-T284-1b #1: Shadow Word:
+ * Pain 132 ms and a shield 236 ms in, all 25 bolts after them). One volley
+ * in the air is no channel running (#4: Penance's single late volley after
+ * a Fade). Such a press is passed over and the next one read. A cast start
+ * is a cast begun and always ends it, and so does any press of a channel
+ * DB2 marks — its own channel measures it (codex 85-tk-L5-T284-1 #1/#3:
+ * Spinning Crane Kick, Penance past a Void Blast, Soothing Mist past
+ * Transcendence). Read only on a unit that carries its effect rows.
  */
 export const CHANNEL_PRESS_IN_FLIGHT_MS = 1000;
-export const CHANNEL_PRESS_SAME_INSTANT_MS = 100;
 /** How far past its press a channel's own effect rows are read for that
  * test, when no next press of the same channel comes first. */
 const CHANNEL_EFFECT_READ_MS = 15_000;
@@ -208,20 +211,14 @@ export function nextPressEndingChannelMs(
     .filter((e) => e.spellId !== spellId && e.ms > afterMs)
     .sort((x, y) => x.ms - y.ms || Number(y.begun) - Number(x.begun));
   if (!presses.length) return Infinity;
-  const first = presses[0]!;
   if (
+    CHANNELED_SPELL_IDS.has(spellId) ||
     unit.id === undefined ||
-    (!unit.damageOut && !unit.healOut) ||
-    first.begun ||
-    first.ms - afterMs > CHANNEL_PRESS_SAME_INSTANT_MS
+    (!unit.damageOut && !unit.healOut)
   )
-    return first.ms;
+    return presses[0]!.ms;
   const effects = unit as Parameters<typeof lastChannelEffectMs>[0];
   const name = getEnglishSpellName(spellId, "");
-  // the channel produced something by this press (a row of its own
-  // millisecond included): it ends it
-  if (lastChannelEffectMs(effects, name, afterMs - 1, first.ms) !== undefined)
-    return first.ms;
   const nextSame = casts.find(
     (e) =>
       e.spellId === spellId &&
@@ -232,11 +229,23 @@ export function nextPressEndingChannelMs(
     nextSame ?? Infinity,
     afterMs + CHANNEL_EFFECT_READ_MS,
   );
-  const after = lastChannelEffectMs(effects, name, first.ms, untilMs, true);
-  if (after === undefined || after - first.ms <= CHANNEL_PRESS_IN_FLIGHT_MS)
-    return first.ms;
-  // the instant's press ended nothing: the next one is read as before
-  return presses[1]?.ms ?? Infinity;
+  for (const p of presses) {
+    if (p.begun || p.ms >= untilMs) return p.ms;
+    // the channel produced something by this press (a row of its own
+    // millisecond included): it ends it
+    if (lastChannelEffectMs(effects, name, afterMs - 1, p.ms) !== undefined)
+      return p.ms;
+    const first = firstChannelEffectMs(effects, name, p.ms, untilMs);
+    const last = lastChannelEffectMs(effects, name, p.ms, untilMs, true);
+    if (
+      first === undefined ||
+      last === undefined ||
+      last - first <= CHANNEL_PRESS_IN_FLIGHT_MS ||
+      last - p.ms <= CHANNEL_PRESS_IN_FLIGHT_MS
+    )
+      return p.ms;
+  }
+  return Infinity;
 }
 
 /** Has DB2 a SpellCooldowns row for this cast id — on the global cooldown or
@@ -301,7 +310,31 @@ function lastChannelEffectMs(
    * refusal logged in its millisecond) are not this channel's (GH #192) */
   untilExclusive = false,
 ): number | undefined {
-  let last: number | undefined;
+  const ts = channelEffectTimes(unit, name, afterMs, untilMs, untilExclusive);
+  return ts.length ? Math.max(...ts) : undefined;
+}
+
+/** The caster's first row of a channel's effect — `lastChannelEffectMs`'
+ * rows, the earliest. */
+function firstChannelEffectMs(
+  unit: Parameters<typeof lastChannelEffectMs>[0],
+  name: string,
+  afterMs: number,
+  untilMs: number,
+): number | undefined {
+  const ts = channelEffectTimes(unit, name, afterMs, untilMs, true);
+  return ts.length ? Math.min(...ts) : undefined;
+}
+
+/** The instants of `lastChannelEffectMs`' rows in (`afterMs`, `untilMs`]. */
+function channelEffectTimes(
+  unit: Parameters<typeof lastChannelEffectMs>[0],
+  name: string,
+  afterMs: number,
+  untilMs: number,
+  untilExclusive: boolean,
+): number[] {
+  const out: number[] = [];
   for (const r of [
     ...(unit.damageOut ?? []),
     ...(unit.healOut ?? []),
@@ -318,10 +351,9 @@ function lastChannelEffectMs(
     const english = attackSpellId
       ? getEnglishSpellName(attackSpellId, attackSpellName ?? "")
       : getEnglishSpellName(r.spellId, r.spellName);
-    if (english !== name) continue;
-    if (last === undefined || t > last) last = t;
+    if (english === name) out.push(t);
   }
-  return last;
+  return out;
 }
 
 /**

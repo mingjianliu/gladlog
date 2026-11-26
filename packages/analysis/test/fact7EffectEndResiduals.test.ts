@@ -129,7 +129,7 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
     };
     expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(0.084));
   });
-  it("a cast begun, or a press past the channel's own instant, ends it whatever lands after (codex 85-tk-L5-T284-1 #3)", () => {
+  it("a cast begun ends it whatever lands after (codex 85-tk-L5-T284-1 #3)", () => {
     const begun = {
       id: "h",
       spellCastEvents: [press(UP, 0)],
@@ -138,13 +138,42 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
       healOut: [],
     };
     expect(nextPressEndingChannelMs(begun, UP, ms(0))).toBe(ms(0.05));
-    const late = {
+  });
+  it("presses in the ascent before the bolts, all 25 after them, end nothing (codex 85-tk-L5-T284-1b #1: Shadow Word: Pain 132 ms, a shield 236 ms in)", () => {
+    const unit = {
       id: "h",
-      spellCastEvents: [press(UP, 0), press("32379", 0.5)],
-      damageOut: [bolt(1.2), bolt(3)],
+      spellCastEvents: [
+        press(UP, 0),
+        press("589", 0.132),
+        press("17", 0.236),
+        press("586", 5.2),
+      ],
+      damageOut: [bolt(0.8), bolt(2.5), bolt(4.6)],
       healOut: [],
     };
-    expect(nextPressEndingChannelMs(late, UP, ms(0))).toBe(ms(0.5));
+    expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(5.2));
+  });
+  it("one volley in the air after an early press is no channel running (codex 85-tk-L5-T284-1b #4)", () => {
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press("586", 0.087)],
+      damageOut: [bolt(1.126), bolt(1.147)],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(unit, UP, ms(0))).toBe(ms(0.087));
+  });
+  it("a channel DB2 marks is ended by the press whatever its rows do (Penance)", () => {
+    const PENANCE = "47540";
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(PENANCE, 0), press("586", 0.087)],
+      damageOut: [
+        { ...(bolt(1.1) as object), spellId: "47666", spellName: "Penance" },
+        { ...(bolt(2.4) as object), spellId: "47666", spellName: "Penance" },
+      ] as never[],
+      healOut: [],
+    };
+    expect(nextPressEndingChannelMs(unit, PENANCE, ms(0))).toBe(ms(0.087));
   });
   it("Ultimate Penitence's aura is the 6.5 s shield: its last bolt ends the channel (7a404f6a: bolts to 5.05 s, Fade at 5.25 s)", () => {
     const unit = {

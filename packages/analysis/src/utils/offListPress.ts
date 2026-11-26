@@ -44,6 +44,7 @@ import {
   timeSpiralEchoMs,
   UNPRICED_COOLDOWN_TALENTS,
 } from "../data/talentScriptedCooldowns";
+import { dropAuraRebroadcasts } from "./auraRebroadcast";
 import {
   buffDurationIsFloorForCaster,
   buffFullDurationForCaster,
@@ -840,8 +841,24 @@ export function pressEffectHandoffRow(
   untilMs = Infinity,
 ): ICombatUnit["auraEvents"][number] | undefined {
   if (PRESS_EFFECT_CHAIN_AURAS[row.spellId ?? ""]) return undefined;
-  const start = row.logLine.timestamp;
-  const events = unit.auraEvents ?? [];
+  // a re-broadcast (REMOVED + APPLIED a moment apart) is one aura, as every
+  // aura reader takes it (codex 85-tk-L5-T284-1b #2, 7951f46f r0: Halo's
+  // 120644 re-broadcast 0.35 s in read as a 2.2 s life of 2.5): the window
+  // is read from its own application
+  const events = dropAuraRebroadcasts(unit.auraEvents ?? []);
+  const own = events.includes(row)
+    ? row
+    : events
+        .filter(
+          (a) =>
+            a.spellId === row.spellId &&
+            a.srcUnitId === caster.id &&
+            (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+              a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+            a.logLine.timestamp <= row.logLine.timestamp,
+        )
+        .pop();
+  const start = (own ?? row).logLine.timestamp;
   const removed = events.find(
     (a) =>
       a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&

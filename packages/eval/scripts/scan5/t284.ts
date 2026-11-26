@@ -7,39 +7,41 @@
  *    (`CHANNELED_CD_SPELL_IDS`) whose end the producer puts at the caster's
  *    next press (`nextPressEndingChannelMs`) while the log shows the channel
  *    had produced nothing yet at that press and went on producing well
- *    after it — a press in the channel's own instant
- *    (`CHANNEL_PRESS_SAME_INSTANT_MS`), its own effect rows (damage / heal /
- *    miss under the channel's English name, by the caster, from its own
- *    millisecond, before its next press of the same spell and within 15 s)
- *    all after the press, the last more than `CHANNEL_PRESS_IN_FLIGHT_MS`
- *    past it. Checked = presses with an ending press before
+ *    after it — a channel its bolts measure (DB2 does not call the press a
+ *    channel), its own effect rows (damage / heal / miss under the
+ *    channel's English name, by the caster, from its own millisecond,
+ *    before its next press of the same spell and within 15 s) all after
+ *    the press, sustained: first to last, and the last past the press, more
+ *    than `CHANNEL_PRESS_IN_FLIGHT_MS`. Checked = presses with an ending press before
  *    their last effect row. Kind = the spell.
  *  - `pressLastsTriggerWindow` (audit 04 D2): a `[PRESS]` line's `lasts`
  *    (`extractOffListPresses` → `durationSeconds` / `durationAura`) read
- *    from an aura the log shows handed off: REMOVED on that unit in the same
- *    instant (`PRESS_CHAIN_HANDOVER_MS`, the producer's) another aura of the press (its id or
- *    `effectAurasOfCast`) is APPLIED on that unit by the caster — the line
- *    priced the window, not the effect that ran. Checked = lines with a
+ *    from an aura the producer's own hand-off reading
+ *    (`pressEffectHandoffRow`) hands off from — the line priced the window,
+ *    not the effect that ran. Checked = lines with a
  *    `lasts` whose aura was REMOVED more than 1 s before it. Kind = the
  *    spell.
  *  - `burstSpanEndsWhileUp` (audit 01 D2): the owner's burst ledger
  *    (`analyzeBurstLedger`) gives a cooldown's span an end more than 1 s
  *    before the round's while the caster's own aura of that press
  *    (APPLIED or REFRESH within 1 s of the cast) has no REMOVED until the
- *    round's end, nor a later row renewing it before the span's end.
+ *    round's end (a REMOVED inside the round), nor a later ledger entry of
+ *    the spell before the span's end.
  *    Checked = ledger spells whose caster aura is found. Kind = the spell.
  */
 import { CHANNELED_CD_SPELL_IDS } from "@gladlog/analysis/src/context/timelineHelpers";
 import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
-import { PRESS_CHAIN_HANDOVER_MS } from "@gladlog/analysis/src/data/pressEffectChains";
+import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CHANNEL_PRESS_IN_FLIGHT_MS,
-  CHANNEL_PRESS_SAME_INSTANT_MS,
   nextPressEndingChannelMs,
 } from "@gladlog/analysis/src/utils/castCommitSpans";
-import { extractOffListPresses } from "@gladlog/analysis/src/utils/offListPress";
+import {
+  extractOffListPresses,
+  pressEffectHandoffRow,
+} from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -71,7 +73,10 @@ function channels(ctx: IRoundCtx): void {
     const casts = successesOf(u);
     for (const [i, c] of casts.entries()) {
       const id = String(c.spellId);
-      if (!CHANNELED_CD_SPELL_IDS.has(id)) continue;
+      // a channel its bolts measure (`nextPressEndingChannelMs`): DB2 does
+      // not call the press a channel
+      if (!CHANNELED_CD_SPELL_IDS.has(id) || CHANNELED_SPELL_IDS.has(id))
+        continue;
       const at = tsOf(c);
       const nextSame = casts.slice(i + 1).find((n) => String(n.spellId) === id);
       const until = Math.min(
@@ -99,9 +104,10 @@ function channels(ctx: IRoundCtx): void {
       const last = Math.max(...fx);
       if (last <= p) continue;
       ctx.bump("channelEndedBeforeItsBolts");
+      const after = fx.filter((t) => t > p);
       if (
-        p - at > CHANNEL_PRESS_SAME_INSTANT_MS ||
         first <= p ||
+        Math.max(...after) - Math.min(...after) <= CHANNEL_PRESS_IN_FLIGHT_MS ||
         last - p <= CHANNEL_PRESS_IN_FLIGHT_MS
       )
         continue;
@@ -149,13 +155,29 @@ function presses(ctx: IRoundCtx): void {
     // Armaments); only one gone before it priced a window
     if (tsOf(removed) - da.atMs > (p.durationSeconds - 1) * 1000) continue;
     ctx.bump("pressLastsTriggerWindow");
-    const ids = new Set([p.spellId, ...effectAurasOfCast(p.spellId)]);
-    ids.delete(da.spellId);
-    const handoff = rows.find(
+    // the producer's own hand-off reading (`pressEffectHandoffRow`) asked
+    // of the line's row: a row it hands off from is a window, not the
+    // effect (codex 85-tk-L5-T284-1b #6: a recurring shield is none)
+    const row = rows.find(
       (r) =>
-        ids.has(r.spellId) &&
-        ev(r) === APPLIED &&
-        Math.abs(tsOf(r) - tsOf(removed)) <= PRESS_CHAIN_HANDOVER_MS,
+        r.spellId === da.spellId &&
+        tsOf(r) === da.atMs &&
+        (ev(r) === APPLIED || ev(r) === REFRESH),
+    );
+    if (!row) continue;
+    const nextPress = successesOf(caster).find(
+      (c: any) => String(c.spellId) === p.spellId && tsOf(c) > tsOf(row),
+    );
+    const handoff = pressEffectHandoffRow(
+      caster,
+      holder,
+      p.spellId,
+      row,
+      p.durationSeconds,
+      Math.min(
+        nextPress ? tsOf(nextPress) : Infinity,
+        roundEndMs(ctx.legacy) + 1,
+      ),
     );
     if (!handoff) continue;
     const name = getEnglishSpellName(p.spellId, "");
@@ -199,18 +221,26 @@ function bursts(ctx: IRoundCtx): void {
       );
       if (!app) continue;
       ctx.bump("burstSpanEndsWhileUp");
+      // a REMOVED inside the round (codex 85-tk-L5-T284-1b #5: one after the
+      // round-ending death is none)
       const gone = own.some(
         (r) =>
-          r.spellId === app.spellId && ev(r) === REMOVED && tsOf(r) > tsOf(app),
-      );
-      // a later row of the aura renews it: this entry's span may end there
-      const renewed = own.find(
-        (r) =>
           r.spellId === app.spellId &&
-          (ev(r) === APPLIED || ev(r) === REFRESH) &&
-          tsOf(r) > tsOf(app) + 1000,
+          ev(r) === REMOVED &&
+          tsOf(r) > tsOf(app) &&
+          tsOf(r) <= roundEndMs(ctx.legacy),
       );
-      const upTo = renewed ? (tsOf(renewed) - ctx.start) / 1000 : endS;
+      // renewed by the ledger's own next entry of the spell (a press that
+      // refreshed a proc's aura, codex 85-tk-L5-T284-1 #4) — not by any
+      // later row (#3 of 1b: a resync batch's APPLIED)
+      const renewed = ledger
+        .flatMap((x) => x.spells)
+        .filter(
+          (o) =>
+            o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
+        )
+        .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity);
+      const upTo = Math.min(renewed, endS);
       if (gone || s.spanToSeconds >= upTo - 1) continue;
       ctx.violate(
         "burstSpanEndsWhileUp",

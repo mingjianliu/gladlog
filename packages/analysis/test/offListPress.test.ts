@@ -21,6 +21,7 @@ import {
   pressChainFollowUps,
   pressDuration,
   pressEffectCutShort,
+  pressEffectHandoffRow,
   pressLineCaster,
   timeStopHeldSeconds,
 } from "../src/utils/offListPress";
@@ -322,6 +323,35 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
       roundEndAtMs,
     );
   };
+
+  it("a re-broadcast is one aura: the window is read from its own application (codex 85-tk-L5-T284-1b #2, Halo)", () => {
+    const rebroadcast = makeAuraEvent(
+      APPLIED,
+      "57934",
+      T + 351,
+      "rog",
+      "hun",
+      "BUFF",
+    );
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 350, "rog", "hun", "BUFF"),
+        rebroadcast,
+        makeAuraEvent(REMOVED, "57934", T + 29_900, "rog", "hun", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 29_910, "rog", "hun", "BUFF"),
+      ],
+    });
+    expect(
+      pressEffectHandoffRow(
+        { id: "rog" },
+        hun,
+        "57934",
+        rebroadcast as any,
+        30,
+      ),
+    ).toBeUndefined();
+  });
 
   it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
     expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
