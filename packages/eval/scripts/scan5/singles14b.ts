@@ -659,7 +659,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           // own row (the product's fallback, T281)
           const landing = matched
             ? { atMs: row!.t, lineIndex: row!.lineIndex }
-            : { atMs: t, lineIndex: pressLine };
+            : { atMs: t, lineIndex: pressLine, atPress: true as const };
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
           // a hit through a wall that stops every hit went through it, it

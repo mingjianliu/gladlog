@@ -134,6 +134,22 @@ describe("T281 — a landing row before the wall's APPLIED row in one millisecon
       false,
     );
   });
+  it("a press read at its press (no row of its own) may be in flight: only the closing row decides it", () => {
+    // Soul Fire cast on the row above Barkskin's APPLIED (6b7fb420 r0)
+    expect(
+      landedBeforeWallRow(
+        { atMs: 5_000, lineIndex: 10, atPress: true },
+        5_000,
+        11,
+      ),
+    ).toBe(false);
+    expect(
+      landedAfterWallRow(
+        { atMs: 5_000, lineIndex: 12, atPress: true },
+        { ms: 5_000, lineIndex: 11 },
+      ),
+    ).toBe(true);
+  });
   it("another millisecond, or no line number on either side, keeps the instant's reading", () => {
     expect(landedBeforeWallRow({ atMs: 5_001, lineIndex: 10 }, 5_000, 11)).toBe(
       false,

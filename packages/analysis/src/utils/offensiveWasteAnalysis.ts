@@ -707,6 +707,9 @@ export interface IPressLanding {
    * hit of the spell is logged on that unit until its next press
    * (`claimLandingRow`) */
   immune?: true;
+  /** no row of the press was found: it is read at its press, its line the
+   * press's own (`pressLandingRows`'s fallback) */
+  atPress?: true;
 }
 
 /**
@@ -716,14 +719,20 @@ export interface IPressLanding {
  * Ironbark's APPLIED shared 20:10:57.795 with the Wrath first: it hit an
  * unwalled target and read `Wrath + Starsurge into Ironbark`. The log's own
  * order decides inside one millisecond; a row or a wall with no line number
- * keeps the instant's reading.
+ * keeps the instant's reading. A press read at its press (no row of its own)
+ * does not: a cast logged before the wall can still be in flight — Soul Fire
+ * cast on the row above Barkskin's APPLIED, its absorbed hit 1.7 s later
+ * inside it (6b7fb420 r0, codex 85-tk-L6-T281-13 #2). Its line still decides
+ * the other end (`landedAfterWallRow`): a cast logged after the wall went
+ * down lands after it.
  */
 export function landedBeforeWallRow(
-  landing: Pick<IPressLanding, "atMs" | "lineIndex">,
+  landing: Pick<IPressLanding, "atMs" | "lineIndex" | "atPress">,
   wallOpenMs: number,
   wallOpenLine: number | undefined,
 ): boolean {
   return (
+    landing.atPress !== true &&
     wallOpenLine !== undefined &&
     landing.lineIndex !== undefined &&
     landing.atMs === wallOpenMs &&
@@ -743,7 +752,7 @@ const LOSS_OF_CONTROL_MECHANICS: ReadonlySet<number> = new Set([
  * millisecond, counted into the Barkskin): a landing logged below the row
  * that closed the wall, in that row's millisecond, came after it. */
 export function landedAfterWallRow(
-  landing: Pick<IPressLanding, "atMs" | "lineIndex">,
+  landing: Pick<IPressLanding, "atMs" | "lineIndex" | "atPress">,
   wallCloseRow: { ms: number; lineIndex: number } | undefined,
 ): boolean {
   return (
@@ -1116,6 +1125,7 @@ export function pressLandingRows<T extends LandingPress>(
         atMs,
         spellId: null,
         hit: false,
+        atPress: true,
         ...(lineIndex === undefined ? {} : { lineIndex }),
       });
     }

@@ -1347,7 +1347,12 @@ describe("pressLandingRows — the attack a press landed as (fact7 r5)", () => {
       { id: "Creature-1", ownerId: "hunter-1", missesOut: [miss] },
     ] as never);
     const rows = pressLandingRows([press], (p) => p.atMs, caster, []);
-    expect(rows.get(press)).toEqual({ atMs: 1_000, spellId: null, hit: false });
+    expect(rows.get(press)).toEqual({
+      atMs: 1_000,
+      spellId: null,
+      hit: false,
+      atPress: true,
+    });
   });
 
   it("a press that landed as an aura has no attack row", () => {
