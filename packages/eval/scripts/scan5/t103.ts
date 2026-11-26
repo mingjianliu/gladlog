@@ -259,23 +259,11 @@ export function run(ctx: IRoundCtx): void {
     // the reverse of the one-charge reading: `ended by your own X` on a
     // DB2 charge aura needs X cast by the holder at the removal
     const own = /^ended by your own (.+?)(;|$)/.exec(claim);
-    // the stealth's APPLIED row of this press, read off the log
-    const appliedMs = ((holder.auraEvents ?? []) as any[])
-      .filter(
-        (a) =>
-          ev(a) === APPLIED &&
-          String(a.spellId) === auraId &&
-          tsOf(a) <= removedMs &&
-          tsOf(a) >= castMs - 1000,
-      )
-      .map(tsOf)
-      .at(-1);
     // the product's own selection of the opener, on those rows
     const opener = stealthOpenerAtRemoval(
       holder,
       auraId,
       id,
-      appliedMs ?? castMs,
       removedMs,
       new Set(friends.map((f) => f.id as string)),
     );

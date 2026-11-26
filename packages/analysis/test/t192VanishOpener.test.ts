@@ -45,59 +45,95 @@ interface Opener {
   self?: boolean;
   /** the opener's own damage row, logged with the cast */
   damage?: boolean;
+  /** …as a miss row instead (a fully absorbed hit) */
+  missType?: string;
+  /** the unit that row is on, when not the cast's target */
+  hitUnit?: string;
+  /** source line of the cast row, and of its damage/miss row */
+  li?: number;
+  hitLi?: number;
 }
-const rogue = (removedS: number, openers: Opener[] = [], appliedS = 30) =>
-  makeUnit(ME, {
-    class: CombatUnitClass.Rogue,
-    spec: CombatUnitSpec.Rogue_Subtlety,
-    spellCastEvents: [
-      makeSpellCastEvent(VANISH, T0 + 30_000, ME),
-      ...openers.map((o) =>
-        makeSpellCastEvent(
-          o.id,
-          T0 + o.atS * 1000,
-          o.self ? ME : "enemy-1",
-          o.self ? "Me" : "Enemy",
-          ME,
-          "Me",
-          0,
-          o.name,
+const withLine = <T>(row: T, li: number | undefined): T => {
+  if (li !== undefined)
+    (row as { logLine: { lineIndex?: number } }).logLine.lineIndex = li;
+  return row;
+};
+const hitRow = (o: Opener) => ({
+  spellId: o.id,
+  spellName: o.name,
+  srcUnitId: ME,
+  destUnitId: o.hitUnit ?? "enemy-1",
+  timestamp: T0 + o.atS * 1000,
+  ...(o.missType ? { missType: o.missType, amount: 0 } : {}),
+  logLine: {
+    event: o.missType ? LogEvent.SPELL_MISSED : LogEvent.SPELL_DAMAGE,
+    timestamp: T0 + o.atS * 1000,
+    parameters: [],
+    ...(o.hitLi !== undefined ? { lineIndex: o.hitLi } : {}),
+  },
+});
+const rogue = (
+  removedS: number,
+  openers: Opener[] = [],
+  appliedS = 30,
+  rows: { appliedLi?: number; removedLi?: number } = {},
+) =>
+  Object.assign(
+    makeUnit(ME, {
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      spellCastEvents: [
+        makeSpellCastEvent(VANISH, T0 + 30_000, ME),
+        ...openers.map((o) =>
+          withLine(
+            makeSpellCastEvent(
+              o.id,
+              T0 + o.atS * 1000,
+              o.self ? ME : "enemy-1",
+              o.self ? "Me" : "Enemy",
+              ME,
+              "Me",
+              0,
+              o.name,
+            ),
+            o.li,
+          ),
         ),
-      ),
-    ].sort((a, b) => a.logLine.timestamp - b.logLine.timestamp),
-    damageOut: openers
-      .filter((o) => o.damage)
-      .map((o) => ({
-        spellId: o.id,
-        spellName: o.name,
-        srcUnitId: ME,
-        destUnitId: "enemy-1",
-        timestamp: T0 + o.atS * 1000,
-        logLine: {
-          event: LogEvent.SPELL_DAMAGE,
-          timestamp: T0 + o.atS * 1000,
-          parameters: [],
-        },
-      })) as never,
-    auraEvents: [
-      makeAuraEvent(
-        LogEvent.SPELL_AURA_APPLIED,
-        VANISH_AURA,
-        T0 + appliedS * 1000,
-        ME,
-        ME,
-        "BUFF",
-      ),
-      makeAuraEvent(
-        LogEvent.SPELL_AURA_REMOVED,
-        VANISH_AURA,
-        T0 + removedS * 1000,
-        ME,
-        ME,
-        "BUFF",
-      ),
-    ],
-  }) as ICombatUnit;
+      ].sort((a, b) => a.logLine.timestamp - b.logLine.timestamp),
+      damageOut: openers
+        .filter((o) => o.damage && !o.missType)
+        .map(hitRow) as never,
+      auraEvents: [
+        withLine(
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            VANISH_AURA,
+            T0 + appliedS * 1000,
+            ME,
+            ME,
+            "BUFF",
+          ),
+          rows.appliedLi,
+        ),
+        withLine(
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_REMOVED,
+            VANISH_AURA,
+            T0 + removedS * 1000,
+            ME,
+            ME,
+            "BUFF",
+          ),
+          rows.removedLi,
+        ),
+      ],
+    }),
+    {
+      missesOut: openers
+        .filter((o) => o.damage && o.missType)
+        .map(hitRow) as never,
+    },
+  ) as ICombatUnit;
 
 const fade = (u: ICombatUnit) =>
   extractOwnerCDBuffExpiry(
@@ -206,5 +242,80 @@ describe("[BUFF FADED] — a Vanish its opener took (T192)", () => {
         ),
       ).endedByOwnPress,
     ).toBe("Eviscerate");
+  });
+
+  it("a Shadowstrike the target fully absorbed resolved on it: its miss row counts (codex 85-tk-L5-T192-2c #1)", () => {
+    const e = fade(
+      rogue(30.98, [
+        {
+          id: SHADOWSTRIKE,
+          name: "Shadowstrike",
+          atS: 30.9,
+          damage: true,
+          missType: "ABSORB",
+        },
+      ]),
+    );
+    expect(e.endedByOwnPress).toBe("Shadowstrike");
+  });
+
+  it("a hit on another unit proves nothing about the cast (2c #2)", () => {
+    const e = fade(
+      rogue(30.98, [
+        {
+          id: SHADOWSTRIKE,
+          name: "Shadowstrike",
+          atS: 30.9,
+          damage: true,
+          hitUnit: "enemy-2",
+        },
+      ]),
+    );
+    expect(e.endedByOwnPress).toBeUndefined();
+  });
+
+  it("a hit row logged before the cast row is not its hit (2c #2)", () => {
+    const strike: Opener = {
+      id: SHADOWSTRIKE,
+      name: "Shadowstrike",
+      atS: 30.9,
+      damage: true,
+      li: 20,
+      hitLi: 19,
+    };
+    expect(fade(rogue(30.98, [strike])).endedByOwnPress).toBeUndefined();
+    expect(fade(rogue(30.98, [{ ...strike, hitLi: 21 }])).endedByOwnPress).toBe(
+      "Shadowstrike",
+    );
+  });
+
+  it("rows in one ms keep their source order: a press logged after the removal is no cause, one right after the application is (2c #3)", () => {
+    const garrote = (li: number): Opener => ({
+      id: "703",
+      name: "Garrote",
+      atS: 31.0,
+      li,
+    });
+    const rows = { appliedLi: 5, removedLi: 50 };
+    expect(
+      fade(rogue(31.0, [garrote(51)], 30, rows)).endedByOwnPress,
+    ).toBeUndefined();
+    expect(fade(rogue(31.0, [garrote(49)], 30, rows)).endedByOwnPress).toBe(
+      "Garrote",
+    );
+    // the application's own millisecond
+    const early: Opener = { id: "703", name: "Garrote", atS: 30.05, li: 6 };
+    expect(
+      fade(rogue(30.08, [early], 30.05, { appliedLi: 5, removedLi: 9 }))
+        .endedByOwnPress,
+    ).toBe("Garrote");
+    expect(
+      fade(
+        rogue(30.08, [{ ...early, li: 4 }], 30.05, {
+          appliedLi: 5,
+          removedLi: 9,
+        }),
+      ).endedByOwnPress,
+    ).toBeUndefined();
   });
 });

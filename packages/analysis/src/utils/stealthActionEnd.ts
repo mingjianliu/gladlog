@@ -393,25 +393,44 @@ export function isMeleeSwingRow(d: {
 }
 
 /** How long before a stealth's removal the press that ended it is logged
- * (`stealthOpenerAtRemoval`; scan5/t103 imports it). */
+ * (`stealthOpenerAtRemoval`; scan5/t103 calls the function itself). */
 export const STEALTH_OPENER_CAST_MS = 100;
+
+interface RowAt {
+  timestamp: number;
+  lineIndex?: number;
+}
+/** `a` is logged before `b`: by ms, then by source line. Rows without a line
+ * index (old archives, fixtures) in one ms count as in order. */
+const loggedBefore = (a: RowAt, b: RowAt): boolean =>
+  a.timestamp < b.timestamp ||
+  (a.timestamp === b.timestamp &&
+    (a.lineIndex === undefined ||
+      b.lineIndex === undefined ||
+      a.lineIndex < b.lineIndex));
 
 /**
  * The holder's own press that ended the stealth `auraId`
- * (`STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`) removed at `removedMs` — the opener
- * of a `[BUFF FADED]` Vanish (pipeline T192, user ruling R121) — or
- * undefined when the log shows none. It is a SPELL_CAST_SUCCESS of the
- * holder
- *  - logged after the stealth went up (`appliedMs`) and at most
- *    `STEALTH_OPENER_CAST_MS` before it came off (codex 85-tk-L5-T192-2b
- *    #2, 68160220 r6: an Eviscerate 56 ms BEFORE the Vanish was named);
+ * (`STEALTH_KEPT_BY_ALLOWED_PRESS_IDS`) whose REMOVED row is logged at
+ * `removedMs` — the opener of a `[BUFF FADED]` Vanish (pipeline T192, user
+ * ruling R121) — or undefined when the log shows none. It is a
+ * SPELL_CAST_SUCCESS of the holder
+ *  - logged after the stealth's APPLIED row (the last one before the REMOVED
+ *    row: this application) and before the REMOVED row, rows in one ms by
+ *    their source line, and at most `STEALTH_OPENER_CAST_MS` before it
+ *    (codex 85-tk-L5-T192-2b #2, 68160220 r6: an Eviscerate 56 ms BEFORE
+ *    the Vanish was named; 2c #3: a Garrote logged one row after the
+ *    removal);
  *  - at a unit that is not of the holder's side: the Stealth button, Crimson
- *    Vial, Shadow Dance, Evasion are no openers (same review #1, 4fb9ee24:
+ *    Vial, Shadow Dance, Evasion are no openers (2b #1, 4fb9ee24:
  *    `ended by your own Stealth` beside the Shadowstrike that landed);
  *  - of a spell stealth does not allow (`ALLOWED_WHILE_STEALTHED_SPELL_IDS`,
- *    DB2) — or, allowed, one whose own damage row the holder dealt within
- *    that window of the cast: Shadowstrike and Ambush need stealth and end
- *    it; Shadowstep, Sap and Blind land no damage and do not.
+ *    DB2) — or, allowed, one that resolved on that same unit: the holder's
+ *    damage or miss row of the spell (a fully absorbed hit is a miss row —
+ *    2c #1, 45e12c2b r6 / 7308d15a r3) logged after the cast and within
+ *    `STEALTH_OPENER_CAST_MS` of it (2c #2: a hit on another unit proves
+ *    nothing). Shadowstrike and Ambush need stealth and end it; Shadowstep,
+ *    Sap and Blind deal nothing and do not.
  * Measured on every cast made while 11327 was up (605 + 285 12.1.5 files;
  * aura off ≤ 100 ms after the cast / still up): Cheap Shot 329 / 0, Garrote
  * 151 / 0, Kidney Shot 15 / 0, Gouge 4 / 0, Rupture 4 / 0; Shadowstrike
@@ -420,34 +439,52 @@ export const STEALTH_OPENER_CAST_MS = 100;
  * before the removal is the one named.
  */
 export function stealthOpenerAtRemoval(
-  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "auraEvents"> &
+    Partial<Pick<ICombatUnit, "damageOut" | "missesOut">>,
   auraId: string,
   pressSpellId: string,
-  appliedMs: number,
   removedMs: number,
   sameSideIds: ReadonlySet<string>,
 ): ICombatUnit["spellCastEvents"][number] | undefined {
   if (!STEALTH_KEPT_BY_ALLOWED_PRESS_IDS.has(auraId)) return undefined;
-  const dealt = (spellId: string, castMs: number) =>
-    (holder.damageOut ?? []).some(
+  const auraRows = (holder.auraEvents ?? []).filter(
+    (a) => a.spellId === auraId,
+  );
+  const removed = auraRows.find(
+    (a) =>
+      (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED &&
+      // the producer's ms is rebuilt from seconds: allow its rounding
+      Math.abs(a.logLine.timestamp - removedMs) <= 1,
+  )?.logLine;
+  if (!removed) return undefined;
+  const applied = auraRows
+    .filter(
+      (a) =>
+        (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED &&
+        loggedBefore(a.logLine, removed),
+    )
+    .at(-1)?.logLine;
+  if (!applied) return undefined;
+  const resolved = (cast: ICombatUnit["spellCastEvents"][number]) =>
+    [...(holder.damageOut ?? []), ...(holder.missesOut ?? [])].some(
       (d) =>
-        d.spellId === spellId &&
-        d.logLine.timestamp >= castMs &&
-        d.logLine.timestamp - castMs <= STEALTH_OPENER_CAST_MS,
+        d.spellId === cast.spellId &&
+        d.destUnitId === cast.destUnitId &&
+        loggedBefore(cast.logLine, d.logLine) &&
+        d.logLine.timestamp - cast.logLine.timestamp <= STEALTH_OPENER_CAST_MS,
     );
   return (holder.spellCastEvents ?? [])
     .filter((c) => {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) return false;
-      const t = c.logLine.timestamp;
-      if (!(t > appliedMs && t <= removedMs)) return false;
-      if (removedMs - t > STEALTH_OPENER_CAST_MS) return false;
+      if (!loggedBefore(applied, c.logLine)) return false;
+      if (!loggedBefore(c.logLine, removed)) return false;
+      if (removed.timestamp - c.logLine.timestamp > STEALTH_OPENER_CAST_MS)
+        return false;
       if (!c.spellId || c.spellId === pressSpellId) return false;
       const dest = c.destUnitId;
       if (!dest || dest === NO_TARGET_GUID || dest === holder.id) return false;
       if (sameSideIds.has(dest)) return false;
-      return (
-        !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(c.spellId) || dealt(c.spellId, t)
-      );
+      return !ALLOWED_WHILE_STEALTHED_SPELL_IDS.has(c.spellId) || resolved(c);
     })
     .at(-1);
 }

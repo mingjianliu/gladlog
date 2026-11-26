@@ -1350,23 +1350,10 @@ export function extractOwnerCDBuffExpiry(
           !endedByOwnPress &&
           holder.id === ownerId
         ) {
-          // the stealth's own APPLIED row (the press's span starts a little
-          // before the cast line; the aura can go up after it)
-          const appliedMs = holder.auraEvents
-            .filter(
-              (a) =>
-                a.spellId === endAuraId &&
-                (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED &&
-                (a.logLine.timestamp as number) >= span.fromMs &&
-                (a.logLine.timestamp as number) <= span.removedMs,
-            )
-            .map((a) => a.logLine.timestamp as number)
-            .at(-1);
           const opener = stealthOpenerAtRemoval(
             holder,
             endAuraId,
             cd.spellId,
-            appliedMs ?? castMs,
             span.removedMs,
             new Set(friends.map((f) => f.id)),
           );
