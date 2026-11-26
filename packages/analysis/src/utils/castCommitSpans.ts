@@ -52,6 +52,11 @@ export interface IEmpowerSpan {
    * also the caster moving or letting go before the first rank — so this is
    * "not released", not "an enemy interrupted it". */
   interrupted: boolean;
+  /** The START's and the closer's line indexes, where the parse kept them:
+   * what falls inside the hold in log order (a retry's rows can share the
+   * closer's millisecond — codex 85-tk-L5-T269-1 #3/#4). */
+  startLine?: number;
+  endLine?: number;
 }
 
 export type EmpowerSpanUnit = Pick<
@@ -111,6 +116,12 @@ export function empowerSpans(unit: EmpowerSpanUnit): IEmpowerSpan[] | null {
       endMs: close.e.timestamp,
       level: close.e.level,
       interrupted: close.interrupted,
+      ...(s.logLine?.lineIndex !== undefined
+        ? { startLine: s.logLine.lineIndex }
+        : {}),
+      ...(close.e.logLine?.lineIndex !== undefined
+        ? { endLine: close.e.logLine.lineIndex }
+        : {}),
     });
   }
   return out;

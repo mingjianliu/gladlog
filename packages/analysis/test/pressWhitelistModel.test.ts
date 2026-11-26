@@ -145,6 +145,72 @@ describe("an empower hold never released starts no cooldown", () => {
     }
   });
 
+  it("a retry 1 ms after a cut hold's lagged row spends (T269, codex 85-tk-L5-T269-1 #1)", () => {
+    // START 35.000, its SUCCESS and INTERRUPT 35.019; the retry's START and
+    // SUCCESS 35.020, released at level 2: the found row is matched on its
+    // own millisecond, not ±1
+    const at = (line: number, row: any) => (
+      (row.logLine.lineIndex = line),
+      row
+    );
+    const u = Object.assign(
+      makeUnit(PID, {
+        class: CombatUnitClass.Evoker,
+        spec: CombatUnitSpec.Evoker_Devastation,
+        info: { talents: [], pvpTalents: [] },
+        spellCastEvents: [
+          at(2, makeSpellCastEvent(FIRE_BREATH, T0 + 35_019, "")),
+          at(5, makeSpellCastEvent(FIRE_BREATH, T0 + 35_020, "")),
+        ],
+      }),
+      {
+        empowerStarts: [
+          at(1, empower(FIRE_BREATH, 35_000)),
+          at(4, empower(FIRE_BREATH, 35_020)),
+        ],
+        empowerInterrupts: [at(3, empower(FIRE_BREATH, 35_019, 0))],
+        empowerEnds: [at(6, empower(FIRE_BREATH, 37_000, 2))],
+      },
+    ) as any;
+    const entry = unitCooldownEntry(u, combatOf(u), FIRE_BREATH)!;
+    expect(chargeSpendTimesOf(entry)).toEqual([35.02]);
+    expect(
+      unreleasedHoldMs(u, FIRE_BREATH, [T0 + 35_019, T0 + 35_020]),
+    ).toEqual([T0 + 35_019]);
+  });
+
+  it("an unclosed hold's row shares the retry START's millisecond (T269, codex 85-tk-L5-T269-1 #3)", () => {
+    // START 35.000 never closed; its SUCCESS 35.020, the retry's START on
+    // the next line at 35.020, its SUCCESS 35.024, released at level 2
+    const at = (line: number, row: any) => (
+      (row.logLine.lineIndex = line),
+      row
+    );
+    const u = Object.assign(
+      makeUnit(PID, {
+        class: CombatUnitClass.Evoker,
+        spec: CombatUnitSpec.Evoker_Devastation,
+        info: { talents: [], pvpTalents: [] },
+        spellCastEvents: [
+          at(2, makeSpellCastEvent(FIRE_BREATH, T0 + 35_020, "")),
+          at(4, makeSpellCastEvent(FIRE_BREATH, T0 + 35_024, "")),
+        ],
+      }),
+      {
+        empowerStarts: [
+          at(1, empower(FIRE_BREATH, 35_000)),
+          at(3, empower(FIRE_BREATH, 35_020)),
+        ],
+        empowerEnds: [at(5, empower(FIRE_BREATH, 37_000, 2))],
+      },
+    ) as any;
+    const entry = unitCooldownEntry(u, combatOf(u), FIRE_BREATH)!;
+    expect(chargeSpendTimesOf(entry)).toEqual([35.024]);
+    expect(
+      unreleasedHoldMs(u, FIRE_BREATH, [T0 + 35_020, T0 + 35_024]),
+    ).toEqual([T0 + 35_020]);
+  });
+
   it("a retry right after a cut hold is a press that spends (codex review #1)", () => {
     const u = Object.assign(
       makeUnit(PID, {
