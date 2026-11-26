@@ -8,6 +8,7 @@ import {
   castBarStartsOf,
   ownerCastCancels,
 } from "../src/utils/castCancels";
+import { analyzeKickAudit } from "../src/utils/kickAudit";
 import type { RawStreams } from "../src/utils/rawStreams";
 import {
   makeAuraEvent,
@@ -522,5 +523,65 @@ describe("ownerCastCancels", () => {
     expect(
       ownerCastCancels({ owner, friends: [owner], enemies: [enemy], combat }),
     ).toBeNull();
+  });
+});
+
+// pipeline T194 (codex 85-tk-L5-T194-1b): the kick audit itself, on a bar
+// with a stop row. One Flash Heal bar from 50.0 s; the kicker's teammate
+// Shadowmelds; the kicker's Kick names the caster.
+describe("analyzeKickAudit — a stopped bar and a target-drop press (T194)", () => {
+  const audit = (o: { meldS: number; stopS: number; kickS: number }) => {
+    const caster = makeUnit("p1", {
+      name: "Me",
+      reaction: CombatUnitReaction.Friendly,
+      info: {},
+      castStartEvents: [0, 4, 50].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+        makeSpellCastEvent("2061", at(5.5), "p1", "Me", "p1", "Me"),
+      ],
+    });
+    const kicker = makeUnit("e1", {
+      name: "Enemy",
+      reaction: CombatUnitReaction.Hostile,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent("1766", at(o.kickS), "p1", "Me", "e1", "Enemy"),
+      ],
+    });
+    const mate = makeUnit("e2", {
+      name: "Mate",
+      reaction: CombatUnitReaction.Hostile,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent("58984", at(o.meldS), "e2", "Mate", "e2", "Mate"),
+      ],
+    });
+    return analyzeKickAudit(
+      kicker,
+      [caster],
+      {
+        startTime: T0,
+        endTime: at(120),
+        units: { p1: caster, e1: kicker, e2: mate },
+      } as never,
+      {
+        available: true,
+        manaSamples: [],
+        castFailed: [fail("2061", o.stopS, "Interrupted")],
+      },
+    )[0]!.result;
+  };
+
+  it("a drop early in the bar, a stop of the caster's own later, then the kick: a juke (the stop instant decides, not the stretch)", () => {
+    expect(audit({ meldS: 50.1, stopS: 50.8, kickS: 50.9 })).toBe("juked");
+  });
+  it("a drop at the stop: the target went away — missed", () => {
+    expect(audit({ meldS: 50.8, stopS: 50.8, kickS: 50.9 })).toBe("missed");
+  });
+  it("a stop logged well after the kick is no fake the kick was sent into: missed", () => {
+    expect(audit({ meldS: 50.3, stopS: 51.8, kickS: 50.6 })).toBe("missed");
+    // …inside the stop reader's tolerance it still is one
+    expect(audit({ meldS: 49, stopS: 50.8, kickS: 50.6 })).toBe("juked");
   });
 });

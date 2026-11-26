@@ -553,7 +553,14 @@ export function analyzeKickAudit(
             // reader's own `near` says whether a target-drop press sat at
             // it (`dodged`, ± CANCEL_CC_NEAR_S), as the ledger reads the
             // same bar (review 85-tk-L5-T194-1 #2)
-            end.kind === "stopped" && end.near === null;
+            // — and a stop logged after the kick is no fake the kick was
+            // sent into: the bar was still running when the kick went out
+            // and missed for another reason (codex 85-tk-L5-T194-1b #1:
+            // a stop 1.2 s after the kick read "juked"). The bound is the
+            // stop reader's own `CANCEL_CC_NEAR_S`.
+            end.kind === "stopped" &&
+            end.near === null &&
+            end.atS <= kickS + CANCEL_CC_NEAR_S;
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };
 
