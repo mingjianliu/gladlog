@@ -8740,24 +8740,25 @@ noPressButPressed reads the producer's event behind each line (procOwned): 605
 9 / 2,283 -> 9 / 2,292, 1215 0 / 1,671 -> 0 / 1,677 (the new lines checked,
 none flagged).
 
-v672 (pipeline batch B218, T194; first assembled as B214): four fact defects
-from the T194 count-first bundle. A kick is no longer called "JUKED by fake X"
-when the faked bar has no end row and a player on the kicker's side dropped as a
-target inside it (Shadowmeld / Feign Death / Transcendence: Transfer): the bar
-may have lost its target. A bar with a logged stop keeps the stop reader's own
-reading (a stop with a target drop, control, displacement or death at it is no
-juke), and a stop logged more than 300 ms after the interrupt's own instant
-(whole ms; a commanded pet's interrupt from its own cast) is no fake the kick
-was sent into. Touch of Karma stacks print once (they printed twice) and keep
-the absorb-row id's price; the cap of 2 stacks still applies, and the slots the
-duplicate Karma rows held now go to other stacks. An Aspect of the Cheetah press
-that printed 12 s (read from an ally's 3 s + 9 s series) while the hunter's own
-series ran 16 s (Aspect of the Fox: 3 s + 13 s) now reads 16 s; a press whose
-own series is 3 s + 9 s still reads 12 s. Measured by the lane on c711793af vs
-79ed92ca4 (605 | 1215): [KICK] JUKED -> hit nothing 7 | 8; Karma double prints
-11 | 26 -> 0, none lost, 4 | 2 stacks the duplicates had crowded out added;
-Cheetah rows printing 12 s for a hunter whose own series ran 16 s 32 -> 0 (605
-only); no in-total violation kind rose (605 inventory cheetahFoxPress / agrees 4
--> 36, the corrected rows moving into it), gates identical. Stack check on
-2df0d5a07: identical rendered diffs, same scan movement, gates diff 0 (B214
-artifacts).
+v672 (pipeline batch B218, T194; first assembled as B214): fact defects from the
+T194 count-first bundle (its fourth, an enemy Avatar extended by Capacitance,
+was reverted in review), plus a kick-stop bound from its review. A kick is no
+longer called "JUKED by fake X" when the faked bar has no end row and a player
+on the kicker's side dropped as a target inside it (Shadowmeld / Feign Death /
+Transcendence: Transfer): the bar may have lost its target. A bar with a logged
+stop keeps the stop reader's own reading (a stop with a target drop, control,
+displacement or death at it is no juke), and a stop logged more than 300 ms
+after the interrupt's own instant (whole ms; a commanded pet's interrupt from
+its own cast) is no fake the kick was sent into. Touch of Karma stacks print
+once (they printed twice) and keep the absorb-row id's price; the cap of 2
+stacks still applies, and the slots the duplicate Karma rows held now go to
+other stacks. An Aspect of the Cheetah press that printed 12 s (read from an
+ally's 3 s + 9 s series) while the hunter's own series ran 16 s (Aspect of the
+Fox: 3 s + 13 s) now reads 16 s; a press whose own series is 3 s + 9 s still
+reads 12 s. Measured by the lane on c711793af vs 79ed92ca4 (605 | 1215): [KICK]
+JUKED -> hit nothing 7 | 8; Karma double prints 11 | 26 -> 0, none lost, 4 | 2
+stacks the duplicates had crowded out added; Cheetah rows printing 12 s for a
+hunter whose own series ran 16 s 32 -> 0 (605 only); no in-total violation kind
+rose (605 inventory cheetahFoxPress / agrees 4 -> 36, the corrected rows moving
+into it), gates identical. Stack check on 2df0d5a07: identical rendered diffs,
+same scan movement, gates diff 0 (B214 artifacts).
