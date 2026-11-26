@@ -1,13 +1,16 @@
 ---
 name: cross-ai-review
-description: Cross-AI review of a feature diff — codex only (gpt-6.2-astra by default); out of quota means wait for the reset. Use after completing any non-trivial feature/fix before push — export diff, run the review with a focused prompt, triage findings, apply fixes. Codifies output-truncation traps and adopt/reject criteria.
+description: Cross-AI review of a feature diff — codex first (gpt-6.2-astra by default); when codex is out of quota, agy gemini-4-carbon-high stands in (APPROVE gate unchanged); both out means wait for the reset. Use after completing any non-trivial feature/fix before push — export diff, run the review with a focused prompt, triage findings, apply fixes. Codifies output-truncation traps and adopt/reject criteria.
 ---
 
 # 跨 AI 复核工作流(code review)
 
-用户裁决(2026-11-10,11-22 确认照此改文档):agy 停用,复核**只走 codex**;额度用完就**排队等重置**,
-不换审查者,过审之前不推。命令一律带 `--backend codex`(别依赖 `cross-run.mjs` 的默认值:各机器不一样,`auto` 会转给 agy;
-用法和失败语义见全局 `cross-ai` skill)。每个非平凡 feature push 前跑一轮。
+用户裁决(2026-11-10 起只走 codex;2026-11-25 改):复核**先走 codex**,命令一律带 `--backend codex`(别依赖
+`cross-run.mjs` 的默认值;用法和失败语义见全局 `cross-ai` skill)。**codex 额度用完时用 agy 的 `gemini-4-carbon-high`
+顶替 astra**:`agy --print "<prompt>" --model gemini-4-carbon-high --new-project`(要用模型 id,显示名会被拒;cross-run
+的 agy 后端不认这个 id,所以直接调 agy CLI),同一时间只跑一个 agy。agy 的 APPROVE 照样算门,提交和汇报写明审查者是
+agy Carbon High;它漏得多,每条意见自己核实,安静不等于没问题。两边都没额度就排队等重置,过审之前不推;不用付费 API
+做审查。每个非平凡 feature push 前跑一轮。
 
 型号分档(用户 2026-11-22,两档都是 6.2;规则全文在 `.claude/knowledge/review-tiering.md`):动共享谓词 /
 门规 / 指控或菜单候选 / parser 的(菜单 id 没变、但措辞改动增删了指控也算)、方案 / 辩论 / 根因、
@@ -25,7 +28,7 @@ node ~/.claude/skills/cross-ai/scripts/cross-run.mjs review --backend codex \
 
 - 真实 diff 的 astra review 要几分钟:用 `run_in_background` 跑,完事读文件。
 - **先看头行 `model=` 和退出码**:按实际型号署名。exit 2 = 复核没发生(额度用完也是它),不许当通过;
-  额度用完就告诉用户(报错里有恢复时间就带上),等重置后重跑。
+  codex 额度用完就改走 agy carbon(见上);也没额度就告诉用户恢复时间,等重置后重跑。
 - **输出必须重定向到文件再读**,不要 `| tail -N` —— findings 会被截断
   (同一天丢过两次第 1 条,还要再花一轮调用找回)。
 - prompt 要点名怀疑面:时间单位混用、React key/重渲、谓词是否单源、

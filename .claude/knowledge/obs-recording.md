@@ -14,7 +14,7 @@ parser segmentOpen / close → recorderService(obs-websocket 起停,串行链 + 
 ## 二期(托管便携 OBS,勿再翻案)
 
 - noobs 实为 GPL-2.0,所以托管一份便携 OBS、**首次运行从 obsproject 官方下载**,gladlog 分发物零 GPL 字节。
-- 便携包没有 ffmpeg → 不裁剪:WoW 在跑就连续录,每场结束 `SplitRecordFile` 切一刀,纯挂机分片删;播放用 `computeVideoWindow` 夹到 [对局开始, 结束]。一个 mp4 带最多 10 分钟赛前大厅是设计如此(`IDLE_SPLIT_MS`,斗内绝不切)。
+- 便携包没有 ffmpeg → 不裁剪:WoW 在跑就连续录,每场结束 `SplitRecordFile` 切一刀,纯挂机分片删;播放用 `computeVideoWindow` 夹到 [对局开始, 结束]。空闲超过 60 s 切一刀(`IDLE_SPLIT_MS = 60_000`,2026-09-05 维护者裁定,原来是 10 分钟),开局也切(`MATCH_OPEN_SPLIT_MAX_LAG_MS` 闸门),斗内绝不切。
 - spawn 必须带 `--disable-shutdown-check`(否则硬杀后下次卡「安全模式」框)。
 - 用户设置单源 `src/shared/managedObsPrefs.ts`、`resolveRecordingDir`;设备枚举靠建一个隐藏探针输入再删,录制中拒绝枚举。
 

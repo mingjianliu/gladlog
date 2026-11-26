@@ -4,7 +4,7 @@
 
 ## 状态与时代门
 
-- 12.1 数据刷新到 build 69587(2026-09-04)。提到 12.1 / 新赛季 / DR 时先看代码里的当前 build,别重复拉数据。
+- 当前数据是 12.1.5.70391(2026-10-16 刷新;12.1.0.69587 那轮在 09-04),以 `packages/analysis/src/data/datagen-manifest.json` 为准。提到 12.1 / 新赛季 / DR 时先看代码里的当前 build,别重复拉数据。
 - DR 窗口按时代区分:单谓词 `drResetMsAt(epochMs)` 16 s / 20 s,切点 2026-08-11 22:00 UTC;12.1 时代门单源 = `drAnalysis.ts` 的 `PATCH_121_GOLIVE_EPOCH_MS`(语料研究的赛季门也用它——「只看新赛季」时第一件事就是过这个门)。官方只改窗口,档位 Full → 50% → Immune 不变。
 
 ## 补丁说明审读(每个大版本都要做)
@@ -21,7 +21,7 @@
 
 ## datagen / 刷新的坑
 
-- `packages/analysis/scripts/datagen/lib/wagoCsv.ts` 的 `resolveBuild` 单源(CLI 参数 > `DATAGEN_BUILD` > wago 最新);`writeManifest.ts` 的清单是硬编码的,手工加的生成物不在清单里会被下次重写静默丢掉。
+- `packages/analysis/scripts/datagen/lib/wagoCsv.ts` 的 `resolveBuild` 单源(CLI 参数 > `DATAGEN_BUILD` > wago 最新)。**只用正式服 build**(维护者 2026-11-22:未上线的版本不用):wago「最新」可能是测试服(当天选中过 12.1.7.71087),所以刷新时一律显式钉正式服 build;`writeManifest.ts` 的清单是硬编码的,手工加的生成物不在清单里会被下次重写静默丢掉。
 - 生成器模板里的头注释是字符串字面量,改生成物注释要和生成器**成对改**,否则下次重跑写回旧文。
 - 验收数字漂移归因:先 rebase 再采基线,或 `git checkout HEAD~1 -- <data paths>` 在同一代码上重采刷新前数据(新增文件要手动删)。
 - 「表里有没有」要连消费者一起查(某个生成表早挖到 30% 却零消费者)。
