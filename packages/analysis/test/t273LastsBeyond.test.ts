@@ -40,6 +40,7 @@ const ROLL_THE_BONES = "1214909";
 const KEEP_IT_ROLLING = "381989";
 const ONE_OF_A_KIND = "1214933";
 const JACKPOT = "1214937";
+const DOUBLE_TROUBLE = "1214934";
 const EARTH_ELEMENTAL = "198103";
 
 beforeAll(async () => {
@@ -293,6 +294,22 @@ describe("T273: review 1b, constructed shapes", () => {
     );
     expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, T0)).toBe(30);
     expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, at(10))).toBe(60);
+  });
+
+  it("8c70dc85 r6 (1c #1): a re-stated enhancement row 2.4 s before the roll that replaces it, Keep It Rolling a second after — 30 s", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [],
+      [
+        [ROLL_THE_BONES, 0],
+        [ROLL_THE_BONES, 29.72],
+        [ROLL_THE_BONES, 58.78],
+        [KEEP_IT_ROLLING, 59.752],
+      ],
+    );
+    // Double Trouble written again at 56.427 s: no roll beside the row
+    expect(buffFullDurationForCaster(DOUBLE_TROUBLE, u, at(56.427))).toBe(30);
+    expect(buffFullDurationForCaster(JACKPOT, u, at(58.779))).toBe(60);
   });
 
   it("#5: a roll with no enhancement row does not read the next roll's", () => {

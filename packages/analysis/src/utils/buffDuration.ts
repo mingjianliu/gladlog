@@ -481,11 +481,14 @@ function perEventExtensionSeconds(
     )
       own = k;
   });
+  // a row with no roll beside it is a re-stated one (8c70dc85 r6: Double
+  // Trouble written again 2.4 s before the roll that replaced it): the
+  // first roll after it replaces it (codex 85-tk-L1-T273-1c #1)
   const replacer =
     own >= 0 &&
     Math.abs(replacers[own]!.logLine.timestamp - fromMs) <= OWN_AURA_PAIR_MS
       ? replacers[own + 1]
-      : undefined;
+      : replacers.find((c) => c.logLine.timestamp > fromMs);
   const replaced =
     replacer !== undefined &&
     replacer.logLine.timestamp <= (run?.toMs ?? Number.POSITIVE_INFINITY);
