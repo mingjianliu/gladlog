@@ -79,6 +79,8 @@ import {
   claimLandingRow,
   EMPOWER_HOLD_ROW_MS,
   isAuraLandingEvent,
+  isTickStackRow,
+  landedAfterWallRow,
   landedBeforeWallRow,
   landedThroughWall,
   pressLandingCaster,
@@ -418,6 +420,8 @@ interface IWallRun {
   toMs: number;
   /** the log line of the APPLIED row that opened it */
   fromLine?: number;
+  /** the log line of the REMOVED row that closed it */
+  toLine?: number;
 }
 
 /** A wall's runs on `target`, its own rows only: APPLIED → REMOVED per spell and
@@ -467,6 +471,7 @@ function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
         fromMs: open.get(k)!,
         toMs: tsOf(a),
         fromLine: openLine.get(k),
+        toLine: a.logLine?.lineIndex,
       });
       open.delete(k);
     }
@@ -568,6 +573,16 @@ function checkIntoDefense(ctx: IRoundCtx): void {
         const reflected = missed
           .filter((d) => d.missType === "REFLECT")
           .map((d) => tsOf(d) as number);
+        // the caster's periodic ticks of the spell on the target: a stack
+        // a tick added is no landing (the product's `isTickStackRow`)
+        const tickMs = ((caster.damageOut ?? []) as any[])
+          .filter(
+            (d) =>
+              d.destUnitId === target.id &&
+              ev(d) === "SPELL_PERIODIC_DAMAGE" &&
+              same(d.spellId, d.spellName),
+          )
+          .map((d) => tsOf(d) as number);
         // `hit`: the product's `IPressLanding.hit` — a damage row, or a miss
         // the target's absorb ate (fact11 D21)
         const rows: {
@@ -602,7 +617,8 @@ function checkIntoDefense(ctx: IRoundCtx): void {
               (a) =>
                 a.srcUnitId === caster.id &&
                 isAuraLandingEvent(ev(a)) &&
-                same(a.spellId, a.spellName),
+                same(a.spellId, a.spellName) &&
+                !isTickStackRow(ev(a), tsOf(a) as number, tickMs),
             )
             .map((a) => ({
               t: tsOf(a) as number,
@@ -635,11 +651,17 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           // refused under the wall
           if (
             matched &&
-            landedBeforeWallRow(
+            (landedBeforeWallRow(
               { atMs: row!.t, lineIndex: row!.lineIndex },
               fromMs,
               iv.fromLine,
-            )
+            ) ||
+              landedAfterWallRow(
+                { atMs: row!.t, lineIndex: row!.lineIndex },
+                iv.toLine === undefined
+                  ? undefined
+                  : { ms: toMs, lineIndex: iv.toLine },
+              ))
           )
             continue;
           if (

@@ -16,6 +16,8 @@ import {
   aurasRefusingSpellAt,
   claimLandingRow,
   isAuraLandingEvent,
+  isTickStackRow,
+  landedAfterWallRow,
   landedBeforeWallRow,
   pressLandingRows,
   refusedByAnotherAura,
@@ -412,6 +414,22 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
     );
     expect(got.get(press)).toMatchObject({ atMs: 12_066, hit: true });
     expect(got.get(second)).toMatchObject({ atMs: 12_001, hit: false });
+  });
+  it("a stack its own tick added is no landing; a row below the wall's closing row came after it", () => {
+    const DOSE = LogEvent.SPELL_AURA_APPLIED_DOSE;
+    expect(isTickStackRow(DOSE, 126_464, [126_464])).toBe(true);
+    expect(isTickStackRow(DOSE, 31_274, [30_100, 32_100])).toBe(false);
+    expect(isTickStackRow(LogEvent.SPELL_AURA_REFRESH, 5, [5])).toBe(false);
+    const close = { ms: 109_045, lineIndex: 1890 };
+    expect(landedAfterWallRow({ atMs: 109_045, lineIndex: 1891 }, close)).toBe(
+      true,
+    );
+    expect(landedAfterWallRow({ atMs: 109_045, lineIndex: 1889 }, close)).toBe(
+      false,
+    );
+    expect(
+      landedAfterWallRow({ atMs: 109_045, lineIndex: 1891 }, undefined),
+    ).toBe(false);
   });
   it("a stack added is a landing row", () => {
     expect(isAuraLandingEvent(LogEvent.SPELL_AURA_APPLIED_DOSE)).toBe(true);

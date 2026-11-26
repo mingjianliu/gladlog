@@ -127,6 +127,9 @@ interface IDefenseWindow {
    * that millisecond logged before it landed before the wall was up
    * (`landedBeforeWallRow`) */
   fromLine?: number;
+  /** the row that closed it (`IAuraInterval.toRow`): a landing logged below
+   * it in its millisecond came after the wall (`landedAfterWallRow`) */
+  toRow?: { ms: number; lineIndex: number };
   unitId: string;
   unitName: string;
   unitSpec: string;
@@ -222,6 +225,7 @@ function buildDefenseWindows(
           const line = row?.logLine.lineIndex;
           return line === undefined ? {} : { fromLine: line };
         })(),
+        ...(iv.toRow ? { toRow: iv.toRow } : {}),
         unitId: enemy.id,
         unitName: enemy.name,
         unitSpec: specToString(enemy.spec),
@@ -496,7 +500,8 @@ export function buildOffensiveWasteSummary(
                 landings.get(e)!,
                 Math.round(matchStartMs + window.fromSeconds * 1000),
                 window.fromLine,
-              )
+              ) ||
+              landedAfterWallRow(landings.get(e)!, window.toRow)
             )
               return false;
             {
@@ -717,6 +722,22 @@ const LOSS_OF_CONTROL_MECHANICS: ReadonlySet<number> = new Set([
   1, 2, 5, 10, 12, 13, 14, 17, 18, 24, 30,
 ]);
 
+/** The other end (codex 85-tk-L6-T281-9 #2, 5305d5fa r0: Barkskin's REMOVED
+ * on row 1890, a Lightning Bolt's damage on row 1891 of the same
+ * millisecond, counted into the Barkskin): a landing logged below the row
+ * that closed the wall, in that row's millisecond, came after it. */
+export function landedAfterWallRow(
+  landing: Pick<IPressLanding, "atMs" | "lineIndex">,
+  wallCloseRow: { ms: number; lineIndex: number } | undefined,
+): boolean {
+  return (
+    wallCloseRow !== undefined &&
+    landing.lineIndex !== undefined &&
+    landing.atMs === wallCloseRow.ms &&
+    landing.lineIndex > wallCloseRow.lineIndex
+  );
+}
+
 /**
  * Pipeline T281: does the data say aura `auraId` stops spell `spellId` —
  * positive evidence only, readings of the aura itself:
@@ -932,6 +953,23 @@ export function isAuraLandingEvent(event: string | undefined): boolean {
   );
 }
 
+/** A stack its own periodic tick added is no press's landing: Agony stacks
+ * on each tick, and the stack row of a tick 1.28 s after a press was taken
+ * as that press's landing, past the Spirit Link Totem it was cast into
+ * (3bb93589 r3; codex 85-tk-L6-T281-9 #1). `tickMs` are the caster's
+ * periodic damage rows of the spell on that target. */
+export const TICK_STACK_ROW_MS = 20;
+export function isTickStackRow(
+  event: string | undefined,
+  atMs: number,
+  tickMs: readonly number[],
+): boolean {
+  return (
+    event === LogEvent.SPELL_AURA_APPLIED_DOSE &&
+    tickMs.some((t) => Math.abs(t - atMs) <= TICK_STACK_ROW_MS)
+  );
+}
+
 /** `pressLandingsMs` with the attack each press landed as (`IPressLanding`). */
 export function pressLandingRows<T extends LandingPress>(
   presses: readonly T[],
@@ -992,10 +1030,28 @@ export function pressLandingRows<T extends LandingPress>(
       m.missType === "IMMUNE",
     );
   }
+  // the caster's periodic ticks per target and spell (`isTickStackRow`)
+  const ticksByKey = new Map<string, number[]>();
+  for (const d of caster.damageOut ?? []) {
+    if (d.logLine?.event !== LogEvent.SPELL_PERIODIC_DAMAGE) continue;
+    const k = `${d.destUnitId}|${spellNameKey(d.spellId ?? "", d.spellName ?? "")}`;
+    const list = ticksByKey.get(k);
+    if (list) list.push(d.logLine.timestamp);
+    else ticksByKey.set(k, [d.logLine.timestamp]);
+  }
   for (const unit of targets)
     for (const a of unit.auraEvents ?? []) {
       if (a.srcUnitId !== caster.id) continue;
-      if (isAuraLandingEvent(a.logLine?.event))
+      if (
+        isAuraLandingEvent(a.logLine?.event) &&
+        !isTickStackRow(
+          a.logLine?.event,
+          a.logLine.timestamp,
+          ticksByKey.get(
+            `${unit.id}|${spellNameKey(a.spellId, a.spellName)}`,
+          ) ?? [],
+        )
+      )
         add(
           unit.id,
           a.spellId,
