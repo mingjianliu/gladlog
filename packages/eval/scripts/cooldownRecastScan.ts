@@ -62,7 +62,11 @@ import {
   castBarOutcomesOf,
   JUKE_LOOKBACK_MS,
 } from "@gladlog/analysis/src/utils/castBarOutcomes";
-import { channelSpans } from "@gladlog/analysis/src/utils/castCommitSpans";
+import {
+  channelSpans,
+  empowerSpans,
+  pressRidesAlong,
+} from "@gladlog/analysis/src/utils/castCommitSpans";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,
@@ -489,7 +493,17 @@ for (const f of files) {
               c.startMs,
               c.endMs,
             ]),
+            // and its empower holds (codex -5 #2: Tip the Scales refused
+            // during a Fire Breath hold, 4d4e8810 r1)
+            ...(empowerSpans(u) ?? []).map((e): [number, number] => [
+              e.startMs,
+              e.endMs,
+            ]),
           ];
+          // …unless the spell rides along with a cast (DB2: off the global
+          // cooldown and castable while channelling — codex -5 #1:
+          // Combustion refused during a Polymorph bar, cf6c4474 r1)
+          const ridesAlong = pressRidesAlong(id);
           const units = Object.values(legacy.units ?? {}) as any[];
           const blockedAt = spellPressBlockedAt(
             u,
@@ -507,7 +521,8 @@ for (const f of files) {
             if (ms < legacy.startTime || ms > endMs) continue;
             if (ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS))
               continue;
-            if (casting.some(([a, b]) => a <= ms && ms < b)) continue;
+            if (!ridesAlong && casting.some(([a, b]) => a <= ms && ms < b))
+              continue;
             if (blockedAt(id, ms)) continue;
             const rt = (ms - legacy.startTime) / 1000;
             const before = {
