@@ -458,6 +458,10 @@ export function analyzeKickAudit(
     enemy: ICombatUnit,
     kickMs: number,
     want: "faked" | "unfinished",
+    /** when the interrupt itself went out, if later than the press (a
+     * commanded pet's own cast, `petExecMsOf`): a stop is "after the kick"
+     * only past this */
+    kickLandMs: number = kickMs,
   ) => {
     const kickS = (kickMs - matchStartMs) / 1000;
     let last: CastBarOutcome | undefined;
@@ -558,9 +562,15 @@ export function analyzeKickAudit(
             // and missed for another reason (codex 85-tk-L5-T194-1b #1:
             // a stop 1.2 s after the kick read "juked"). The bound is the
             // stop reader's own `CANCEL_CC_NEAR_S`.
+            // In whole ms (a float sum made equal delays read
+            // differently), from the interrupt's own instant — a commanded
+            // pet's cast, not its owner's press (codex 85-tk-L5-T194-1c).
             end.kind === "stopped" &&
             end.near === null &&
-            end.atS <= kickS + CANCEL_CC_NEAR_S;
+            Math.round(end.atS * 1000) <=
+              Math.max(kickMs, kickLandMs) -
+                matchStartMs +
+                Math.round(CANCEL_CC_NEAR_S * 1000);
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };
 
@@ -802,7 +812,7 @@ export function analyzeKickAudit(
     }
     let jukedBy: string | undefined;
     for (const enemy of candidates) {
-      jukedBy = openCastOf(enemy, kickMs, "faked");
+      jukedBy = openCastOf(enemy, kickMs, "faked", petExecMs);
       if (jukedBy) break;
     }
 

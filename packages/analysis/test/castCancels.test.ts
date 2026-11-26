@@ -584,4 +584,9 @@ describe("analyzeKickAudit — a stopped bar and a target-drop press (T194)", ()
     // …inside the stop reader's tolerance it still is one
     expect(audit({ meldS: 49, stopS: 50.8, kickS: 50.6 })).toBe("juked");
   });
+  it("the tolerance is counted in whole ms: the same 300 ms delay reads the same at any instant (codex 85-tk-L5-T194-1c #2)", () => {
+    expect(audit({ meldS: 49, stopS: 50.3, kickS: 50.0 })).toBe("juked");
+    expect(audit({ meldS: 49, stopS: 50.301, kickS: 50.001 })).toBe("juked");
+    expect(audit({ meldS: 49, stopS: 50.302, kickS: 50.001 })).toBe("missed");
+  });
 });
