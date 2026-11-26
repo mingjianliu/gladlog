@@ -83,6 +83,37 @@ describe("ownerCastCancels", () => {
     ],
   };
 
+  // pipeline T194 (review 85-tk-L5-T194-1 #2): the kick audit reads a
+  // stopped bar's own stop instant through the cast-bar reader, as this
+  // ledger does — a Shadowmeld of the kicker's side at the stop is the
+  // target going away for both readers: no cancel counted, no baited kick.
+  // One away from the stop (here before the bar) changes neither.
+  it("a target-drop press at the stop: the ledger and the kick audit agree it was no fake", () => {
+    const withMeld = (atS: number) => {
+      const mate = makeUnit("e2", {
+        name: "Mate",
+        reaction: CombatUnitReaction.Hostile,
+        info: {},
+        spellCastEvents: [
+          makeSpellCastEvent("58984", at(atS), "e2", "Mate", "e2", "Mate"),
+        ],
+      });
+      return ownerCastCancels({
+        owner,
+        friends: [owner],
+        enemies: [enemy, mate],
+        combat: { ...combat, units: { p1: owner, e1: enemy, e2: mate } },
+        rawStreams: streams,
+      })!;
+    };
+    // the bar began at 50 s, was stopped at 50.3 s, the kick came at 50.6 s
+    const away = withMeld(49);
+    expect(away.baitedKicks.map((b) => b.atSeconds)).toEqual([50.6]);
+    const atStop = withMeld(50.3);
+    expect(atStop.baitedKicks).toEqual([]);
+    expect(atStop.cancels.length).toBe(away.cancels.length - 1);
+  });
+
   it("counts self-cancels with progress, skips CC / other reasons, finds the baited kick", () => {
     const r = ownerCastCancels({
       owner,
@@ -106,7 +137,10 @@ describe("ownerCastCancels", () => {
     ).toEqual([0, 6, 16, 26]);
     // a bar is a cooldown's when its completed cast would be a press of it
     expect(
-      castBarsOfCooldown(bars, owner, { spellId: "2061", spellName: "Flash Heal" }),
+      castBarsOfCooldown(bars, owner, {
+        spellId: "2061",
+        spellName: "Flash Heal",
+      }),
     ).toHaveLength(7);
     expect(
       castBarsOfCooldown(bars, owner, { spellId: "51514", spellName: "Hex" }),
@@ -170,7 +204,13 @@ describe("ownerCastCancels", () => {
     const dazed = {
       ...base,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61391", at(10.6), "e1", "p1"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "61391",
+          at(10.6),
+          "e1",
+          "p1",
+        ),
       ],
     };
     expect(run(dazed, [enemy], failed).cancels).toHaveLength(0);
@@ -178,7 +218,12 @@ describe("ownerCastCancels", () => {
     const knocked = {
       ...base,
       damageIn: [
-        { timestamp: at(10.5), spellId: "51490", srcUnitId: "e1", destUnitId: "p1" },
+        {
+          timestamp: at(10.5),
+          spellId: "51490",
+          srcUnitId: "e1",
+          destUnitId: "p1",
+        },
       ],
     };
     expect(run(knocked as never, [enemy], failed).cancels).toHaveLength(0);
@@ -186,7 +231,13 @@ describe("ownerCastCancels", () => {
     const late = {
       ...base,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61391", at(11.2), "e1", "p1"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "61391",
+          at(11.2),
+          "e1",
+          "p1",
+        ),
       ],
     };
     expect(run(late, [enemy], failed).cancels).toHaveLength(1);
@@ -202,11 +253,19 @@ describe("ownerCastCancels", () => {
       auraEvents: [],
       // Typhoon 132469 logged as SPELL_MISSED IMMUNE on the owner
       missesIn: [
-        { timestamp: at(10.6), spellId: "132469", srcUnitId: "e1", destUnitId: "p1", missType: "IMMUNE", amount: 0 },
+        {
+          timestamp: at(10.6),
+          spellId: "132469",
+          srcUnitId: "e1",
+          destUnitId: "p1",
+          missType: "IMMUNE",
+          amount: 0,
+        },
       ],
     };
     expect(
-      run(immune as never, [enemy], [fail("2061", 10.6, "Interrupted")]).cancels,
+      run(immune as never, [enemy], [fail("2061", 10.6, "Interrupted")])
+        .cancels,
     ).toHaveLength(1);
   });
 
@@ -388,7 +447,7 @@ describe("ownerCastCancels", () => {
   });
 
   // FT I11 (b): stops the player did not choose.
-  it("a cast bar the owner's own death ended is not a cancel (0fe0e2e2 0:43: the \"Interrupted\" row 24 ms before UNIT_DIED)", () => {
+  it('a cast bar the owner\'s own death ended is not a cancel (0fe0e2e2 0:43: the "Interrupted" row 24 ms before UNIT_DIED)', () => {
     const base = {
       ...owner,
       castStartEvents: [0, 43.158].map((s) => start("2061", s)),

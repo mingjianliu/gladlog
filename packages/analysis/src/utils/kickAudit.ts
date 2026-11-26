@@ -392,12 +392,29 @@ export function analyzeKickAudit(
   // (`castBarOutcomesOf`), with the unit's own SPELL_CAST_FAILED rows when it
   // recorded the log and they were handed in.
   const barsByUnit = new Map<string, CastBarOutcome[]>();
+  // The kicker's side's target-dropping presses (`targetDropInstantsMs`),
+  // the `dodgeMs` the cast-cancel ledger gives the same bars
+  // (`ownerCastBarOutcomes`): the players of the kicker's own reaction, never
+  // the kicked side whatever `enemies` a caller passed (review
+  // 85-tk-L5-T194-1 note 4).
+  let dropMs: number[] | undefined;
+  const kickerSideDropMs = () =>
+    (dropMs ??= targetDropInstantsMs(
+      allUnits.filter(
+        (u) =>
+          u.info &&
+          u.reaction === player.reaction &&
+          !enemyPlayers.some((p) => p.id === u.id),
+      ),
+      TARGETED_CC_DODGE_SPELLS,
+    ));
   const barsOf = (enemy: ICombatUnit) => {
     let bars = barsByUnit.get(enemy.id);
     if (!bars) {
       bars = castBarOutcomesOf({
         unit: enemy,
         startMs: matchStartMs,
+        dodgeMs: kickerSideDropMs(),
         failed: rawStreams?.available
           ? rawStreams.castFailed.filter((e) => e.unitGuid === enemy.id)
           : [],
@@ -437,15 +454,6 @@ export function analyzeKickAudit(
    *  - `unfinished` (the silenced branch): any end but a completion or
    *    somebody's interrupt — whether the silence or the target stopped it
    *    the log cannot tell. */
-  // the kicker's side: the players that are not the kicked side's
-  let dropMs: number[] | undefined;
-  const kickerSideDropMs = () =>
-    (dropMs ??= targetDropInstantsMs(
-      allUnits.filter(
-        (u) => u.info && !enemyPlayers.some((p) => p.id === u.id),
-      ),
-      TARGETED_CC_DODGE_SPELLS,
-    ));
   const openCastOf = (
     enemy: ICombatUnit,
     kickMs: number,
@@ -525,8 +533,8 @@ export function analyzeKickAudit(
     };
     // pipeline T194 (GH #173 item 35): a press of the kicker's side that
     // drops its presser as a target (`targetDropInstantsMs` — Shadowmeld,
-    // Transcendence: Transfer, Feign Death) between the bar's start and the
-    // kick. A START row names no target, so the bar may have lost its own:
+    // Transcendence: Transfer, Feign Death) between the start of a bar with
+    // no end row and the kick. A START row names no target, so the bar may have lost its own:
     // whether the unit faked the log cannot tell, and the kick is `missed`,
     // never called a juke — the reading `castBarOutcomesOf` gives the same
     // bar from the caster's own prompt (`dodgeMs` → "dodged"), and the
@@ -541,9 +549,11 @@ export function analyzeKickAudit(
         ? end.kind !== "completed" && end.kind !== "kicked"
         : end.kind === "none"
           ? !forcedInside() && !supersededInside() && !targetDroppedInside()
-          : end.kind === "stopped" &&
-            end.near === null &&
-            !targetDroppedInside();
+          : // a bar with a stop row has its stop instant: the cast-bar
+            // reader's own `near` says whether a target-drop press sat at
+            // it (`dodged`, ± CANCEL_CC_NEAR_S), as the ledger reads the
+            // same bar (review 85-tk-L5-T194-1 #2)
+            end.kind === "stopped" && end.near === null;
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };
 

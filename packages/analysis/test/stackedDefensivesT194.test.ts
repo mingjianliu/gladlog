@@ -26,7 +26,11 @@ const KARMA = "122470";
 const KARMA_ABSORB = "125174";
 const PAIN_SUPPRESSION = "33206";
 
-const pairsWith = (karmaAuras: string[]) => {
+const pairsWith = (
+  karmaAuras: string[],
+  /** Pain Suppression first, Touch of Karma 2 s into it */
+  karmaLater = false,
+) => {
   const aura = (t: number, event: string, spellId: string, src: string) => ({
     spellId,
     spellName: spellId,
@@ -58,11 +62,33 @@ const pairsWith = (karmaAuras: string[]) => {
     [KARMA_ABSORB]: 15_000,
   };
   const monk = unit("M", {
+    // a hit the shield took: the log's absorb row names the cast, 122470
+    absorbsIn: karmaLater
+      ? [
+          {
+            timestamp: T0 + 13_000,
+            spellId: KARMA,
+            srcUnitId: "M",
+            srcUnitName: "M-R",
+            absorbedAmount: 30,
+          },
+        ]
+      : [],
     auraEvents: [
       ...karmaAuras.map((id) =>
-        aura(10_000, LogEvent.SPELL_AURA_APPLIED, id, "M"),
+        aura(
+          karmaLater ? 12_000 : 10_000,
+          LogEvent.SPELL_AURA_APPLIED,
+          id,
+          "M",
+        ),
       ),
-      aura(12_000, LogEvent.SPELL_AURA_APPLIED, PAIN_SUPPRESSION, "P"),
+      aura(
+        karmaLater ? 10_000 : 12_000,
+        LogEvent.SPELL_AURA_APPLIED,
+        PAIN_SUPPRESSION,
+        "P",
+      ),
       ...karmaAuras.map((id) =>
         aura(ends[id]!, LogEvent.SPELL_AURA_REMOVED, id, "M"),
       ),
@@ -97,5 +123,17 @@ describe("[STACKED DEFENSIVES] — two auras of one press are one defensive (T19
     const pairs = pairsWith([KARMA]);
     expect(pairs).toHaveLength(1);
     expect(pairs[0]).toMatchObject({ overlapFromSec: 12, overlapToSec: 20 });
+  });
+
+  it("Touch of Karma as the later one keeps its absorb price: the interval carries the key's id (review 85-tk-L5-T194-1 #1)", () => {
+    const pairs = pairsWith([KARMA, KARMA_ABSORB], true);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]!.second.spellId).toBe(KARMA);
+    expect(pairs[0]).toMatchObject({
+      overlapFromSec: 12,
+      overlapToSec: 15,
+      pricing: "absorb",
+      blockedOverlapPct: 30,
+    });
   });
 });

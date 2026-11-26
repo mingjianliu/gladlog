@@ -218,9 +218,12 @@ export function stackedDefensivePairs(
     // the unit — Touch of Karma's 10 s marker 122470 and its absorb 125174,
     // both the key 122470 — is one defensive of the stack. Left as two
     // intervals it printed the same `[STACKED DEFENSIVES]` line twice (605
-    // + 12.1.5 captures: 14 line facts, every one a Touch of Karma). Of two
-    // overlapping runs of one key from one source the shorter stands: the
-    // defensive was up no longer than the aura of it that ended first.
+    // + 12.1.5 captures: 14 line facts, every one a Touch of Karma). Two
+    // overlapping runs of one key from one source are one interval: up no
+    // longer than the aura of it that ended first, and under the KEY's own
+    // id when one of the two carries it — the log's absorb rows name the
+    // cast (122470), and the price of a later Karma is read by that id
+    // (review 85-tk-L5-T194-1 #1: kept under 125174 it read "not priced").
     const one: IAuraInterval[] = [];
     for (const iv of ivs) {
       const key = stackedDefensiveKeyOf(iv.spellId);
@@ -231,8 +234,17 @@ export function stackedDefensivePairs(
           o.fromS < iv.toS &&
           iv.fromS < o.toS,
       );
-      if (at < 0) one.push(iv);
-      else if (iv.toS - iv.fromS < one[at]!.toS - one[at]!.fromS) one[at] = iv;
+      if (at < 0) {
+        one.push(iv);
+        continue;
+      }
+      const o = one[at]!;
+      const named = iv.spellId === key && o.spellId !== key ? iv : o;
+      one[at] = {
+        ...named,
+        fromS: Math.min(o.fromS, iv.fromS),
+        toS: Math.min(o.toS, iv.toS),
+      };
     }
     ivs = one.sort((a, b) => a.fromS - b.fromS);
     for (let i = 0; i < ivs.length; i++) {

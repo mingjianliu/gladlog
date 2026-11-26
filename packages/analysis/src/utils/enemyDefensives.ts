@@ -84,7 +84,7 @@ export {
   pressSecondsOfAura,
   SAVE_CAST_AURA_PAIR_S,
 } from "./auraIntervals";
-import { buffDurationOfApplication } from "./buffDuration";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { missBelongsToCast } from "./castMissRows";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
@@ -485,8 +485,7 @@ export function ownPressedShieldSpansMs(
     if (
       presses.length > 0 &&
       presses.every(
-        (c) =>
-          c.logLine.timestamp > loggedStartMs + AURA_BEFORE_CAST_ROW_MAX_MS,
+        (c) => c.logLine.timestamp > loggedStartMs + AURA_BEFORE_CAST_ROW_MAX_MS,
       ) &&
       !(caster.spellCastEvents ?? []).some(
         (c) =>
@@ -2632,23 +2631,8 @@ export function enemyDefensiveEventsUncached(
     }
     return iv;
   };
-  // the length of THIS application (pipeline T194, GH #218 2.7): the
-  // time-less length left out what a press earns while it is up — Avatar
-  // under Capacitance, +2 s per Thunder Blast — so an application that ran
-  // past the table's number could not be early of its own end (605 + 12.1.5
-  // captures: 473 Avatar presses whose length differs from the time-less one)
-  const fullOf = (spellId: string, fromS: number) =>
-    buffDurationOfApplication(
-      spellId,
-      enemy,
-      combat.startTime + Math.round(fromS * 1000),
-    );
-  const removedEarly = (
-    spellId: string,
-    fromS: number,
-    observed: number,
-  ): boolean => {
-    const full = fullOf(spellId, fromS);
+  const removedEarly = (spellId: string, observed: number): boolean => {
+    const full = buffFullDurationForCaster(spellId, enemy);
     if (full === undefined) return false;
     // a length that moves with haste has no fixed end to be early of (fact8
     // D38, `runsWithHaste` in timelineHelpers); the channel bound stands in
@@ -2742,7 +2726,7 @@ export function enemyDefensiveEventsUncached(
         ? { removedEarly: false, upAtRoundEnd: true }
         : { removedEarly: false, endNotLogged: true, ...actionEnd };
     }
-    if (!removedEarly(auraId, iv.fromS, iv.toS - iv.fromS)) {
+    if (!removedEarly(auraId, iv.toS - iv.fromS)) {
       // Inside the slack an end the log gives a cause for is still early:
       // the slack absorbs aura-event jitter, and a REMOVED that names its
       // cause is not jitter (acceptance 7e2a3c95 #2: 64a7a24d `Ice Barrier
@@ -2750,7 +2734,7 @@ export function enemyDefensiveEventsUncached(
       // same ms as the last absorb — printed no `— used up`). A clamp at the
       // log's end (below) is no end the log gave, and an aura that ran its
       // full length expired whatever else is logged in that ms.
-      const full = fullOf(auraId, iv.fromS);
+      const full = buffFullDurationForCaster(auraId, enemy);
       // in whole ms (codex 40-FT-82: 32.300 − 20.300 is 11.999999999999996
       // in floating point, and a Barkskin that ran its full 12 s read
       // "ended at death")
