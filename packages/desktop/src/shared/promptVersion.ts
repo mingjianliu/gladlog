@@ -1982,5 +1982,13 @@
  *  ANSWERED]; Defy Fate prints its cheat-death proc; [NO HEAL CAST] ignores
  *  placeholder reach rows; more DB2 control auras are recognised. See
  *  docs/prompt-version-history.md.
+ *
+ * v675 (2026-11-26; pipeline batch B256, Mac bundle M1: T278 T281, with the
+ *  eval-only T243 T249 T250 T262 T267): an Adaptation lockout wiped by its
+ *  holder's death keeps its DB2 60 s, so the trinket countdown and the
+ *  [DEATH] trinket note no longer read the wipe as the trinket's return; a
+ *  cast that landed before an immunity or wall opened is no longer listed as
+ *  cast into it, and one leaves a wall's count only on evidence that another
+ *  aura refused it. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 674;
+export const PROMPT_VERSION = 675;

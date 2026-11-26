@@ -8833,3 +8833,37 @@ lines; T244's [PRESS] 71 | 162; T258 + T257's [BURST ANSWERED] +184/-146 |
 +180/-159; T190's [ENEMY DEF] / [PROC]; menu rows T251 + T258 8/8 | 12/11);
 scan5 in-total violations 31,369 -> 30,131 | 35,863 -> 34,559, no violation kind
 rose, gates identical.
+
+v675 (pipeline batch B256, Mac bundle M1: T278 T281, plus the eval-only T243
+T249 T250 T262 T267; user ruling 2026-11-26: bundled; the eval-only five were
+first assembled as B220 / B221). Per ticket, measured by its lane on its own
+base (605 | 1215):
+T278 — an Adaptation lockout whose debuff is wiped by its holder's death reads
+ready at its application plus DB2's 60 s, not at the wipe: scan5
+adaptationReadyAtDeathWipe 6 of 51 | 5 of 22 lockouts -> 0 | 0; lockouts that
+ran out unchanged.
+T281 — ABILITIES INTO IMMUNITY/DR: a cast that landed before the immunity or
+wall opened is no cast into it, and a cast is taken out of a wall's count (as
+refused by another aura) only on positive evidence; without it the cast stays
+in that wall's count: scan5 intoDefenseLanded over / under 185 / 14 | 198 / 9
+-> 0 / 0, pressImmuneTagLanded (Merithra's Blessing) 1 | 3 -> 0 | 0.
+T243, T249, T250, T262, T267 — no prompt line: scan5 artefact fixes (T243;
+its noPressButPressed exemption needs a matched event of the press itself, and
+where both rows carry a line index an absorb in its run's opening millisecond
+counts only when logged after the run's own row), one DB2 build for the scan5
+reads with a missing table failing the run (T249), datagen resolving wago's
+live retail build only (T250), ownShieldNotPopped opening the attempt at its own
+millisecond (T262), and in the cooldown model Penance joining the haste-scaled
+table and Swiftmend's cooldown under Renewing Surge (T267), which no prompt line
+prints.
+Bundle check (Mac, 7fc206b9e -> the bundle's code, both sides on one machine;
+the B255 commits above it change only eval scans and the version): 605 —
+[CC ON TEAM] 21 / 21 and [DEATH] 6 / 6 lines (T278), the ABILITIES INTO
+IMMUNITY/DR section -218 / +109 (of them 164 / 109 per-wall ability rows) and
+[YOU] [CAST] -1 (T281), 141 contexts; 1215 — [CC ON TEAM] 3 / 3, [DEATH] 3 / 3,
+that section -318 / +105 (183 / 105 ability rows), [YOU] [CAST] -5 / +5, 179
+contexts; each kind equals its ticket's own check. scan5 in-total violations
+on 605 28,620 -> 28,420; no violation kind rose on either corpus (fell:
+intoDefenseLanded over / under, pressImmuneTagLanded; on 605 also
+pressNamedRead / unregisteredCompanion 234 -> 229, lines T281 removes); gates
+identical on both.
