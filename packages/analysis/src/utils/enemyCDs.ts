@@ -54,6 +54,7 @@ import {
   specToString,
   unitCooldownEntry,
   unitCooldownOf,
+  unitHpSampleAt,
 } from "./cooldowns";
 import { isEffectHolderUnit } from "./effectHolder";
 import { isStolenAuraAcquisition } from "./enemyDefensives";
@@ -1659,6 +1660,23 @@ export const BURST_DAMAGE_RATIO_MAX = 6;
 /** What a healer controlled for the whole observed window adds to its
  * score: `1 + coverage × this` (scan5/t91 reads the coverage back off it). */
 export const BURST_HEALER_CC_WEIGHT = 0.8;
+
+/**
+ * Pipeline T237 (codex 80-PIPE-234-B212 #1): an aligned burst window's HP
+ * reading — the unit's reading at `atMs` (`unitHpSampleAt`), null when the
+ * one it picks was taken after the observed end (the round's end). 7686e97d
+ * r5: the deciding death at 239.105 s at 8 %, the window to 254.065 s read
+ * 100 % from a sample at 251.995 s.
+ */
+export function burstHpPctAt(
+  unit: ICombatUnit,
+  atMs: number,
+  observedEndMs: number,
+  radiusMs: number,
+): number | null {
+  const sample = unitHpSampleAt(unit, Math.min(atMs, observedEndMs), radiusMs);
+  return sample && sample.sampleMs <= observedEndMs ? sample.pct : null;
+}
 
 export function burstWindowRateSpanSeconds(
   fromSeconds: number,

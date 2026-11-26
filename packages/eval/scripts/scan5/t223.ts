@@ -32,9 +32,11 @@
  * kinds out of the total: `unlisted` is a candidate only (self-damage of
  * other kinds shares the shape; read the names in the details).
  */
+import { HP_SAMPLE_RADIUS_MS } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   BURST_DAMAGE_RATIO_MAX,
   BURST_DAMAGE_RATIO_MIN,
+  burstHpPctAt,
   burstWindowRateSpanSeconds,
   reconstructEnemyCDTimeline,
 } from "@gladlog/analysis/src/utils/enemyCDs";
@@ -51,6 +53,7 @@ import { fmtS, type IRoundCtx, nameOf } from "./ctx";
 import { rateVerdict } from "./t91";
 
 export const CHECKS = [
+  "burstEndHpPastRoundEnd",
   "burstSumRedistribution",
   "redistributionTableComplete",
   "deferralTableComplete",
@@ -145,6 +148,34 @@ export function run(ctx: IRoundCtx): void {
     friends as never,
   );
   if (timeline.alignedBurstWindows.length === 0) return;
+
+  // T237 (codex 80-PIPE-234-B212 #1): a window whose last buff runs past
+  // the round's end prints its pressured unit's HP at the round's end, from
+  // a reading taken no later than it — not the 100 % of a reading after the
+  // deciding death (7686e97d r5: death 239.105 s at 8 %, the buff to
+  // 254.065 s). Counted: windows ending after the round's end with an end
+  // reading printed.
+  for (const w of timeline.alignedBurstWindows) {
+    const t = w.mostPressuredTarget;
+    if (!t || ctx.start + w.toSeconds * 1000 <= dmgEnd) continue;
+    const unit = friends.find((u: any) => u.name === t.unitName);
+    if (!unit) continue;
+    ctx.bump("burstEndHpPastRoundEnd");
+    const want = burstHpPctAt(
+      unit,
+      ctx.start + w.toSeconds * 1000,
+      dmgEnd,
+      HP_SAMPLE_RADIUS_MS,
+    );
+    if (t.endHpPct === want) continue;
+    ctx.violate(
+      "burstEndHpPastRoundEnd",
+      "end HP read past the round's end",
+      ctx.start + w.fromSeconds * 1000,
+      `${t.unitName}#${w.fromSeconds}`,
+      `${t.unitName} burst ${fmtS(w.fromSeconds)}–${fmtS(w.toSeconds)} (round ends ${fmtS(sliceEndS)}): printed end ${t.endHpPct ?? "none"}, at the round's end ${want ?? "none"}`,
+    );
+  }
 
   type Row = { t: number; amount: number; unit: string; absorb: boolean };
   const shared: Row[] = [];
