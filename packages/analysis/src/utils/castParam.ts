@@ -35,6 +35,9 @@ export type CastParamCaster = Partial<
 export function superchargedPointsAt(
   caster: CastParamCaster | undefined,
   castTs: number,
+  /** the finisher's own id: two finishers logged in one millisecond are
+   * told apart by it (codex 85-tk-L1-T273-1b #6) */
+  castId?: string,
 ): number {
   const spec = caster?.spec;
   const cfg =
@@ -54,7 +57,12 @@ export function superchargedPointsAt(
     rank,
   );
   let took = false;
-  for (const c of used) if (c.logLine.timestamp === castTs) took = true;
+  for (const c of used)
+    if (
+      c.logLine.timestamp === castTs &&
+      (castId === undefined || String(c.spellId) === castId)
+    )
+      took = true;
   if (!took) return 0;
   return (
     SUPERCHARGED_FINISHERS.pointsPerCharge +
@@ -134,6 +142,7 @@ export function castParamPartsAt(
     return null;
   }
   let castTs: number | null = null;
+  let castId: string | undefined;
   for (const c of caster.spellCastEvents ?? []) {
     if (c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (!cfg.castIds.includes(String(c.spellId))) continue;
@@ -141,8 +150,10 @@ export function castParamPartsAt(
     // the cast row can trail its aura by a ms or two (codex 62-POSTHOC-13e
     // #2: an Envenom cast 1 ms after its aura was rejected — 49 of 322
     // finisher applications in 20 files read a 0 s duration)
-    if (dt >= -CAST_PARAM_TRAIL_MS && dt <= CAST_PARAM_WINDOW_MS)
+    if (dt >= -CAST_PARAM_TRAIL_MS && dt <= CAST_PARAM_WINDOW_MS) {
       castTs = c.logLine.timestamp;
+      castId = String(c.spellId);
+    }
   }
   if (castTs === null) return null;
   for (const s of caster.advancedActions ?? []) {
@@ -154,7 +165,7 @@ export function castParamPartsAt(
       const n = Math.min(cp.current, cp.max);
       // a supercharged point counts on top of the points the bar held
       return n >= 1
-        ? { read: n, inferred: superchargedPointsAt(caster, castTs) }
+        ? { read: n, inferred: superchargedPointsAt(caster, castTs, castId) }
         : null;
     }
   }

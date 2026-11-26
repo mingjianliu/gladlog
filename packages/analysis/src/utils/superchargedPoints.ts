@@ -1,15 +1,17 @@
 /**
  * Supercharged combo points (Supercharger 470347), read off the presses —
  * the log has no aura for them: a charging press supercharges
- * `pointsPerCharge` points (one per rank of the talent), each damaging
- * finisher after it consumes one. A press while points are still in hand
- * adds to them (Preparation resets Adrenaline Rush). The one walk the
- * duration model (`superchargedPointsAt`, utils/castParam.ts) and the
- * cooldown ledger (`powerSpendTriggers`, data/talentScriptedCooldowns.ts)
- * both read (codex 85-tk-L1-T273-1 #3: the two had walks of their own, one
- * charge a press against one per rank — 1ce02e10 r6, Adrenaline Rush,
- * Dispatch, Between the Eyes: the press priced the second point, Restless
- * Blades did not).
+ * `pointsPerCharge` points, each damaging finisher after it consumes one.
+ * A press while points are still in hand adds to them (Preparation resets
+ * Adrenaline Rush). The one walk the duration model (`superchargedPointsAt`,
+ * utils/castParam.ts) and the cooldown ledger (`powerSpendTriggers`,
+ * data/talentScriptedCooldowns.ts) both read, over the ids of
+ * `SUPERCHARGED_FINISHERS`. They pass different counts, each on its own
+ * rows of the log: the duration model one point per rank (Between the
+ * Eyes' stacks run 2 + 2 × (points + 3) on the second finisher too), the
+ * ledger one a press (crediting the second finisher puts Sprint back
+ * before the server's "not yet recovered" refusals — codex
+ * 85-tk-L1-T273-1b #1).
  *
  * Returns the finisher rows that consumed a point.
  */

@@ -157,8 +157,8 @@ describe("T273: Supercharger — a consumed supercharged point counts as combo p
   });
 });
 
-describe("T273: one walk of the supercharged points for the press and the cooldown ledger", () => {
-  it("1ce02e10 r6: Adrenaline Rush, Dispatch, a 5-point Between the Eyes — 18 s, and the ledger counts the same 8 points", () => {
+describe("T273: the walk of the supercharged points (the cooldown ledger reads it with one point a press)", () => {
+  it("1ce02e10 r6: Adrenaline Rush, Dispatch, a 5-point Between the Eyes — 18 s on the second point of a rank-2 holder", () => {
     const u = unit(
       CombatUnitSpec.Rogue_Outlaw,
       [SUPERCHARGER(2), FORCED_INDUCTION],
@@ -261,6 +261,70 @@ describe("T273: Keep It Rolling adds 30 s to the enhancement of the roll it is p
     });
     // the marker is a plain 30 s aura
     expect(buffFullDurationForCaster(ROLL_THE_BONES, u, T0)).toBe(30);
+  });
+});
+
+describe("T273: review 1b, constructed shapes", () => {
+  const row = (id: string, ms: number, ev = LogEvent.SPELL_AURA_APPLIED) =>
+    makeAuraEvent(ev, id, T0 + ms, "r", "r");
+  it("#3: two rolls 0.8 s apart into the same enhancement, Keep It Rolling after — only the second is extended", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [],
+      [
+        [ROLL_THE_BONES, 0],
+        [ROLL_THE_BONES, 0.8],
+        [KEEP_IT_ROLLING, 2],
+      ],
+    );
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, T0)).toBe(30);
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, at(0.8))).toBe(60);
+  });
+
+  it("#3: Keep It Rolling logged after the replacing roll in its millisecond extends the new roll only", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [],
+      [
+        [ROLL_THE_BONES, 0],
+        [ROLL_THE_BONES, 10],
+        [KEEP_IT_ROLLING, 10],
+      ],
+    );
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, T0)).toBe(30);
+    expect(buffFullDurationForCaster(ONE_OF_A_KIND, u, at(10))).toBe(60);
+  });
+
+  it("#5: a roll with no enhancement row does not read the next roll's", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [],
+      [
+        [ROLL_THE_BONES, 0],
+        [ROLL_THE_BONES, 0.8],
+      ],
+    );
+    (u as { auraEvents: unknown[] }).auraEvents = [row(JACKPOT, 801)];
+    const [first, second] = u.spellCastEvents;
+    expect(pressDuration(u, first!, [u], u.spellCastEvents)).toBeUndefined();
+    expect(
+      pressDuration(u, second!, [u], u.spellCastEvents)?.durationSeconds,
+    ).toBe(30);
+  });
+
+  it("#6: a Dispatch and a Between the Eyes in one millisecond — the point goes to the one logged first", () => {
+    const u = unit(
+      CombatUnitSpec.Rogue_Outlaw,
+      [SUPERCHARGER(1), FORCED_INDUCTION],
+      [
+        [AR, 0],
+        [DISPATCH, 1, 7],
+        [BTE, 1, 7],
+      ],
+    );
+    expect(superchargedPointsAt(u, at(1), DISPATCH)).toBe(3);
+    expect(superchargedPointsAt(u, at(1), BTE)).toBe(0);
+    expect(buffFullDurationForCaster(BTE, u, at(1))).toBe(16);
   });
 });
 

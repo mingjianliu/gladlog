@@ -338,7 +338,7 @@ export interface IPowerSpendTrigger {
     addWith?: { talentId: string; pct: number };
   }>;
   /** Supercharged combo points (Supercharger 470347, T136): a press of
-   * `byCastIds` supercharges `points` combo points per rank of the talent; the holder's next
+   * `byCastIds` supercharges `points` combo points; the holder's next
    * finisher of `finisherIds` (a damaging one) consumes one and counts as
    * `extra` more points spent (+ `extraWith.extra` for a holder of that
    * talent). The log shows no aura of it: the press and the finisher rows
@@ -2072,13 +2072,7 @@ export function eventTriggersFor(
               ),
             })),
             ...(r.triggerPowerSpend
-              ? powerSpendTriggers(
-                  unit,
-                  r.triggerPowerSpend,
-                  holderSpec,
-                  holds,
-                  rankOf,
-                )
+              ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
               : []),
             ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
             ...(r.triggerOwnAuraStacksLost
@@ -2530,9 +2524,6 @@ export function powerSpendTriggers(
   p: IPowerSpendTrigger,
   holderSpec: string | undefined,
   holds?: (talentSpellId: string) => boolean,
-  /** the holder's purchased rank of a talent (a charging press
-   * supercharges one point per rank); absent → rank 1 for a holder */
-  rankOf?: (talentSpellId: string) => number,
 ): IEventTrigger[] {
   const units =
     (holderSpec !== undefined
@@ -2548,14 +2539,20 @@ export function powerSpendTriggers(
     ? sc.extra +
       (sc.extraWith && holds?.(sc.extraWith.talentId) ? sc.extraWith.extra : 0)
     : 0;
-  // the finishers that took a point: the one walk the duration model
-  // reads too (`superchargedFinisherRows`)
+  // the finishers that took a point: the walk the duration model reads
+  // (`superchargedFinisherRows`), on `points` a press whatever the rank.
+  // The duration model counts one per rank (Between the Eyes' own stacks
+  // show the second point); here the second point's credit is refused by
+  // the server's own rows (codex 85-tk-L1-T273-1b #1, 6bf9a4d0 r4: with it
+  // Sprint is back at 27.0 s and was refused "not yet recovered" at 29.9,
+  // 30.1, 30.5 and 30.8 s; without it, back at 31.2 s) — scan5 t136 counts
+  // both directions
   const scUsed = sc
     ? superchargedFinisherRows(
         unit.spellCastEvents,
         sc.byCastIds,
         sc.finisherIds,
-        sc.points * Math.max(1, rankOf?.(sc.talentId) ?? 1),
+        sc.points,
       )
     : undefined;
   for (const e of unit.spellCastEvents) {

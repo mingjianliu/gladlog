@@ -434,11 +434,9 @@ export function pressAuraCandidates(
   const at = release ?? cast.logLine.timestamp;
   // a press whose length another aura carries reads that aura only
   // (`PRESS_OUTCOME_AURAS`: a roll's enhancement, not its marker)
+  const outcome = PRESS_OUTCOME_AURAS[cast.spellId!];
   const auraIds = new Set(
-    PRESS_OUTCOME_AURAS[cast.spellId!] ?? [
-      cast.spellId!,
-      ...effectAurasOfCast(cast.spellId!),
-    ],
+    outcome ?? [cast.spellId!, ...effectAurasOfCast(cast.spellId!)],
   );
   if (onlyAuraIds)
     for (const id of [...auraIds]) if (!onlyAuraIds.has(id)) auraIds.delete(id);
@@ -459,10 +457,15 @@ export function pressAuraCandidates(
     row: ICombatUnit["auraEvents"][number];
   }> = [];
   for (const u of ordered) {
+    // (an outcome aura is the press's own on whichever unit: never a row
+    // at or past the next press — codex 85-tk-L1-T273-1b #5, a roll with no
+    // enhancement row read the next roll's)
     const end =
       u.id === cast.destUnitId
         ? Math.min(at + PRESS_TARGET_AURA_LEAD_MS, untilMs - 1)
-        : at + PRESS_AURA_LEAD_MS;
+        : outcome
+          ? Math.min(at + PRESS_AURA_LEAD_MS, untilMs - 1)
+          : at + PRESS_AURA_LEAD_MS;
     const rows = (u.auraEvents ?? []).filter(
       (a) =>
         (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||

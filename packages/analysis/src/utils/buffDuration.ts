@@ -461,20 +461,38 @@ function perEventExtensionSeconds(
   const fromMs = run?.fromMs ?? atMs;
   // …and it ends at the press that replaces it (`endsAtCastIds`: the next
   // roll), whatever the aura rows merge into — a re-roll into the same
-  // enhancement is one REMOVED → APPLIED pair, read as one run
-  const replacedAt =
+  // enhancement is one REMOVED → APPLIED pair, read as one run. The roll
+  // that gave this application is the one nearest its row; the one logged
+  // after it replaces it, at its own line (codex 85-tk-L1-T273-1b #3)
+  const replacers =
     "endsAtCastIds" in p && p.endsAtCastIds
-      ? (caster.spellCastEvents ?? []).find(
+      ? (caster.spellCastEvents ?? []).filter(
           (c) =>
             c.logLine.event === "SPELL_CAST_SUCCESS" &&
-            p.endsAtCastIds!.includes(c.spellId ?? "") &&
-            c.logLine.timestamp > fromMs + OWN_AURA_PAIR_MS,
-        )?.logLine.timestamp
+            p.endsAtCastIds!.includes(c.spellId ?? ""),
+        )
+      : [];
+  let own = -1;
+  replacers.forEach((c, k) => {
+    if (
+      own < 0 ||
+      Math.abs(c.logLine.timestamp - fromMs) <
+        Math.abs(replacers[own]!.logLine.timestamp - fromMs)
+    )
+      own = k;
+  });
+  const replacer =
+    own >= 0 &&
+    Math.abs(replacers[own]!.logLine.timestamp - fromMs) <= OWN_AURA_PAIR_MS
+      ? replacers[own + 1]
       : undefined;
-  const toMs = Math.min(
-    run?.toMs ?? Number.POSITIVE_INFINITY,
-    replacedAt ?? Number.POSITIVE_INFINITY,
-  );
+  const replaced =
+    replacer !== undefined &&
+    replacer.logLine.timestamp <= (run?.toMs ?? Number.POSITIVE_INFINITY);
+  const toMs = replaced
+    ? replacer.logLine.timestamp
+    : (run?.toMs ?? Number.POSITIVE_INFINITY);
+  const toLine = replaced ? replacer.logLine.lineIndex : run?.toLine;
   // a press in the APPLIED's own ms but logged before it is not inside the
   // run (codex B25 #2)
   const beforeRun = (c: IWalkRow) => {
@@ -491,7 +509,7 @@ function perEventExtensionSeconds(
     const t = c.logLine.timestamp;
     if (t !== toMs) return t > toMs;
     const line = c.logLine.lineIndex;
-    return run?.toLine !== undefined && line !== undefined && line > run.toLine;
+    return toLine !== undefined && line !== undefined && line > toLine;
   };
   // …and the casts the log wrote no SPELL_CAST_SUCCESS for
   // (`hiddenCastEffects`, T246), in time order with the presses

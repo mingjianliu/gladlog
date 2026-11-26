@@ -109,15 +109,19 @@ export const CAST_PARAM_DURATIONS: Record<string, ICastParamDuration> = {
  * rank 2 only and the + 2 without Forced Induction rests on the tooltip.
  * A charging press with points in hand adds to them; counted as replacing
  * them instead, the same presses fit (532 of 574 either way).
- * Open, left flagged (codex 85-tk-L1-T273-1 #4): the points are counted
- * from zero each round, and two presses read as if one had been carried
- * over from the round before — 2d4d9d9d r2 and d9ed7bd2 r2, Adrenaline
- * Rush, two finishers, then a Between the Eyes that ran 22 s. Carrying a
- * surviving rogue's unused points into the next round fits those two and
- * prices a third press 6 s long (e9306c04 r4): 533 of 574 against 532, on
- * no tooltip sentence — not modelled. Subtlety (Shadow Dance) and
- * Assassination (Kingsbane) are the same tooltip with no corpus split yet:
- * not listed. The cooldown ledger reads this table and the same walk
+ * Open, left flagged (codex 85-tk-L1-T273-1 #4, -1b #2): the points are
+ * counted from zero each round, and two presses read as if one had been
+ * carried over from the round before — Adrenaline Rush, two finishers,
+ * then a Between the Eyes at six points that ran 20.0 s (2d4d9d9d r2) and
+ * one at seven that ran 22.0 s (d9ed7bd2 r2). Carrying a surviving rogue's
+ * unused points into the next round fits those two and prices a third
+ * press 6 s long (e9306c04 r4, 14.0 s): 533 of 574 against 532. The
+ * reviewer's rule for the third — a talent change between the rounds
+ * clears the points — is an inference from that one press, on no tooltip
+ * sentence, and this reader sees one round's presses only: not modelled.
+ * Subtlety (Shadow Dance) and Assassination (Kingsbane) are the same
+ * tooltip with no corpus split yet: not listed. The cooldown ledger reads
+ * this table and the same walk with one point a press
  * (`superchargedFinisherRows`; Restless Blades, talentScriptedCooldowns.ts).
  */
 export const SUPERCHARGED_FINISHERS = {
