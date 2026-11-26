@@ -11,6 +11,7 @@ import { CombatUnitSpec } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { CUSTOM_TALENT_MODIFIERS } from "../scripts/datagen/customTalentModifiers";
+import manifest from "../src/data/datagen-manifest.json";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { isHasteScaledCooldown } from "../src/data/hasteScaledCooldowns";
 import raw from "../src/data/hasteScaledCooldownsGenerated.json";
@@ -52,10 +53,23 @@ describe("T267 — charges a spec passive recovers by haste (DB2 aura 457)", () 
     ).toBe(false);
   });
   it("a charge category no other row resolves is listed, not dropped silently", () => {
+    // Preservation's Reversion (category 2010): no other row of the
+    // inventory reaches it, so the table cannot name the spell — and says so
+    const { meta, bySpec } = raw as {
+      meta: { unresolvedChargeCategories: string[] };
+      bySpec: Record<string, string[]>;
+    };
+    expect(bySpec[String(CombatUnitSpec.Evoker_Preservation)]).not.toContain(
+      "366155",
+    );
+    expect(meta.unresolvedChargeCategories).toContain("2010(356810)");
+  });
+  it("the manifest counts the table's specs", () => {
     expect(
-      (raw as { meta: { unresolvedChargeCategories: string[] } }).meta
-        .unresolvedChargeCategories.length,
-    ).toBeGreaterThan(0);
+      (manifest as { artifacts: Record<string, { specs?: number }> }).artifacts[
+        "hasteScaledCooldownsGenerated.json"
+      ]!.specs,
+    ).toBe(Object.keys((raw as { bySpec: object }).bySpec).length);
   });
 });
 

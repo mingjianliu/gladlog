@@ -160,7 +160,7 @@
       "producer": "packages/eval/scripts/castEffectAuraScan.ts --emit"
     },
     "hasteScaledCooldownsGenerated.json": {
-      "specs": 7,
+      "specs": 15,
       "producer": "packages/eval/scripts/hasteScaledCooldownGen.ts (reads talentEffectInventoryGenerated.json; --check verifies)"
     },
     "ownShieldLinksGenerated.json": {
