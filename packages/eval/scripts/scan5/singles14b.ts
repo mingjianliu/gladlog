@@ -620,7 +620,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           // which row is the landing, and the cursor: the product's own
           // (`claimLandingRow`, T281)
           const claim = matched
-            ? claimLandingRow(rows, next, (r) => r.t, presses)
+            ? claimLandingRow(rows, next, (r) => r.t, t, presses)
             : undefined;
           const row = claim ? rows[claim.landing] : first;
           if (claim) next = claim.cursor;

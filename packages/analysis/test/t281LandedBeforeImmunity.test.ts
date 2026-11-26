@@ -225,11 +225,17 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       { atMs: 12_070, hit: true },
     ];
     const at = (r: { atMs: number }) => r.atMs;
-    expect(claimLandingRow(rows, 0, at, [10_900, 12_030])).toEqual({
+    expect(claimLandingRow(rows, 0, at, 10_900, [10_900, 12_030])).toEqual({
       landing: 0,
       cursor: 1,
     });
-    expect(claimLandingRow(rows, 0, at, [10_900])).toEqual({
+    expect(claimLandingRow(rows, 0, at, 10_900, [10_900])).toEqual({
+      landing: 1,
+      cursor: 2,
+    });
+    // the press's own success row logged between its refusal and its hit
+    // (b3dea9f6: Rake) is no later press — -5 #1
+    expect(claimLandingRow(rows, 0, at, 12_030, [12_030])).toEqual({
       landing: 1,
       cursor: 2,
     });
@@ -241,7 +247,9 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       { atMs: 12_050, hit: false, immune: true as const },
       { atMs: 12_180, hit: true },
     ];
-    expect(claimLandingRow(rows, 0, (r) => r.atMs, [12_000, 12_010])).toEqual({
+    expect(
+      claimLandingRow(rows, 0, (r) => r.atMs, 12_000, [12_000, 12_010]),
+    ).toEqual({
       landing: 0,
       cursor: 2,
     });
@@ -303,6 +311,13 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
     // Deep Breath's flight: a listed control immunity, for a control only
     expect(up("433874", "3355", "Freezing Trap")).toEqual(["433874"]);
     expect(up("433874", "78674", "Starsurge")).toEqual([]);
+    // …and for the control aura only: a control press's damage or slow
+    // lands under Precognition (58a92059 r4, ccada8e6 — -5 #2)
+    expect(up("377362", "88625", "Holy Word: Chastise")).toEqual([]);
+    expect(up("377362", "389823", "Snowdrift")).toEqual([]);
+    expect(up("377362", "389831", "Snowdrift")).toEqual(["377362"]);
+    // area damage lands through Vanish (-5 #3)
+    expect(up("11327", "81297", "Consecration")).toEqual([]);
     // Blessing of Freedom stops no stun
     expect(up("1044", "118905", "Static Charge")).toEqual([]);
     // Spellwarding stops no physical stun; Fortitude stops a stun

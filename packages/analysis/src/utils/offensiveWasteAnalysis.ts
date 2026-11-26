@@ -14,6 +14,7 @@ import {
 } from "../data/mitigationVerdicts";
 import { SPELL_CATEGORIES } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS } from "../data/spellIdLists";
 import { parryStopsAttack } from "../data/spellParry";
 import { immunityCoversSpell, immunityMechanics } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
@@ -716,26 +717,39 @@ export function landedBeforeWallRow(
  *    203337 — no table row);
  *  - an immunity that lasts its aura (`immunityLastsItsAura`: the pressed
  *    Spirit of Redemption form 215769) unless its school mask rules the
- *    spell out;
+ *    spell out — not the stealth-kind ones (Vanish, Burrow, Mass
+ *    Invisibility: area damage lands through them, rulings U-KA3 / U-KA3b);
  *  - DB2's mechanic immunity on the aura listing the spell's mechanic
  *    (`immunityMechanics`: Dispersion against a root, Icebound Fortitude
  *    against a stun);
- *  - for a control, a listed control immunity that covers it
- *    (`CC_AVOIDANCE_BUFF_SPELLS` with `avoidanceBuffCoversCc`: Deep Breath's
- *    flight). Movement out of a ground effect (Hover, Blessing of Freedom —
+ *  - for a row that is itself a control or root aura (`SPELL_CATEGORIES`
+ *    cc / roots, the mechanic leg too — not a control press's damage or
+ *    slow, which land under Precognition), a
+ *    listed control immunity that covers it (`CC_AVOIDANCE_BUFF_SPELLS` with
+ *    `avoidanceBuffCoversCc`: Deep Breath's flight); an aura with a DB2 mechanic list
+ *    (Precognition) answers by that list alone. Movement out of a ground effect (Hover, Blessing of Freedom —
  *    `applicableCCAvoidanceIds`' other half) refuses nothing on the target
  *    and is not asked (codex 85-tk-L6-T281-3 #4, #5, -4 #2, #3).
  */
 export function auraStopsSpell(auraId: string, spellId: string): boolean {
   const mech = ccMechanicOf(spellId);
+  // the row is itself a control or a root aura — not a control press's
+  // damage or slow, which carry a mechanic label too and land under
+  // Precognition (Snowdrift's slow 389823, mechanic 11: 58a92059 r4)
+  const kind = SPELL_CATEGORIES[spellId]?.type;
+  const control = kind === "cc" || kind === "roots";
   return (
     immunityStopsDamageSpell(auraId, spellId) ||
     immunityCoversSpell(auraId, spellId) === true ||
     (immunityLastsItsAura(auraId) &&
+      !ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(auraId) &&
       immunityStopsSpellSchool(auraId, spellId) !== false) ||
-    (mech !== undefined && !!immunityMechanics(auraId)?.includes(mech)) ||
-    ((isControlCast(spellId) || SPELL_CATEGORIES[spellId]?.type === "cc") &&
+    (control &&
+      mech !== undefined &&
+      !!immunityMechanics(auraId)?.includes(mech)) ||
+    (control &&
       CC_AVOIDANCE_BUFF_SPELLS.has(auraId) &&
+      immunityMechanics(auraId) === undefined &&
       avoidanceBuffCoversCc(auraId, spellId))
   );
 }
@@ -807,7 +821,7 @@ export function refusedByAnotherAura(
  * target in time order, `next` the first one this press can own.
  *  - a refusal with a hit beside it (`PRESS_LANDED_SAME_INSTANT_MS`) landed
  *    at the hit (Rake's stun 163505 IMMUNE, its damage 16 ms later), unless
- *    another press of the spell went off between the two — the hit is that
+ *    a later press of the spell went off between the two — the hit is that
  *    one's; both rows are consumed;
  *  - a hit takes the refusals of its own millisecond with it (a hit sorts
  *    before them).
@@ -820,6 +834,8 @@ export function claimLandingRow<
   rows: readonly R[],
   next: number,
   atOf: (row: R) => number,
+  /** this press, and every press of the spell on the target */
+  pressMs: number,
   pressTimesMs: readonly number[],
 ): { landing: number; cursor: number } {
   const row = rows[next]!;
@@ -830,7 +846,10 @@ export function claimLandingRow<
         k > next &&
         o.hit &&
         atOf(o) - at <= PRESS_LANDED_SAME_INSTANT_MS &&
-        !pressTimesMs.some((p) => p > at && p <= atOf(o)),
+        // a LATER press than this one: this press's own success row can be
+        // logged after its refusal (b3dea9f6: Rake's stun refused 12.606,
+        // its success and damage 12.622 — codex 85-tk-L6-T281-5 #1)
+        !pressTimesMs.some((p) => p > pressMs && p > at && p <= atOf(o)),
     );
     return beside >= 0
       ? { landing: beside, cursor: beside + 1 }
@@ -939,6 +958,13 @@ export function pressLandingRows<T extends LandingPress>(
   const taken = new Map<string, number>();
   const landed = new Map<T, IPressLanding>();
   const inOrder = [...presses].sort((a, b) => atMsOf(a) - atMsOf(b));
+  const pressTimesByKey = new Map<string, number[]>();
+  for (const o of inOrder) {
+    const k = `${o.destUnitId}|${spellNameKey(o.spellId, o.spellName)}`;
+    const list = pressTimesByKey.get(k);
+    if (list) list.push(atMsOf(o));
+    else pressTimesByKey.set(k, [atMsOf(o)]);
+  }
   for (const press of inOrder) {
     const atMs = atMsOf(press);
     const key = `${press.destUnitId}|${spellNameKey(press.spellId, press.spellName)}`;
@@ -947,14 +973,14 @@ export function pressLandingRows<T extends LandingPress>(
     while (next < rows.length && rows[next]!.atMs < atMs - PRESS_EFFECT_LEAD_MS)
       next++;
     const row = rows[next];
-    const pressTimes = inOrder
-      .filter(
-        (o) =>
-          `${o.destUnitId}|${spellNameKey(o.spellId, o.spellName)}` === key,
-      )
-      .map(atMsOf);
     if (row !== undefined && row.atMs <= atMs + REFLECT_ROW_LAG_MS) {
-      const claim = claimLandingRow(rows, next, (r) => r.atMs, pressTimes);
+      const claim = claimLandingRow(
+        rows,
+        next,
+        (r) => r.atMs,
+        atMs,
+        pressTimesByKey.get(key) ?? [],
+      );
       landed.set(press, rows[claim.landing]!);
       next = claim.cursor;
     } else landed.set(press, { atMs, spellId: null, hit: false });
