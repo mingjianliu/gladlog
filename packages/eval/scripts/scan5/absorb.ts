@@ -208,7 +208,7 @@ export function run(ctx: IRoundCtx): void {
     const hit = runsCache.get(u.id);
     if (hit) return hit;
     const out = new Map<string, IRun[]>();
-    const open = new Map<string, number>();
+    const open = new Map<string, any>();
     const seenLine = new Set<string>();
     const rows = ((u.auraEvents ?? []) as any[])
       .filter(
@@ -228,22 +228,33 @@ export function run(ctx: IRoundCtx): void {
     // (its own rows only: one logged before the application is the shield
     // before it, and a REFRESH logged after the last absorbed row in its
     // millisecond is still after it — codex 85-tk-L5-T243-1 #3)
-    const lastAbsorbIn = (id: string, fromMs: number, toMs: number): any =>
+    // …and logged after the run's own opening row: in its millisecond the
+    // source line decides (B221 review #2: the old shield's last absorb,
+    // its REMOVED and the new APPLIED in one ms closed the new shield at
+    // once). Rows without a line index in that ms count as inside.
+    const afterOpen = (r: any, openRow: any): boolean => {
+      if (tsOf(r) !== tsOf(openRow)) return tsOf(r) > tsOf(openRow);
+      const a = openRow.logLine?.lineIndex;
+      const b = r.logLine?.lineIndex;
+      return a === undefined || b === undefined || b > a;
+    };
+    const lastAbsorbIn = (id: string, openRow: any, toMs: number): any =>
       ((u.absorbsIn ?? []) as any[])
         .filter(
           (r) =>
             (ev(r) === undefined || ev(r) === ABSORBED) &&
             String(r.spellId) === id &&
             r.srcUnitId === u.id &&
-            tsOf(r) >= fromMs &&
+            afterOpen(r, openRow) &&
             tsOf(r) <= toMs,
         )
         .reduce(
           (last: any, r) => (!last || !rowBefore(r, last) ? r : last),
           undefined,
         );
-    const close = (id: string, fromMs: number, capMs: number, inf: boolean) => {
-      const eaten = inf ? lastAbsorbIn(id, fromMs, capMs) : undefined;
+    const close = (id: string, openRow: any, capMs: number, inf: boolean) => {
+      const fromMs = tsOf(openRow);
+      const eaten = inf ? lastAbsorbIn(id, openRow, capMs) : undefined;
       // …unless the run was refreshed after it: a new shield, still whole
       const refreshedAfter =
         !!eaten &&
@@ -291,19 +302,19 @@ export function run(ctx: IRoundCtx): void {
         close(
           id,
           from,
-          Math.min(tsOf(a), from + (durationS(id) + 1) * 1000),
+          Math.min(tsOf(a), tsOf(from) + (durationS(id) + 1) * 1000),
           true,
         );
-        open.set(id, tsOf(a));
+        open.set(id, a);
       } else if (e === APPLIED || (e === REFRESH && !open.has(id))) {
-        if (!open.has(id)) open.set(id, tsOf(a));
+        if (!open.has(id)) open.set(id, a);
       } else if (e === REMOVED && open.has(id)) {
         close(id, open.get(id)!, tsOf(a), false);
         open.delete(id);
       }
     }
     for (const [id, from] of open)
-      close(id, from, from + (durationS(id) + 1) * 1000, true);
+      close(id, from, tsOf(from) + (durationS(id) + 1) * 1000, true);
     runsCache.set(u.id, out);
     return out;
   };

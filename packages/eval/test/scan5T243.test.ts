@@ -142,6 +142,23 @@ describe("noPressButPressed (T243)", () => {
     ).toEqual(["refreshed"]);
   });
 
+  it("flags the press's line when the tag moved to it (B221 review #1)", () => {
+    // the Exhilaration copy's line untagged, the hunter's own press tagged:
+    // the untagged line's producer event is an application it logged no
+    // press for, not the press's own
+    const untaggedProc = proc.replace(" [no press logged]", "");
+    const taggedPress = pressed.replace(
+      " (at 38% HP)",
+      " [no press logged] (at 38% HP)",
+    );
+    expect(
+      of(
+        scan(runPressEffect, [owner, hunter], [untaggedProc, taggedPress]),
+        "noPressButPressed",
+      ),
+    ).toEqual(["refreshed"]);
+  });
+
   it("flags it when the press refreshed nothing, whatever else prints", () => {
     // one application, the press's own (codex 85-tk-L5-T243-1 #2)
     const single = {
@@ -559,5 +576,63 @@ describe("attemptNamedLaterPress (T243)", () => {
 
   it("flags the line when the press itself came a second later", () => {
     expect(scanMeta(undefined)).toBe(1);
+  });
+});
+
+describe("ownAbsorbDefenseless — one ms, source order (B221 review #2)", () => {
+  const ICE = "11426";
+  const owner = { id: "o", name: "Owner", pid: "1", reaction: 1 };
+  const window =
+    "  [KILL WINDOW] 0:30–0:40 on Frost Mage (Mage): team burst 400k (defenseless 0:30–0:40); team offensive CDs ready at 0:30: none.";
+  const line = <T extends { logLine?: any }>(r: T, li: number): T => {
+    (r as any).logLine = { ...(r as any).logLine, lineIndex: li };
+    return r;
+  };
+  // the old barrier absorbs, is removed and a fresh one applied, all at
+  // 10.000 s in that log order; nothing absorbs or removes after
+  const mage = (absorbLi: number) => ({
+    id: "m",
+    name: "Mage",
+    pid: "4",
+    reaction: 2,
+    spellCastEvents: [
+      cast(5_000, "m", ICE, "Ice Barrier"),
+      cast(10_000, "m", ICE, "Ice Barrier"),
+    ],
+    auraEvents: [
+      line(
+        aura(LogEvent.SPELL_AURA_APPLIED, 5_000, "m", ICE, "Ice Barrier"),
+        1,
+      ),
+      line(
+        aura(LogEvent.SPELL_AURA_REMOVED, 10_000, "m", ICE, "Ice Barrier"),
+        11,
+      ),
+      line(
+        aura(LogEvent.SPELL_AURA_APPLIED, 10_000, "m", ICE, "Ice Barrier"),
+        12,
+      ),
+    ],
+    absorbsIn: [
+      line(
+        rowOf(LogEvent.SPELL_ABSORBED, 10_000, {
+          srcUnitId: "m",
+          spellId: ICE,
+          spellName: "Ice Barrier",
+          absorbedAmount: 5_000,
+        }),
+        absorbLi,
+      ),
+    ],
+  });
+  it("the old shield's absorb before the new APPLIED does not close the new one", () => {
+    expect(
+      of(scan(runAbsorb, [owner, mage(10)], [window]), "ownAbsorbDefenseless"),
+    ).toEqual(["pressed"]);
+  });
+  it("an absorb logged after the new APPLIED is the new shield's", () => {
+    expect(
+      of(scan(runAbsorb, [owner, mage(13)], [window]), "ownAbsorbDefenseless"),
+    ).toEqual([]);
   });
 });

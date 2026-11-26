@@ -174,9 +174,9 @@ export function run(ctx: IRoundCtx): void {
       // Frenzied Regeneration), and both lines are true (T243). With no
       // REFRESH the application is the press's own and the tag is wrong
       // whatever else prints (codex 85-tk-L5-T243-1 #2). That other line
-      // must be the press's own: when the producer's event of it is a
-      // proc's (`procOwned`, T259), the press's line is the tagged one and
-      // is flagged (scan5PressEffect B192 review 9, the tags swapped).
+      // must be the press's own (below): with the tags swapped the press's
+      // line is the tagged one and is flagged (scan5PressEffect B192
+      // review 9).
       const pressSec = Math.floor((tsOf(press) - ctx.start) / 1000);
       const eventsOfSec = (s: number) =>
         enemyDefEventsOf(ctx, unit).filter(
@@ -196,12 +196,18 @@ export function run(ctx: IRoundCtx): void {
             o.includes("[no press logged]")
           )
             return false;
+          // the producer's event of that line must be the press's own: one
+          // it matched (an unmatched line proves nothing), no proc's, and
+          // not an application it logged no press for (B221 review #1: an
+          // Exhilaration copy carries noPressLogged without procOwned, and
+          // with the tag moved to the press it passed as the press's line)
           const oLines = linesOfKey.get(keyOf(om)) ?? [];
-          return !ownEventOfLine(
+          const oEv = ownEventOfLine(
             oLines.indexOf(j),
             oLines.length,
             eventsOfSec(pressSec),
-          )?.procOwned;
+          );
+          return !!oEv && !oEv.procOwned && !oEv.noPressLogged;
         })
       )
         continue;
