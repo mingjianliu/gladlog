@@ -14,8 +14,13 @@
  * `readyAtMs` is when the trinket is back if the log says so — the matching
  * 336139 REMOVED for Adaptation, read from the log interval rather than a
  * constant (Game-Behaviour Rule: no DB2-checked constant yet); a lockout
- * still up at the round's end reads `Infinity`. Absent = the caller's
- * cooldown constant applies (the Medallion).
+ * still up at the round's end reads `Infinity`, and one REMOVED by its
+ * holder's death (`removedInDeathTeardown`) before its DB2 length reads to
+ * that length — the wipe is no return of the trinket (pipeline T278, 12.1.5
+ * audit 15-fc0bed09 r0: 336139 up 3:00.37, REMOVED 3:24.843, UNIT_DIED 2 ms
+ * later; "23s left" at 3:02 where ~58 s were, "PvP Trinket available" on
+ * the [DEATH] line). Absent = the caller's cooldown constant applies (the
+ * Medallion).
  *
  * Consumers: `ccTrinketAnalysis` (the [TRINKET] / [ENEMY TRINKET] lines and
  * every `pvpTrinketRemainingSecondsAt` reader), kill-attempt / kill-window
@@ -24,7 +29,9 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { spellEffectData } from "../data/spellEffectData";
 import { unitMemo } from "./combatMemo";
+import { deathTeardownWindowsMs, removedInDeathTeardown } from "./unitDeath";
 
 /** Gladiator's Medallion (active break-CC). */
 export const MEDALLION_SPELL_ID = "336126";
@@ -106,7 +113,22 @@ export function pvpTrinketUsesUncached(unit: ICombatUnit): IPvpTrinketUse[] {
           x.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
           x.logLine.timestamp >= lockOn.logLine.timestamp,
       );
-      readyAtMs = off ? off.logLine.timestamp : Number.POSITIVE_INFINITY;
+      // the lockout's own length: DB2 SpellMisc 336139 DurationIndex 858 =
+      // 60 s, no PvP index; every lockout that ran out in the audit ran 60.0
+      const lenS = spellEffectData[ADAPTATION_LOCKOUT_AURA_ID]?.durationSeconds;
+      const fullEndMs =
+        lenS !== undefined ? lockOn.logLine.timestamp + lenS * 1000 : undefined;
+      readyAtMs = !off
+        ? Number.POSITIVE_INFINITY
+        : fullEndMs !== undefined &&
+            off.logLine.timestamp < fullEndMs &&
+            removedInDeathTeardown(
+              deathTeardownWindowsMs(unit),
+              off.logLine.timestamp,
+              fullEndMs,
+            )
+          ? fullEndMs
+          : off.logLine.timestamp;
     }
     out.push({
       atMs: t,
