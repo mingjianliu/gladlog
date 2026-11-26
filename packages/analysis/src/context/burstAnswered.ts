@@ -109,7 +109,7 @@ export const BURST_ANSWERED_CONTROL_RULE_LEGEND =
  * "only such roots are listed" clause GH #24 had to add to `[ROOT]`). */
 export const BURST_ANSWERED_LEGEND = [
   `  ${BURST_ANSWERED_TAG} = an enemy burst window the team DID answer inside ${BURST_RESPONSE_WINDOW_SEC}s — context, not a mistake.`,
-  `    At most ${BURST_ANSWERED_CAP} of them are listed per round (the most dangerous first), so this is NOT a full list of answered bursts.`,
+  `    At most ${BURST_ANSWERED_CAP} of them are listed per round (the most dangerous first; a window whose only answer is another teammate's team-wide healing cooldown takes a place the others leave), so this is NOT a full list of answered bursts.`,
   BURST_ANSWERED_CONTROL_RULE_LEGEND,
   // WO6 #2 (n48): an extra names its own caster when another enemy pressed it
   "    `enemy opened X (+Y; Z by <enemy> Ns later) (<opener>)` = the other cooldowns inside the window: Y is the opener's own, Z was",

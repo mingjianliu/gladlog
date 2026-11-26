@@ -41,6 +41,7 @@ import {
   burstWindowDecisionPoints,
   pressDidNotReachPressured,
   pressWentElsewhere,
+  TEAM_HEAL_WALL_ANSWER_IDS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { burstWindowLongEnoughToJudge } from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import {
@@ -110,7 +111,13 @@ function refusal(pr: any, r: any): string {
   if (r.afterPressuredDeath) return "pressed after the unit died";
   if (r.category === "control") return "control off before the opener";
 
-  if (r.category === "wall" && r.casterId !== pr.unitId)
+  // a teammate's team-heal wall is no "own wall" since ruling R110: the
+  // credit line can name it, so its refusal is one of the readings below
+  if (
+    r.category === "wall" &&
+    r.casterId !== pr.unitId &&
+    !TEAM_HEAL_WALL_ANSWER_IDS.has(r.spellId)
+  )
     return "another unit's own wall";
   if (
     r.effectEndSec !== undefined &&
@@ -169,7 +176,7 @@ export function run(ctx: IRoundCtx): void {
         ctx.bump("selfOnlyRowsHealCd");
         ctx.violate(
           "selfOnlyRowsHealCd",
-          `${kindId(r.spellId)} | ${SELF_ONLY_ROWS_STATES[pressDidNotReachPressured(pr, r) ? 0 : others.length > 0 || p.responses.kite || p.responses.attackerMoved ? 1 : 2]}`,
+          `${kindId(r.spellId)} | ${SELF_ONLY_ROWS_STATES[pressDidNotReachPressured(pr, r) ? 0 : others.length > 0 || teamHealWallCredit(p) !== undefined || p.responses.kite || p.responses.attackerMoved ? 1 : 2]}`,
           at,
           fact,
           `window at ${p.tSec}s: ${r.casterName} ${name} ${r.latencySec}s; responded=${p.responded}`,

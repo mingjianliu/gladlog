@@ -30,6 +30,10 @@ import {
   teamHealWallCredit,
 } from "@gladlog/analysis/src/context/burstAnswered";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
+import {
+  isPastRoundEnd,
+  roundEndMs,
+} from "@gladlog/analysis/src/utils/roundEnd";
 
 import type { IRoundCtx } from "./ctx";
 import { readPrintedAnswer } from "./t184";
@@ -57,14 +61,17 @@ export function run(ctx: IRoundCtx): void {
     return;
   }
   // the renderer's own lines, read back by the reader the gates use; a
-  // window that opens after the round's end is never emitted
-  const endSec = (ctx.end - ctx.start) / 1000;
+  // window that opens after the round's end — a Solo Shuffle round's
+  // deciding death, else the log's end — is never emitted (the timeline's
+  // own `addEntry` cut: `isPastRoundEnd` over `roundEndMs`)
+  const endSec = (roundEndMs(ctx.legacy) - ctx.start) / 1000;
+  const pastEnd = (sec: number): boolean => isPastRoundEnd(sec, endSec);
   // roster-label-shaped names, so the reader takes a control's target
   // clause as one (the capture's lines carry `5(RPaladin)` labels)
   const label = (n: string): string => `${ctx.pidOf(n) ?? "0"}(x)`;
   const labels = { friendly: label, enemy: label };
   const rendered = formatBurstAnsweredLines(points, undefined, labels)
-    .filter((e) => e.atSeconds <= endSec)
+    .filter((e) => !pastEnd(e.atSeconds))
     .map((e) => ({
       atSec: e.atSeconds,
       answer: readPrintedAnswer(`${fmtTime(e.atSeconds)}  ${e.line}`),
@@ -127,7 +134,7 @@ export function run(ctx: IRoundCtx): void {
     // cap of every window would print
     if (rendered.some((r) => r.atSec === p.tSec)) continue;
     if (
-      p.tSec > endSec ||
+      pastEnd(p.tSec) ||
       !formatBurstAnsweredLines(points, { cap: points.length }, labels).some(
         (e) => e.atSeconds === p.tSec,
       )
