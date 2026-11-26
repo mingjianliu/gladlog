@@ -626,7 +626,7 @@ type LandingPress = {
   destUnitId: string;
   /** the press's own row: a press with no row of its own on the target
    * lands at it, in log order (`landedAfterWallRow`) */
-  logLine?: { lineIndex?: number };
+  logLine?: { lineIndex?: number; timestamp?: number };
 };
 
 /**
@@ -918,10 +918,13 @@ export function claimLandingRow<
         k > next &&
         o.hit &&
         atOf(o) - at <= PRESS_LANDED_SAME_INSTANT_MS &&
-        // a LATER press than this one: this press's own success row can be
-        // logged after its refusal (b3dea9f6: Rake's stun refused 12.606,
-        // its success and damage 12.622 — codex 85-tk-L6-T281-5 #1)
-        !pressTimesMs.some((p) => p > pressMs && p > at && p <= atOf(o)),
+        // …and no LATER press than this one went off by the hit: its own
+        // projectile can be the hit (two Throw Glaives 440 ms apart, the
+        // first dodged 20 ms before the second hit — codex 85-tk-L6-T281-11
+        // #1). This press's own success row can be logged after its refusal
+        // and is no later press (b3dea9f6: Rake's stun refused 12.606, its
+        // success and damage 12.622 — -5 #1).
+        !pressTimesMs.some((p) => p > pressMs && p <= atOf(o)),
     );
     return beside >= 0
       ? { landing: beside, cursor: beside + 1 }
@@ -1104,7 +1107,10 @@ export function pressLandingRows<T extends LandingPress>(
       // no row of its own: it lands at its press, in the log's order (an
       // Incinerate cast logged two rows below Divine Protection's REMOVED,
       // its bolt 1.6 s later: 429a3735 r0, codex 85-tk-L6-T281-10 #2)
-      const lineIndex = press.logLine?.lineIndex;
+      // …when the press is that row: an empowered spell goes off at its
+      // release, not at the hold's first row (codex 85-tk-L6-T281-11 #2)
+      const lineIndex =
+        press.logLine?.timestamp === atMs ? press.logLine.lineIndex : undefined;
       landed.set(press, {
         atMs,
         spellId: null,

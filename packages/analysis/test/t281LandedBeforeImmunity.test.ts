@@ -243,6 +243,16 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       cursor: 2,
     });
   });
+  it("the cursor: a later press already in flight owns the hit beside an earlier press's miss", () => {
+    // Throw Glaives at 17.400 and 17.840; dodge 18.050, hit 18.070 — -11 #1
+    const rows = [
+      { atMs: 18_050, hit: false },
+      { atMs: 18_070, hit: true },
+    ];
+    expect(
+      claimLandingRow(rows, 0, (r) => r.atMs, 17_400, [17_400, 17_840]),
+    ).toEqual({ landing: 0, cursor: 1 });
+  });
   it("the cursor: an aura row with a hit beside it landed at the hit", () => {
     // Wildfire Bomb's aura refreshed 12 ms before its hit — -10 #1
     const rows = [
@@ -422,8 +432,11 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
       } as never,
       [],
     );
-    expect(got.get(press)).toMatchObject({ atMs: 12_066, hit: true });
-    expect(got.get(second)).toMatchObject({ atMs: 12_001, hit: false });
+    // the second press went off before the hit, so the hit may be its own
+    // (-11 #1): the first lands at its refusal, the second at the hit, and
+    // no row is taken twice
+    expect(got.get(press)).toMatchObject({ atMs: 12_050, hit: false });
+    expect(got.get(second)).toMatchObject({ atMs: 12_066, hit: true });
   });
   it("a stack its own tick added is no landing; a row below the wall's closing row came after it", () => {
     const DOSE = LogEvent.SPELL_AURA_APPLIED_DOSE;

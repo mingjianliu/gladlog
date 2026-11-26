@@ -535,7 +535,9 @@ function checkIntoDefense(ctx: IRoundCtx): void {
               pressImpactRow(c, successesOf(caster)) === undefined,
           )
           .sort((a: any, b: any) => tsOf(a) - tsOf(b));
-        const presses = rowsOfSpell
+        // each press with its own row in the log, when it is that row (an
+        // empowered spell goes off at its release)
+        const pressRows: { t: number; line?: number }[] = rowsOfSpell
           .filter(
             (c: any, i: number) =>
               !rowsOfSpell.some(
@@ -558,15 +560,16 @@ function checkIntoDefense(ctx: IRoundCtx): void {
                 spellNameKey(h.spellId, h.spellName) === key &&
                 Math.abs(h.startMs - t) <= EMPOWER_HOLD_ROW_MS,
             );
-            if (hold) return hold.interrupted ? [] : [hold.endMs];
+            if (hold) return hold.interrupted ? [] : [{ t: hold.endMs }];
             return ((caster.empowerStarts ?? []) as any[]).some(
               (st) =>
                 spellNameKey(st.spellId, st.spellName) === key &&
                 Math.abs(tsOf(st) - t) <= EMPOWER_HOLD_ROW_MS,
             )
               ? []
-              : [t];
+              : [{ t, line: c.logLine?.lineIndex as number | undefined }];
           });
+        const presses = pressRows.map((p) => p.t);
         // one row per hit: a hit eaten whole writes SPELL_MISSED and
         // SPELL_ABSORBED; a DoT or a channel lands as its aura going on, and
         // its later ticks, eaten or not, are nobody's press
@@ -638,15 +641,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
         const wallAuraId = iv.key.split("|")[0]!;
         let next = 0;
         let inside = 0;
-        // each press's own row in the log (a press with no row on the
-        // target lands at it)
-        const pressLineAt = new Map<number, number | undefined>(
-          rowsOfSpell.map((c: any) => [
-            tsOf(c) as number,
-            c.logLine?.lineIndex as number | undefined,
-          ]),
-        );
-        for (const t of presses) {
+        for (const { t, line: pressLine } of pressRows) {
           while (next < rows.length && rows[next]!.t < t - 50) next++;
           const first = rows[next];
           const matched = first !== undefined && first.t <= t + 1500;
@@ -662,7 +657,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           // own row (the product's fallback, T281)
           const landing = matched
             ? { atMs: row!.t, lineIndex: row!.lineIndex }
-            : { atMs: t, lineIndex: pressLineAt.get(t) };
+            : { atMs: t, lineIndex: pressLine };
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
           // a hit through a wall that stops every hit went through it, it
