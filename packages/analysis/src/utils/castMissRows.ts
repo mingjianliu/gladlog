@@ -461,19 +461,25 @@ export const PRESS_LANDED_SAME_INSTANT_MS = CAST_MISS_LEAD_MS;
  * damage or heal row of the refused row's OWN id, on `destUnitId`, from the
  * cast's own millisecond on, logged before the refusal's instant
  * (`PRESS_LANDED_SAME_INSTANT_MS`), inside the cast's window
- * (`missBelongsToCast`)? Then the immunity went up between the two: the
- * press landed, and the row is a later pulse refused. Merithra's Blessing
- * 1256581 healed its target at 1:33.125, Cyclone landed there at 1:33.189,
- * the next 1256581 pulse logged IMMUNE at 1:33.880, and the line read
- * `[IMMUNE — Cyclone was up]`.
+ * (`missBelongsToCast`)? Then the press landed there, at least in part, and
+ * the row is a later pulse of it refused — not the press refused.
+ * Merithra's Blessing 1256581 healed its target at 1:33.125, Cyclone landed
+ * there at 1:33.189, the next 1256581 pulse logged IMMUNE at 1:33.880, and
+ * the line read `[IMMUNE — Cyclone was up]`. It does not say when the
+ * immunity began: the first pulses can be logged just after the control's
+ * own row (2c8867a8 r4: Cyclone +132 ms, two heals +172 ms, the refusals
+ * from +536 ms; 11 of 26 such rows on the 285 12.1.5 files).
  *
- * Narrow on purpose (codex 85-tk-L6-T281-1):
+ * Narrow on purpose (codex 85-tk-L6-T281-1 / -2):
  *  - the same id, not the press's family: Eviscerate's Shadow part 328082
  *    hit under a Blessing of Protection that was already up and its physical
  *    196819 was refused 139 ms later — one press, two components, one
  *    refused; Judgment's damage 20271 lands and its debuff 197277 is refused;
  *  - no lead before the cast: a row before the cast row is the previous
  *    press's (a Throw Glaive in flight hit 81 ms before the next cast);
+ *  - no row an earlier press of the spell can own (its `CAST_MISS_WINDOW_MS`
+ *    still open at the row): the same glaive landing just after the next
+ *    cast (bf679e40: casts 440 ms apart);
  *  - no SPELL_ABSORBED row and no periodic row: an absorbed tick writes a
  *    SPELL_ABSORBED the log does not mark periodic (Deep Breath).
  */
@@ -493,7 +499,12 @@ export function refusedComponentLandedBefore(
       !r.logLine.event?.startsWith("SPELL_PERIODIC_") &&
       r.logLine.timestamp >= castMs &&
       r.logLine.timestamp < refusedAtMs - PRESS_LANDED_SAME_INSTANT_MS &&
-      missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp),
+      missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp) &&
+      // …and no earlier press of the spell can own it: a projectile of the
+      // press before, still in flight when this cast went off
+      !sameSpellCastMs.some(
+        (t) => t < castMs - 5 && r.logLine.timestamp - t <= CAST_MISS_WINDOW_MS,
+      ),
   );
 }
 

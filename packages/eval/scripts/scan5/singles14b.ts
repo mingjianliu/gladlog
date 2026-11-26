@@ -69,7 +69,6 @@ import {
   isCdGatedPurger,
   PURGE_SPELLS_BY_SPEC,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
-import { wallStopsEveryHit } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -78,6 +77,7 @@ import {
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import {
   EMPOWER_HOLD_ROW_MS,
+  aurasRefusingSpellAt,
   landedBeforeWallRow,
   landedThroughWall,
   pressLandingCaster,
@@ -475,21 +475,6 @@ function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
   return runs;
 }
 
-/** The auras on `target` that stop every hit (`wallStopsEveryHit`), up at
- * `atMs` by the target's own aura rows — the gate's reading of the product's
- * `fullStopAurasUpAt` (T281). */
-function fullStopAurasUpAt(target: any, atMs: number): string[] {
-  const up = new Set<string>();
-  for (const a of (target.auraEvents ?? []) as any[]) {
-    if (tsOf(a) > atMs) break;
-    if (a.destUnitId !== target.id || !a.spellId) continue;
-    if (!wallStopsEveryHit(String(a.spellId))) continue;
-    if (ev(a) === APPLIED || ev(a) === REFRESH) up.add(String(a.spellId));
-    else if (ev(a) === REMOVED) up.delete(String(a.spellId));
-  }
-  return [...up];
-}
-
 function checkIntoDefense(ctx: IRoundCtx): void {
   // the section reads the round's own casts: the ones after its ending death
   // are in the log's tail
@@ -590,6 +575,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
           hit: boolean;
           lineIndex?: number;
           immune?: true;
+          spellId?: string;
         }[] = [
           ...((caster.damageOut ?? []) as any[])
             .filter(
@@ -608,6 +594,7 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             t: tsOf(d) as number,
             hit: d.missType === "ABSORB",
             lineIndex: d.logLine?.lineIndex as number | undefined,
+            spellId: d.spellId ? String(d.spellId) : undefined,
             ...(d.missType === "IMMUNE" ? { immune: true as const } : {}),
           })),
           ...((target.auraEvents ?? []) as any[])
@@ -628,22 +615,32 @@ function checkIntoDefense(ctx: IRoundCtx): void {
         let inside = 0;
         for (const t of presses) {
           while (next < rows.length && rows[next]!.t < t - 50) next++;
-          const row = rows[next];
-          const matched = row !== undefined && row.t <= t + 1500;
-          const at = matched ? row.t : t;
+          const first = rows[next];
+          const matched = first !== undefined && first.t <= t + 1500;
           if (matched) next++;
+          // a refused component beside a hit of the press: the hit row is
+          // where the press landed (the product's `pressLandingRows`, T281)
+          const row =
+            matched && first.immune
+              ? (rows.find(
+                  (o) =>
+                    o.hit &&
+                    Math.abs(o.t - first.t) <= PRESS_LANDED_SAME_INSTANT_MS,
+                ) ?? first)
+              : first;
+          const at = matched ? row!.t : t;
           // reflected: it went back at the caster and landed on nobody here
           if (reflected.some((r) => r >= t && r <= t + 1500)) continue;
           // a hit through a wall that stops every hit went through it, it
           // was not pressed into it (fact11 D21, `landedThroughWall`)
-          if (matched && landedThroughWall(wallAuraId, row)) continue;
+          if (matched && landedThroughWall(wallAuraId, row!)) continue;
           // T281, the product's two readings: a row logged before the
-          // wall's APPLIED row in one millisecond, and an IMMUNE under a
-          // damage-reduction wall
+          // wall's APPLIED row in one millisecond, and a press another aura
+          // refused under the wall
           if (
             matched &&
             landedBeforeWallRow(
-              { atMs: row.t, lineIndex: row.lineIndex },
+              { atMs: row!.t, lineIndex: row!.lineIndex },
               fromMs,
               iv.fromLine,
             )
@@ -651,19 +648,19 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             continue;
           if (
             matched &&
+            row!.immune &&
             refusedByAnotherAura(
               wallAuraId,
-              // refused outright: no hit of the press beside the IMMUNE row
-              row.immune &&
-                rows.some(
-                  (o) =>
-                    o.hit &&
-                    Math.abs(o.t - row.t) <= PRESS_LANDED_SAME_INSTANT_MS,
-                )
-                ? {}
-                : row,
-              fullStopAurasUpAt(target, row.t),
-              damageImmuneControlUpAt(target, row.t, (id, src) =>
+              row!,
+              aurasRefusingSpellAt(
+                target,
+                ctx.units,
+                row!.spellId ?? String(rowsOfSpell[0]?.spellId ?? ""),
+                spell,
+                row!.t,
+                row!.lineIndex,
+              ),
+              damageImmuneControlUpAt(target, row!.t, (id, src) =>
                 ccFullDurationForCaster(
                   id,
                   ctx.players.find((p: any) => p.id === src),

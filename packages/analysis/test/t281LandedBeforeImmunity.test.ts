@@ -13,6 +13,7 @@ import {
   refusedComponentLandedBefore,
 } from "../src/utils/castMissRows";
 import {
+  aurasRefusingSpellAt,
   landedBeforeWallRow,
   pressLandingRows,
   refusedByAnotherAura,
@@ -70,6 +71,13 @@ describe("T281 — the refused component had landed there before", () => {
     );
     expect(before([row(93_880 - PRESS_LANDED_SAME_INSTANT_MS)])).toBe(false);
     expect(before([row(93_125)], 93_500, [92_744, 93_500])).toBe(false);
+  });
+  it("a row an earlier press of the spell can still own is not this press's", () => {
+    // bf679e40: two Throw Glaives 440 ms apart, the first one's hit landing
+    // 100 ms after the second cast — codex 85-tk-L6-T281-2 #1
+    expect(before([row(93_125)], 92_744, [92_300, 92_744])).toBe(false);
+    // an earlier press whose window closed before the row owns nothing
+    expect(before([row(93_125)], 92_744, [90_000, 92_744])).toBe(true);
   });
   it("the same-instant reading is unchanged: only the refusal's own instant", () => {
     const landed = (ms: number) =>
@@ -163,6 +171,53 @@ describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
       refusedByAnotherAura(ICE_BLOCK, { immune: true }, [ICE_BLOCK], false),
     ).toBe(false);
   });
+  it("the wall among the refusing auras keeps the cast whatever else is up", () => {
+    // Blessing of Protection beside Dispersion, a root: only Dispersion
+    // stops it, and were both listed the wall still refuses it itself
+    expect(
+      refusedByAnotherAura(
+        DISPERSION,
+        { immune: true },
+        [DISPERSION, "1022"],
+        false,
+      ),
+    ).toBe(false);
+  });
+  it("DB2 and the tables: Ice Block stops a Starsurge, Blessing of Protection no root, Dispersion a root", () => {
+    const up = (auraId: string, spellId: string, name: string) =>
+      aurasRefusingSpellAt(
+        {
+          auraEvents: [
+            {
+              spellId: auraId,
+              spellName: "",
+              srcUnitId: "T",
+              srcUnitName: "T",
+              destUnitId: "T",
+              destUnitName: "T",
+              auraType: "BUFF",
+              timestamp: 1_000,
+              logLine: {
+                event: LogEvent.SPELL_AURA_APPLIED,
+                timestamp: 1_000,
+                lineIndex: 1,
+              },
+            },
+          ],
+        } as never,
+        [],
+        spellId,
+        name,
+        2_000,
+        undefined,
+      );
+    expect(up(ICE_BLOCK, "78674", "Starsurge")).toEqual([ICE_BLOCK]);
+    expect(up("1022", "339", "Entangling Roots")).toEqual([]);
+    expect(up(DISPERSION, "339", "Entangling Roots")).toEqual([DISPERSION]);
+    expect(up(IRONBARK, "78674", "Starsurge")).toEqual([]);
+    // Time Stop: no table row, DB2's all-school immunity on the aura
+    expect(up("378441", "1329", "Mutilate")).toEqual(["378441"]);
+  });
 });
 
 describe("T281 — a refused component beside a hit is no outright refusal", () => {
@@ -201,7 +256,8 @@ describe("T281 — a refused component beside a hit is no outright refusal", () 
       } as never,
       [],
     ).get(press)!;
-  it("the stun's IMMUNE with the damage 16 ms later: the press landed", () => {
+  it("the stun's IMMUNE with the damage 16 ms later: the press landed, at the damage row", () => {
+    expect(landing(12_066)).toMatchObject({ atMs: 12_066, hit: true });
     expect(landing(12_066).immune).toBeUndefined();
   });
   it("the IMMUNE alone, or with a hit a second later: refused outright", () => {

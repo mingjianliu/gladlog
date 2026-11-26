@@ -110,6 +110,8 @@ export function run(ctx: IRoundCtx): void {
         const other = landed.find(
           (r) =>
             r.destUnitId === m.destUnitId &&
+            // another id: an absorbed row is the attack's
+            String(r.attackSpellId ?? r.spellId) !== String(m.spellId) &&
             !String(ev(r) ?? "").startsWith("SPELL_PERIODIC_") &&
             tsOf(r) >= t &&
             tsOf(r) < tsOf(m) - PRESS_LANDED_SAME_INSTANT_MS &&
