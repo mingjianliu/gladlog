@@ -333,6 +333,13 @@ describe("Impish Instincts — weapon-class hits of any school (pipeline T266)",
     expect(hostileTakenTriggers(unit, r).map((g) => g.atMs - T0)).toEqual([
       9_000,
     ]);
+    // a school-only trigger reads it too (a Holy mask)
+    expect(
+      hostileTakenTriggers(unit, {
+        seconds: 3,
+        triggerHostileTaken: { internalCooldownMs: 5000, damageSchoolMask: 2 },
+      }).map((g) => g.atMs - T0),
+    ).toEqual([9_000]);
   });
   it("the class alone (no school mask) drops the Physical magic-class hit", () => {
     const unit: any = {

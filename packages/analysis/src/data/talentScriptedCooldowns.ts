@@ -933,9 +933,12 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // the lockout's phase decides them). Tried and rejected (review round,
   // 2026-11-26): "a hit while Teleport is off cooldown neither procs nor
   // takes the lockout" explains all three (0 + 0), but it makes the model
-  // early — of the "Not yet recovered" Teleport refusals inside the
-  // unreduced 30 s, the model calls ready 14 + 13 with this entry and
-  // 14 + 28 with that rule. Suppress Target Procs spells are left out (see
+  // early: the game refused Teleport as "not ready" where that model
+  // calls it ready — episodes (a unit's refusals between two presses, no
+  // cast of its own in the 1.6 s before, no interrupt lockout, past the
+  // model's exact ready instant) 1 + 0 with this entry, 1 + 2 with that
+  // rule (b0c45be2: pressed 107.9 s, refused 132.5–134.6 s, back at
+  // 135.5 s; ef085806: pressed 68.1 s, refused 88.1 s). Suppress Target Procs spells are left out (see
   // `hostileTakenTriggers`). The Physical-school leg (the parent's reading)
   // also admits a class-1 attack DB2's mask does not (Flurry Strikes
   // 450617, codex -1 #3); weapon class alone is 1 + 3, so it stays.
@@ -2164,14 +2167,10 @@ export function hostileTakenTriggers(
     if (!damageOnly) return true;
     // a hit whose spell carries DB2's "Suppress Target Procs"
     // (SpellMisc.Attributes_3 bit 17: Divine Storm 224239) procs nothing on
-    // the unit it hits — pipeline T266, codex 85-tk-L6-T266-1 #2. It moved
-    // no count of the scan (Teleport model-impossible 1 | 2 with or
-    // without it).
-    if (
-      h.weaponClassAttacks &&
-      e.spellId &&
-      SUPPRESS_TARGET_PROCS_SPELL_IDS.has(String(e.spellId))
-    )
+    // the unit it hits, whatever the trigger reads (class or school) —
+    // pipeline T266, codex 85-tk-L6-T266-1 #2, -2. It moved no count of the
+    // scan (Teleport model-impossible 1 | 2 with or without it).
+    if (e.spellId && SUPPRESS_TARGET_PROCS_SPELL_IDS.has(String(e.spellId)))
       return false;
     if (
       h.weaponClassAttacks &&

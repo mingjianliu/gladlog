@@ -66,7 +66,10 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import { parseRawTimestamp } from "@gladlog/analysis/src/utils/rawStreams";
+import {
+  parseRawTimestamp,
+  splitRawLine,
+} from "@gladlog/analysis/src/utils/rawStreams";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
@@ -84,6 +87,10 @@ const minCd = Number(arg("--min-cd", "8"));
 /** a "not ready" refusal this soon after a cast of the unit's is its global
  * cooldown's, not the spell's (the longest unhasted GCD plus the row slack) */
 const REJECT_GCD_MS = 1600;
+/** a "not ready" refusal this soon after the unit was interrupted is its
+ * school lockout's (the longest kick lockout; codex 85-tk-L6-T266-2 #2:
+ * six Shadow Teleport refusals after a Skull Bash on Hand of Gul'dan) */
+const REJECT_LOCKOUT_MS = 6000;
 const out = arg("--out", "");
 const noGear = process.argv.includes("--no-gear");
 
@@ -261,22 +268,37 @@ for (const f of files) {
     continue;
   }
   // unit GUID → spell id → ms of its "not ready" SPELL_CAST_FAILED rows
-  // (the recorder's only; `--spells` runs)
+  // (the recorder's only; `--spells` runs), and unit GUID → ms of the
+  // interrupts it took. Fields by the parser's own quote-aware split: a
+  // spell name with a comma ("Invoke Chi-Ji, the Red Crane") shifted every
+  // later field (codex 85-tk-L6-T266-2 #4).
   const rejected = new Map<string, Map<string, number[]>>();
+  const interrupted = new Map<string, number[]>();
   for (const line of text.split("\n")) {
     parser.push(line);
-    if (!onlySpells.size || !line.includes("SPELL_CAST_FAILED,")) continue;
-    const sep = line.indexOf("  ");
-    const p = line.slice(sep + 2).split(",");
-    const id = p[9] ?? "";
-    if (!onlySpells.has(id)) continue;
-    if (!NOT_READY_REASONS.has((p[12] ?? "").replace(/"/g, "").trim()))
-      continue;
-    const at = sep < 0 ? null : parseRawTimestamp(line.slice(0, sep));
+    if (!onlySpells.size) continue;
+    const isFail = line.includes("SPELL_CAST_FAILED,");
+    if (!isFail && !line.includes("SPELL_INTERRUPT,")) continue;
+    const split = splitRawLine(line.endsWith("\r") ? line.slice(0, -1) : line);
+    if (!split) continue;
+    const { datePart, eventName, params } = split;
+    const at = parseRawTimestamp(datePart);
     if (at === null) continue;
-    const bySpellId = rejected.get(p[1] ?? "") ?? new Map<string, number[]>();
+    if (eventName === "SPELL_INTERRUPT") {
+      const dest = params[4] ?? "";
+      interrupted.set(dest, [...(interrupted.get(dest) ?? []), at]);
+      continue;
+    }
+    if (eventName !== "SPELL_CAST_FAILED") continue;
+    // base units [0..7], spell id [8], the localized reason [11]
+    const id = params[8] ?? "";
+    if (!onlySpells.has(id)) continue;
+    if (!NOT_READY_REASONS.has((params[11] ?? "").replace(/"/g, "").trim()))
+      continue;
+    const bySpellId =
+      rejected.get(params[0] ?? "") ?? new Map<string, number[]>();
     bySpellId.set(id, [...(bySpellId.get(id) ?? []), at]);
-    rejected.set(p[1] ?? "", bySpellId);
+    rejected.set(params[0] ?? "", bySpellId);
   }
   parser.end();
   const lines: string[] = [];
@@ -419,6 +441,12 @@ for (const f of files) {
             if (ms < legacy.startTime || ms > endMs) continue;
             if (ownCastMs.some((c) => c <= ms && ms - c < REJECT_GCD_MS))
               continue;
+            if (
+              (interrupted.get(u.id) ?? []).some(
+                (k) => k <= ms && ms - k < REJECT_LOCKOUT_MS,
+              )
+            )
+              continue;
             const rt = (ms - legacy.startTime) / 1000;
             const before = {
               ...entry,
@@ -427,16 +455,33 @@ for (const f of files) {
                 (c) => c.timeSeconds < rt,
               ),
             };
-            if (!before.casts.length && !before.sharedCasts.length) continue;
+            // a spend before it: a free press alone spends nothing (codex
+            // 85-tk-L6-T266-2, a free-only history)
+            if (
+              !before.casts.some((c) => !freePresses.has(c.timeSeconds)) &&
+              !before.sharedCasts.length
+            )
+              continue;
             rejectedOnCooldown++;
-            if (cdAvailableAt(before, rt))
+            // the model's own ready instant, without the rendering slack
+            // `cdAvailableAt` adds (codex -2 #3: two refusals 0.4 s before
+            // the modelled return)
+            if (cdAvailableAt(before, rt - CD_INSTANT_SLACK_S))
               modelReadyAtRejected.push(Math.round(rt * 10) / 10);
           }
           if ((entry.charges ?? 1) <= 1)
             for (let i = 1; i < presses.length; i++) {
-              // no ratio measured across an undated press (any before the
-              // pair's second press: a free press between them hides it)
-              if ([...undated].some((u) => u < presses[i]!)) continue;
+              // no ratio measured across an undated press: the pair's first
+              // press, or one between them (a free press between hides it);
+              // one cooldown's ratio reads its own press only, so an older
+              // undated press does not void it (codex -2 #5: Demonic
+              // Circle's undated 0.080 placement voided 6.719 -> 73.060)
+              if (
+                [...undated].some(
+                  (u) => u >= presses[i - 1]! && u < presses[i]!,
+                )
+              )
+                continue;
               const back = pressReadyAgainAtSeconds(entry, presses[i - 1]!);
               const own = back === null ? null : back - presses[i - 1]!;
               if (own && own > 0)
@@ -456,7 +501,12 @@ for (const f of files) {
             for (const o of outs) {
               const next = presses.find((x) => x > o.atSeconds + 0.05);
               if (next === undefined) continue;
-              if ([...undated].some((u) => u < next)) continue;
+              // a charge's return reads the spends of one recharge horizon
+              // before it, so only an undated press inside it voids the ratio
+              if (
+                [...undated].some((u) => u > o.atSeconds - horizon && u < next)
+              )
+                continue;
               const upTo = (c: { timeSeconds: number }) =>
                 c.timeSeconds <= o.atSeconds + 0.05;
               const back = entryAvailabilityTransitions(
