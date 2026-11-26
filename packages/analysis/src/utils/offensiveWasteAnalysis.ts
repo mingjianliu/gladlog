@@ -4,6 +4,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { damageImmuneControlUpAt } from "../analysis/candidates/massDispel";
 import { castAndEffectIds, castKeyOfAura } from "../data/castEffectAuras";
 import {
   KILL_LIVE_HP_PCT,
@@ -16,13 +17,14 @@ import { parryStopsAttack } from "../data/spellParry";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
-import { isControlCast } from "./castMissRows";
+import { isControlCast, PRESS_LANDED_SAME_INSTANT_MS } from "./castMissRows";
 import {
   COMPANION_CAST_ROW_MS,
   isNoPressRow,
   isPressImpactRow,
   pressImpactRow,
 } from "./castPress";
+import { ccFullDurationForCaster } from "./ccDuration";
 import { applicableCCAvoidanceIds } from "./ccTrinketAnalysis";
 import {
   hpTroughInEventSpan,
@@ -196,6 +198,9 @@ function buildDefenseWindows(
             (a) =>
               a.spellId === iv.spellId &&
               a.destUnitId === enemy.id &&
+              // the interval's own source: two units can put the same wall
+              // on one target in one millisecond
+              (iv.srcUnitId === undefined || a.srcUnitId === iv.srcUnitId) &&
               a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
               a.logLine.timestamp === openMs,
           );
@@ -330,6 +335,20 @@ export function buildOffensiveWasteSummary(
     ...combat,
     units: combat.units ?? {},
   } as never);
+
+  // the walls that stop every hit, up on a unit at an instant (T281)
+  const fullStopAurasUpAt = (unitId: string, atMs: number): string[] => {
+    const t = (atMs - matchStartMs) / 1000;
+    return defenseWindows
+      .filter(
+        (w) =>
+          w.unitId === unitId &&
+          t >= w.fromSeconds &&
+          t <= w.toSeconds &&
+          wallStopsEveryHit(w.spellId),
+      )
+      .map((w) => w.spellId);
+  };
 
   for (const friend of friends) {
     const highValueIds = getHighValueSpellIds(friend, ownTeamIds);
@@ -480,9 +499,17 @@ export function buildOffensiveWasteSummary(
             if (
               refusedByAnotherAura(
                 window.spellId,
-                e.spellId,
-                e.spellName,
                 landings.get(e)!,
+                fullStopAurasUpAt(window.unitId, landings.get(e)!.atMs),
+                damageImmuneControlUpAt(
+                  window.unit,
+                  landings.get(e)!.atMs,
+                  (id, src) =>
+                    ccFullDurationForCaster(
+                      id,
+                      friends.find((f) => f.id === src),
+                    ),
+                ) !== undefined,
               )
             )
               return false;
@@ -638,7 +665,10 @@ export interface IPressLanding {
   hit: boolean;
   /** the landing row's line in the log, when the row carries one */
   lineIndex?: number;
-  /** the landing row is a refusal: the game logged the attack IMMUNE */
+  /** the press was refused outright: its landing row is an IMMUNE and no
+   * hit of the press is logged on that unit in that row's instant
+   * (`PRESS_LANDED_SAME_INSTANT_MS` — Rake's stun 163505 IMMUNE and its
+   * damage 16 ms later are one press that landed) */
   immune?: true;
 }
 
@@ -667,26 +697,26 @@ export function landedBeforeWallRow(
 /**
  * Pipeline T281 (same round: a Starsurge logged IMMUNE 0.26 s after Ice
  * Block went up, counted into the Ironbark under it): was this press refused
- * outright — its landing row an IMMUNE — inside a wall that refuses nothing
- * itself? A damage-reduction wall takes a share off a hit; an IMMUNE row
- * under it is another aura's doing, and the cast went into that, not into
- * the wall. A wall that stops every hit it covers (`wallStopsEveryHit`) and
- * a wall that is the control avoidance refusing this very cast
- * (`applicableCCAvoidanceIds`: a stun into Icebound Fortitude) keep it.
+ * outright by ANOTHER aura than the wall — its landing an IMMUNE with no hit
+ * of the press beside it (`IPressLanding.immune`), under a wall that does
+ * not stop every hit itself, while something that does was up on the target:
+ * another wall of `fullStopAurasUp` (`wallStopsEveryHit`: Ice Block, a
+ * school-limited immunity) or a damage-immune control (`immuneControlUp`:
+ * Cyclone)? Then the cast went into that, not into the wall. With no such
+ * aura up the refusal may be the wall's own (Dispersion refuses a root,
+ * Icebound Fortitude a stun — codex 85-tk-L6-T281-1 #4) and the cast stays.
  */
 export function refusedByAnotherAura(
   wallAuraId: string,
-  castSpellId: string,
-  castSpellName: string | null | undefined,
   landing: Pick<IPressLanding, "immune">,
+  fullStopAurasUp: readonly string[],
+  immuneControlUp: boolean,
 ): boolean {
   return (
     landing.immune === true &&
     !wallStopsEveryHit(wallAuraId) &&
-    !applicableCCAvoidanceIds(
-      castSpellId,
-      getEnglishSpellName(castSpellId, castSpellName ?? ""),
-    ).has(wallAuraId)
+    (immuneControlUp ||
+      fullStopAurasUp.some((id) => id !== wallAuraId && wallStopsEveryHit(id)))
   );
 }
 
@@ -796,7 +826,22 @@ export function pressLandingRows<T extends LandingPress>(
       next++;
     const row = rows[next];
     if (row !== undefined && row.atMs <= atMs + REFLECT_ROW_LAG_MS) {
-      landed.set(press, row);
+      landed.set(
+        press,
+        row.immune &&
+          rows.some(
+            (o) =>
+              o.hit &&
+              Math.abs(o.atMs - row.atMs) <= PRESS_LANDED_SAME_INSTANT_MS,
+          )
+          ? {
+              atMs: row.atMs,
+              spellId: row.spellId,
+              hit: row.hit,
+              lineIndex: row.lineIndex,
+            }
+          : row,
+      );
       next++;
     } else landed.set(press, { atMs, spellId: null, hit: false });
     taken.set(key, next);

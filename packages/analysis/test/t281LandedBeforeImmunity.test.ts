@@ -10,9 +10,11 @@ import {
   PRESS_LANDED_SAME_INSTANT_MS,
   pressImmuneMissRows,
   pressLandedOn,
+  refusedComponentLandedBefore,
 } from "../src/utils/castMissRows";
 import {
   landedBeforeWallRow,
+  pressLandingRows,
   refusedByAnotherAura,
 } from "../src/utils/offensiveWasteAnalysis";
 
@@ -20,66 +22,77 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
-describe("T281 — a hit of the press before its IMMUNE row", () => {
+describe("T281 — the refused component had landed there before", () => {
   // audit-1215 17 D1 (0d211b8b r1): Merithra's Blessing 1256581 pressed
   // 92.744, healed the target 93.125, Cyclone on the target 93.189, a later
   // pulse IMMUNE 93.880
   const MERITHRA = "1256581";
-  const heal = (ms: number) => ({
-    spellId: MERITHRA,
+  const row = (
+    ms: number,
+    spellId = MERITHRA,
+    event = LogEvent.SPELL_HEAL,
+  ) => ({
+    spellId,
     spellName: "Merithra's Blessing",
     destUnitId: "T",
     timestamp: ms,
-    logLine: { event: LogEvent.SPELL_HEAL, timestamp: ms },
+    logLine: { event, timestamp: ms },
   });
-  const immune = {
-    spellId: MERITHRA,
-    missType: "IMMUNE",
-    destUnitId: "T",
-    timestamp: 93_880,
-    logLine: { event: LogEvent.SPELL_MISSED },
-  };
-  const landed = (rows: unknown[]) =>
-    pressLandedOn(
+  const before = (rows: unknown[], castMs = 92_744, same = [92_744]) =>
+    refusedComponentLandedBefore(
       rows as never,
       MERITHRA,
-      "Merithra's Blessing",
-      [92_744],
-      92_744,
+      same,
+      castMs,
       "T",
       93_880,
     );
-  it("the heal 755 ms before the refusal is the press landing", () => {
-    expect(landed([heal(93_125)])).toBe(true);
+  it("its own id healed 755 ms before the refusal", () => {
+    expect(before([row(93_125)])).toBe(true);
   });
-  it("a hit after the refusal's instant, or a periodic row, is not", () => {
-    expect(landed([heal(93_880 + PRESS_LANDED_SAME_INSTANT_MS + 1)])).toBe(
+  it("another component's hit is one press with one part refused", () => {
+    // c3cb3e72 1:11: Eviscerate's Shadow part 328082 hit under a Blessing
+    // of Protection already up, its physical 196819 was refused 139 ms later
+    expect(before([row(93_125, "328082", LogEvent.SPELL_DAMAGE)])).toBe(false);
+  });
+  it("a row before the cast row is the previous press's", () => {
+    // 0a118f43 4:41: a Throw Glaive in flight hit 81 ms before the next cast
+    expect(before([row(92_744 - 81)])).toBe(false);
+    expect(before([row(92_744)])).toBe(true);
+  });
+  it("an absorbed or periodic row, a row in or after the refusal's instant, a row of an earlier press", () => {
+    // 504abea0 2:32: an absorbed Deep Breath tick writes a SPELL_ABSORBED
+    expect(before([row(93_125, MERITHRA, LogEvent.SPELL_ABSORBED)])).toBe(
       false,
     );
-    expect(
-      landed([
-        {
-          ...heal(93_125),
-          logLine: { event: LogEvent.SPELL_PERIODIC_HEAL, timestamp: 93_125 },
-        },
-      ]),
-    ).toBe(false);
+    expect(before([row(93_125, MERITHRA, LogEvent.SPELL_PERIODIC_HEAL)])).toBe(
+      false,
+    );
+    expect(before([row(93_880 - PRESS_LANDED_SAME_INSTANT_MS)])).toBe(false);
+    expect(before([row(93_125)], 93_500, [92_744, 93_500])).toBe(false);
   });
-  it("a hit of an earlier press of the spell is not this press landing", () => {
-    // pressed again at 93.5: the 93.125 heal is the first press's
-    expect(
+  it("the same-instant reading is unchanged: only the refusal's own instant", () => {
+    const landed = (ms: number) =>
       pressLandedOn(
-        [heal(93_125)] as never,
+        [row(ms)] as never,
         MERITHRA,
         "Merithra's Blessing",
-        [92_744, 93_500],
-        93_500,
+        [92_744],
+        92_744,
         "T",
         93_880,
-      ),
-    ).toBe(false);
+      );
+    expect(landed(93_125)).toBe(false);
+    expect(landed(93_880)).toBe(true);
   });
-  it("the press's refusal reading drops the row, and keeps it with no hit", () => {
+  it("the press's refusal reading drops the row, and keeps it with no such row", () => {
+    const immune = {
+      spellId: MERITHRA,
+      missType: "IMMUNE",
+      destUnitId: "T",
+      timestamp: 93_880,
+      logLine: { event: LogEvent.SPELL_MISSED },
+    };
     const rows = (hits: unknown[]) =>
       pressImmuneMissRows(
         [immune],
@@ -89,8 +102,11 @@ describe("T281 — a hit of the press before its IMMUNE row", () => {
         undefined,
         hits as never,
       );
-    expect(rows([heal(93_125)])).toHaveLength(0);
+    expect(rows([row(93_125)])).toHaveLength(0);
     expect(rows([])).toHaveLength(1);
+    expect(rows([row(93_125, "328082", LogEvent.SPELL_DAMAGE)])).toHaveLength(
+      1,
+    );
   });
 });
 
@@ -119,29 +135,77 @@ describe("T281 — a landing row before the wall's APPLIED row in one millisecon
 describe("T281 — an IMMUNE landing under a damage-reduction wall", () => {
   const IRONBARK = "102342";
   const ICE_BLOCK = "45438";
-  const ICEBOUND = "48792";
-  const STARSURGE = "78674";
-  const KIDNEY_SHOT = "408";
-  it("a Starsurge logged IMMUNE under Ironbark was refused by something else", () => {
+  const DISPERSION = "47585";
+  it("a Starsurge refused under Ironbark while Ice Block was up went into the Ice Block", () => {
     expect(
-      refusedByAnotherAura(IRONBARK, STARSURGE, "Starsurge", { immune: true }),
+      refusedByAnotherAura(IRONBARK, { immune: true }, [ICE_BLOCK], false),
     ).toBe(true);
   });
-  it("a landing that is no IMMUNE row stays the wall's", () => {
-    expect(refusedByAnotherAura(IRONBARK, STARSURGE, "Starsurge", {})).toBe(
+  it("…or while a damage-immune control (Cyclone) was on the target", () => {
+    expect(refusedByAnotherAura(IRONBARK, { immune: true }, [], true)).toBe(
+      true,
+    );
+  });
+  it("with nothing else up the refusal may be the wall's own: a root into Dispersion stays", () => {
+    // codex 85-tk-L6-T281-1 #4 (05ea5983: Entangling Roots IMMUNE)
+    expect(refusedByAnotherAura(DISPERSION, { immune: true }, [], false)).toBe(
       false,
     );
+    expect(
+      refusedByAnotherAura(DISPERSION, { immune: true }, [DISPERSION], false),
+    ).toBe(false);
+  });
+  it("a landing that is no outright refusal stays the wall's", () => {
+    expect(refusedByAnotherAura(IRONBARK, {}, [ICE_BLOCK], true)).toBe(false);
   });
   it("an immunity keeps its own refusals", () => {
     expect(
-      refusedByAnotherAura(ICE_BLOCK, STARSURGE, "Starsurge", { immune: true }),
+      refusedByAnotherAura(ICE_BLOCK, { immune: true }, [ICE_BLOCK], false),
     ).toBe(false);
   });
-  it("a stun refused by Icebound Fortitude is that wall's refusal", () => {
-    expect(
-      refusedByAnotherAura(ICEBOUND, KIDNEY_SHOT, "Kidney Shot", {
-        immune: true,
-      }),
-    ).toBe(false);
+});
+
+describe("T281 — a refused component beside a hit is no outright refusal", () => {
+  // b3dea9f6 0:12: Rake's stun 163505 IMMUNE, its damage 1822 16 ms later
+  const press = { spellId: "1822", spellName: "Rake", destUnitId: "T" };
+  const landing = (damageMs: number | null) =>
+    pressLandingRows(
+      [press],
+      () => 12_000,
+      {
+        id: "C",
+        damageOut:
+          damageMs === null
+            ? []
+            : [
+                {
+                  spellId: "1822",
+                  spellName: "Rake",
+                  destUnitId: "T",
+                  logLine: {
+                    event: LogEvent.SPELL_DAMAGE,
+                    timestamp: damageMs,
+                  },
+                },
+              ],
+        missesOut: [
+          {
+            spellId: "163505",
+            spellName: "Rake",
+            destUnitId: "T",
+            missType: "IMMUNE",
+            timestamp: 12_050,
+            logLine: { event: LogEvent.SPELL_MISSED, timestamp: 12_050 },
+          },
+        ],
+      } as never,
+      [],
+    ).get(press)!;
+  it("the stun's IMMUNE with the damage 16 ms later: the press landed", () => {
+    expect(landing(12_066).immune).toBeUndefined();
+  });
+  it("the IMMUNE alone, or with a hit a second later: refused outright", () => {
+    expect(landing(null).immune).toBe(true);
+    expect(landing(13_100).immune).toBe(true);
   });
 });

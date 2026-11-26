@@ -256,7 +256,8 @@ export function pressImmuneMissRows<T extends IPressMissRow>(
   followUp?: IPressFollowUp,
   /** the caster's damage and heal rows (`damageOut` + `healOut`): an IMMUNE
    * on a unit a non-control press landed on anyway is one component refused,
-   * not the press (`pressLandedOn`, fact11 D10) */
+   * not the press (`pressLandedOn`, fact11 D10); so is one whose own
+   * component had landed there earlier (`refusedComponentLandedBefore`) */
   landed?: readonly IPressHitRow[],
   /** the caster's aura applications on other units and itself
    * (`pressAuraLandedOn`, pipeline T216): an IMMUNE on a unit the press's
@@ -314,16 +315,28 @@ export function pressImmuneMissRows<T extends IPressMissRow>(
   return out.filter(
     (m) =>
       !m.destUnitId ||
-      !ids.some((id) =>
-        pressLandedOn(
-          landed,
-          id,
-          getEnglishSpellName(id, ""),
-          sameSpellCastMs,
-          castMs,
-          m.destUnitId!,
-          m.timestamp,
-        ),
+      !(
+        ids.some((id) =>
+          pressLandedOn(
+            landed,
+            id,
+            getEnglishSpellName(id, ""),
+            sameSpellCastMs,
+            castMs,
+            m.destUnitId!,
+            m.timestamp,
+          ),
+        ) ||
+        // the refused component itself had landed there before (T281)
+        (!!m.spellId &&
+          refusedComponentLandedBefore(
+            landed,
+            m.spellId,
+            sameSpellCastMs,
+            castMs,
+            m.destUnitId,
+            m.timestamp,
+          ))
       ),
   );
 }
@@ -407,12 +420,7 @@ export function isPressHitRow(
  * D10 (16bc5861 1:10 / 3:14 / 4:31): The Hunt's root 370970 met Blessing of
  * Freedom IMMUNE, its impact 370966 and DoT 370969 landed in the same
  * millisecond — three `[IMMUNE — Blessing of Freedom was up]` read as the
- * whole cooldown refused. With `refusedAtMs`, the hit is one logged up to
- * the refusal's instant: in it, or before it — pipeline T281 (audit-1215 17
- * D1, 0d211b8b r1 1:32): Merithra's Blessing healed its target at 1:33.125,
- * Cyclone landed there at 1:33.189, and a later pulse's IMMUNE at 1:33.880
- * read `[IMMUNE — Cyclone was up]` for a press that had landed. A hit after
- * the refusal stays out (`PRESS_LANDED_SAME_INSTANT_MS`).
+ * whole cooldown refused.
  */
 export function pressLandedOn(
   rows: readonly IPressHitRow[],
@@ -421,8 +429,8 @@ export function pressLandedOn(
   sameSpellCastMs: readonly number[],
   castMs: number,
   destUnitId: string,
-  /** the refusal row's own ms: a hit counts up to its instant
-   * (`PRESS_LANDED_SAME_INSTANT_MS`), never after it */
+  /** the refusal row's own ms: a hit counts only in its instant
+   * (`PRESS_LANDED_SAME_INSTANT_MS`) */
   refusedAtMs?: number,
 ): boolean {
   return rows.some(
@@ -434,18 +442,60 @@ export function pressLandedOn(
       !r.logLine.event?.startsWith("SPELL_PERIODIC_") &&
       missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp) &&
       (refusedAtMs === undefined ||
-        r.logLine.timestamp <= refusedAtMs + PRESS_LANDED_SAME_INSTANT_MS) &&
+        Math.abs(r.logLine.timestamp - refusedAtMs) <=
+          PRESS_LANDED_SAME_INSTANT_MS) &&
       isPressHitRow(spellId, spellName, r),
   );
 }
 
-/** A hit of the press is the press landing through a refused component up
- * to the refusal's own instant — The Hunt's impact and its root's IMMUNE share
- * a millisecond (fact11 D10); a hit before it landed before the immunity
- * (T281). A same-named hit seconds later is a separate
+/** A hit of the press is the press landing through a refused component only
+ * in the refusal's own instant — The Hunt's impact and its root's IMMUNE share
+ * a millisecond (fact11 D10). A same-named hit seconds later is a separate
  * trigger landing once the immunity is gone: Arcane Surge 365350 IMMUNE into
  * Ice Block, its 453326 "Arcane Surge" 2.4 s later on the unblocked mage. */
 export const PRESS_LANDED_SAME_INSTANT_MS = CAST_MISS_LEAD_MS;
+
+/**
+ * Pipeline T281 (audit-1215 17 D1, 0d211b8b r1 1:32): had the very component
+ * the IMMUNE row refuses already landed on that unit from this press — a
+ * damage or heal row of the refused row's OWN id, on `destUnitId`, from the
+ * cast's own millisecond on, logged before the refusal's instant
+ * (`PRESS_LANDED_SAME_INSTANT_MS`), inside the cast's window
+ * (`missBelongsToCast`)? Then the immunity went up between the two: the
+ * press landed, and the row is a later pulse refused. Merithra's Blessing
+ * 1256581 healed its target at 1:33.125, Cyclone landed there at 1:33.189,
+ * the next 1256581 pulse logged IMMUNE at 1:33.880, and the line read
+ * `[IMMUNE — Cyclone was up]`.
+ *
+ * Narrow on purpose (codex 85-tk-L6-T281-1):
+ *  - the same id, not the press's family: Eviscerate's Shadow part 328082
+ *    hit under a Blessing of Protection that was already up and its physical
+ *    196819 was refused 139 ms later — one press, two components, one
+ *    refused; Judgment's damage 20271 lands and its debuff 197277 is refused;
+ *  - no lead before the cast: a row before the cast row is the previous
+ *    press's (a Throw Glaive in flight hit 81 ms before the next cast);
+ *  - no SPELL_ABSORBED row and no periodic row: an absorbed tick writes a
+ *    SPELL_ABSORBED the log does not mark periodic (Deep Breath).
+ */
+export function refusedComponentLandedBefore(
+  rows: readonly IPressHitRow[],
+  refusedSpellId: string,
+  sameSpellCastMs: readonly number[],
+  castMs: number,
+  destUnitId: string,
+  refusedAtMs: number,
+): boolean {
+  return rows.some(
+    (r) =>
+      r.destUnitId === destUnitId &&
+      r.spellId === refusedSpellId &&
+      r.logLine.event !== LogEvent.SPELL_ABSORBED &&
+      !r.logLine.event?.startsWith("SPELL_PERIODIC_") &&
+      r.logLine.timestamp >= castMs &&
+      r.logLine.timestamp < refusedAtMs - PRESS_LANDED_SAME_INSTANT_MS &&
+      missBelongsToCast(sameSpellCastMs, castMs, r.logLine.timestamp),
+  );
+}
 
 function pressImmuneMissRowsAll<T extends IPressMissRow>(
   misses: readonly T[],

@@ -96,10 +96,10 @@ import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
   isControlCast,
   isPressHitRow,
-  missBelongsToCast,
   PRESS_LANDED_SAME_INSTANT_MS,
   PRESS_TRIGGERED_CAST_IDS,
   pressAuraLandedOn,
+  refusedComponentLandedBefore,
 } from "@gladlog/analysis/src/utils/castMissRows";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import { killAttemptAllImmuneClause } from "@gladlog/analysis/src/utils/killAttempts";
@@ -517,10 +517,7 @@ export function run(ctx: IRoundCtx): void {
       ((caster.damageOut ?? []) as any[]).some(
         (d) =>
           d.destUnitId === m.destUnitId &&
-          // up to the refusal's instant, a row of this press (T281)
-          tsOf(d) <= tsOf(m) + PRESS_LANDED_SAME_INSTANT_MS &&
-          !String(ev(d) ?? "").startsWith("SPELL_PERIODIC_") &&
-          missBelongsToCast(sameSpellCastMs, t, tsOf(d)) &&
+          Math.abs(tsOf(d) - tsOf(m)) <= PRESS_LANDED_SAME_INSTANT_MS &&
           hitIds.some((h) => isPressHitRow(h, h === id ? pressName : "", d)),
       );
     // T216: the press's own aura already up on that unit — the IMMUNE row
@@ -553,6 +550,15 @@ export function run(ctx: IRoundCtx): void {
         tsOf(m) <= t + PRESS_MISS_WINDOW_MS &&
         !next.some((n) => n <= tsOf(m) + PRESS_MISS_LEAD_MS) &&
         !landedAt(m) &&
+        // T281: the refused component itself had landed there before
+        !refusedComponentLandedBefore(
+          [...(caster.damageOut ?? []), ...(caster.healOut ?? [])],
+          String(m.spellId),
+          sameSpellCastMs,
+          t,
+          m.destUnitId,
+          tsOf(m),
+        ) &&
         !auraUpBefore(m),
     );
     if (!miss) return false;

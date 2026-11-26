@@ -41,6 +41,7 @@
  *    `… until m:ss` line with a second in reach before that one. Kinds `purge`
  *    / `cleanse` / `purgeUntilLate` / `cleanseUntilLate`.
  */
+import { damageImmuneControlUpAt } from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import { isDotAura } from "@gladlog/analysis/src/context/matchTimelineSections";
 import {
   getEnglishSpellName,
@@ -50,11 +51,13 @@ import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { officialDurationS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { CAST_INTERRUPTED_REASONS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import { empowerSpans } from "@gladlog/analysis/src/utils/castCommitSpans";
+import { PRESS_LANDED_SAME_INSTANT_MS } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   COMPANION_CAST_ROW_MS,
   COPY_CAST_IDS,
   pressImpactRow,
 } from "@gladlog/analysis/src/utils/castPress";
+import { ccFullDurationForCaster } from "@gladlog/analysis/src/utils/ccDuration";
 import { selectPressureWindows } from "@gladlog/analysis/src/utils/cooldowns";
 import { spellNameKey } from "@gladlog/analysis/src/utils/damagePress";
 import {
@@ -66,6 +69,7 @@ import {
   isCdGatedPurger,
   PURGE_SPELLS_BY_SPEC,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
+import { wallStopsEveryHit } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -76,8 +80,8 @@ import {
   EMPOWER_HOLD_ROW_MS,
   landedBeforeWallRow,
   landedThroughWall,
-  refusedByAnotherAura,
   pressLandingCaster,
+  refusedByAnotherAura,
   withoutDeferralTag,
 } from "@gladlog/analysis/src/utils/offensiveWasteAnalysis";
 import { LOS_SWEEP_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
@@ -471,6 +475,21 @@ function wallRuns(ctx: IRoundCtx, target: any, spell: string): IWallRun[] {
   return runs;
 }
 
+/** The auras on `target` that stop every hit (`wallStopsEveryHit`), up at
+ * `atMs` by the target's own aura rows — the gate's reading of the product's
+ * `fullStopAurasUpAt` (T281). */
+function fullStopAurasUpAt(target: any, atMs: number): string[] {
+  const up = new Set<string>();
+  for (const a of (target.auraEvents ?? []) as any[]) {
+    if (tsOf(a) > atMs) break;
+    if (a.destUnitId !== target.id || !a.spellId) continue;
+    if (!wallStopsEveryHit(String(a.spellId))) continue;
+    if (ev(a) === APPLIED || ev(a) === REFRESH) up.add(String(a.spellId));
+    else if (ev(a) === REMOVED) up.delete(String(a.spellId));
+  }
+  return [...up];
+}
+
 function checkIntoDefense(ctx: IRoundCtx): void {
   // the section reads the round's own casts: the ones after its ending death
   // are in the log's tail
@@ -605,9 +624,6 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             })),
         ].sort((a, b) => a.t - b.t);
         const wallAuraId = iv.key.split("|")[0]!;
-        const castId: string | undefined = rowsOfSpell[0]?.spellId
-          ? String(rowsOfSpell[0].spellId)
-          : undefined;
         let next = 0;
         let inside = 0;
         for (const t of presses) {
@@ -635,8 +651,25 @@ function checkIntoDefense(ctx: IRoundCtx): void {
             continue;
           if (
             matched &&
-            castId &&
-            refusedByAnotherAura(wallAuraId, castId, spell, row)
+            refusedByAnotherAura(
+              wallAuraId,
+              // refused outright: no hit of the press beside the IMMUNE row
+              row.immune &&
+                rows.some(
+                  (o) =>
+                    o.hit &&
+                    Math.abs(o.t - row.t) <= PRESS_LANDED_SAME_INSTANT_MS,
+                )
+                ? {}
+                : row,
+              fullStopAurasUpAt(target, row.t),
+              damageImmuneControlUpAt(target, row.t, (id, src) =>
+                ccFullDurationForCaster(
+                  id,
+                  ctx.players.find((p: any) => p.id === src),
+                ),
+              ) !== undefined,
+            )
           )
             continue;
           if (at >= fromMs && at <= toMs) inside++;

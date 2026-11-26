@@ -176,6 +176,7 @@ import {
   isControlCast,
   PRESS_LANDED_SAME_INSTANT_MS,
   PRESS_TRIGGERED_CAST_IDS,
+  refusedComponentLandedBefore,
 } from "@gladlog/analysis/src/utils/castMissRows";
 import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
 import { CANCEL_CC_NEAR_S } from "@gladlog/analysis/src/utils/castStopEvidence";
@@ -637,11 +638,25 @@ function pressImmuneTagChecks(ctx: IRoundCtx): void {
       );
       // landed through the refused component: a hit on that unit in the
       // refusal's own instant (`PRESS_LANDED_SAME_INSTANT_MS`)
+      // …or the refused component itself had landed there earlier in this
+      // press (`refusedComponentLandedBefore`, T281: Merithra's Blessing
+      // healed, Cyclone landed, the next pulse was refused)
+      const sameCastMs = castsOf(actor)
+        .filter((c) => String(c.spellId) === id)
+        .map(tsOf);
       const landedAt = (x: any) =>
         hits.some(
           (r) =>
             r.destUnitId === x.destUnitId &&
             Math.abs(tsOf(r) - tsOf(x)) <= PRESS_LANDED_SAME_INSTANT_MS,
+        ) ||
+        refusedComponentLandedBefore(
+          [...(actor.damageOut ?? []), ...(actor.healOut ?? [])],
+          String(x.spellId),
+          sameCastMs,
+          tsOf(press),
+          x.destUnitId,
+          tsOf(x),
         );
       if (immune.every(landedAt))
         ctx.violate(
