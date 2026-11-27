@@ -8968,3 +8968,23 @@ anothersSelfOnlyHealCdAnswers 5 -> 0 | 21 -> 0, kwAbsorbedNotTargets 0 | 21
 -> 0 (and attacker-side spans 72 -> 51 on 1215), duringExternalShare 0 | 6 ->
 0, channelLastTickDropped 0 | 2 -> 0; corpusFactScan reflectReturn 3 -> 0 |
 12 -> 0, fact2Scan sorImmune 2 -> 0 | 9 -> 0; gates identical on both.
+
+v679 (pipeline batch B261, WSL bundle W3: T240; user ruling 2026-11-26:
+bundled). Measured by its lane on its own base (605 | 1215):
+T240 — the Mistweaver kick's cooldown model reads Thunder Focus Tea and
+Rushing Wind Kick 467307: cooldownRecastScan model-impossible re-presses /
+model pairs 1,107 / 1,574 | 2,276 / 2,802 -> 837 / 2,041 | 1,185 / 3,183
+(605 + 1215: 3,383 / 4,376 -> 2,022 / 5,224; 467 real presses on the 605 no
+longer folded); Thunder Focus Tea stack removals matched to a kick's cast row
+909 / 909 inside 250 ms; 605 and 12.1.5 captures byte-identical. The model
+does feed printed lines (the `locked N of the last 12s` lockout tally: a
+constructed round with a tea reset prints `locked 2.0` where the static model
+printed `4.0`), so rounds outside both corpora can change. The set-bonus kick
+charge is not modelled (recorded, deferred): a bonus-charge kick still counts
+as a normal spend (fa2c363c r0 106.748 s).
+Bundle check (wsl2 BW-3-W3, dev 1cb75c532 -> the bundle's code, both sides on
+one machine): captures identical on 605 and 1215; scan5 in-total violations
+28,363 -> 28,363 | 32,792 -> 32,792, no violation kind rose or fell; gates
+identical. Re-picked onto v678 (8fa500591), whose captures are line-identical
+to v677's: the capture evidence carries over, while the scan totals above were
+measured with v677's scanners (v678 changes scan readers) and were not re-run.

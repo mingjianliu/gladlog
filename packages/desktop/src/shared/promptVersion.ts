@@ -2014,5 +2014,14 @@
  *  v677's); scan readers that flagged right product lines are corrected,
  *  and the periodic-aura table counts an aura-226 trigger. See
  *  docs/prompt-version-history.md.
+ *
+ * v679 (2026-11-27; pipeline batch B261, WSL bundle W3: T240): the
+ *  Mistweaver kick's cooldown reads Thunder Focus Tea and Rushing Wind Kick
+ *  (a tea-empowered kick's 9 s is that press's own cooldown). The set-bonus
+ *  kick charge is not modelled yet (recorded, deferred: a bonus-charge kick
+ *  still counts as a normal spend). The 605 and 12.1.5 captures are
+ *  byte-identical, but the model does feed printed lines (the
+ *  `locked N of the last 12s` lockout tally), so a round outside both corpora
+ *  can print a different number. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 678;
+export const PROMPT_VERSION = 679;
