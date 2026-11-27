@@ -943,7 +943,13 @@ export function pressEffectHandoffRow<
   const effects = new Set(effectAurasOfCast(castSpellId));
   effects.delete(row.spellId!);
   if (row.spellId !== castSpellId || !effects.size) return undefined;
-  const silent = copies.every(
+  // the caster's own copy silent — the one its next action consumes; a
+  // target's copy may log its end (codex 85-tk-L5-T284-1m, 897840ab r0
+  // 14.157 s: the target's 57934 REMOVED at +5.51 s, the rogue's never,
+  // its 59628 shown by a resync at +6.12 s). With no copy on the caster,
+  // every copy silent.
+  const casterCopies = copies.filter((c) => c.unit.id === caster.id);
+  const silent = (casterCopies.length ? casterCopies : copies).every(
     (c) =>
       !rebroadcastFree(c.unit).some(
         (r) =>
@@ -1238,6 +1244,11 @@ export function pressDuration(
   // Breath's bundle at a 2 s release is no re-state)
   const landAt = empowerReleaseMs(caster, cast, nextPressMs) ?? at;
   const skipped = new Set<ICombatUnit>();
+  // rows `pressEffectHandoffRow` named: the effect that ran, read at its
+  // length whether its row is the application or a resync's re-statement
+  // (codex 85-tk-L5-T284-1m, 897840ab r0: the rogue's 59628 shown only by
+  // a resync at +6.12 s)
+  const handedOff = new Set<ICombatUnit["auraEvents"][number]>();
   for (let k = 0; k < candidates.length; k++) {
     const { unit, row } = candidates[k]!;
     // laid on an aura already up: the life is what was left plus the
@@ -1254,6 +1265,7 @@ export function pressDuration(
     // wings and trinket procs — the first cut dropped `lasts` off 447
     // [PRESS] lines in the 605 capture)
     if (
+      !handedOff.has(row) &&
       row.logLine.timestamp - landAt > PRESS_RESTATE_MIN_LAG_MS &&
       isResyncBatchAt(unit, row.logLine.timestamp)
     ) {
@@ -1327,6 +1339,7 @@ export function pressDuration(
           )
         : undefined;
     if (handoff) {
+      handedOff.add(handoff.row);
       candidates.splice(k, 1, handoff);
       k--;
       continue;

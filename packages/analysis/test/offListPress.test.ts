@@ -664,6 +664,29 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
     expect(d?.durationSeconds).toBe(10);
   });
 
+  it("the target's window REMOVED, the rogue's never, its 59628 shown by a resync: the hand-off (codex 85-tk-L5-T284-1m, 897840ab r0)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const resync = ["1001", "1002", "1003", "1004", "1005", "59628"].map((id) =>
+      makeAuraEvent(APPLIED, id, T + 6_123, "rog", "rog", "BUFF"),
+    );
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
+        ...resync,
+      ],
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 5_510, "rog", "hun", "BUFF"),
+      ],
+    });
+    const d = pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+    expect(d?.row.spellId).toBe("59628");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
   it("no REMOVED logged and an aura laid with the press: no hand-off (Wake of Ashes' DoT)", () => {
     const cast = makeSpellCastEvent("255937", T, "pet", "Pet", "pal", "Pal");
     const pal = makeUnit("pal", { spellCastEvents: [cast] });
