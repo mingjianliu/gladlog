@@ -164,7 +164,13 @@ export function emitFriendlyAuraOnlyEntries(ctx: {
       u.id === owner.id
         ? ctx.ownerCDs
         : (ctx.teammateCDs.find((t) => t.player.id === u.id)?.cds ?? []);
-    for (const a of auraOnlyActivations(u, units, matchStartMs, endMs)) {
+    for (const a of auraOnlyActivations(
+      u,
+      units,
+      matchStartMs,
+      endMs,
+      matchStartMs + ctx.matchEndSeconds * 1000,
+    )) {
       // …except beside a proc's own activation (the producer's `procOwned`,
       // T259 B194 review), where a logged press of the same button is a
       // second fact with its own [CD] line: the ledger row of that press does

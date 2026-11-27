@@ -118,16 +118,26 @@ export function castlessHealCdAuras(
   return out;
 }
 
-/** Every aura-only activation of one unit inside the round, by time. */
+/** Every aura-only activation of one unit inside the round (at or before
+ * `endMs`, the round's end), by time. `logEndMs` is the log's end: the saves
+ * are read over the log's span with the round's end passed as its own
+ * argument, as the `[ENEMY DEF]` renderer reads them — with the round's end
+ * as the span, an aura that went up after it was clamped to it (T287). */
 export function auraOnlyActivations(
   unit: ICombatUnit,
   units: readonly ICombatUnit[],
   matchStartMs: number,
   endMs: number,
+  logEndMs: number = endMs,
 ): IAuraOnlyActivation[] {
   const out = castlessHealCdAuras(unit, matchStartMs, endMs);
   const bounds = { startTime: matchStartMs, endTime: endMs };
-  const saves = enemyDefensiveEvents(unit, [...units], bounds);
+  const saves = enemyDefensiveEvents(
+    unit,
+    [...units],
+    { startTime: matchStartMs, endTime: Math.max(endMs, logEndMs) },
+    endMs,
+  );
   for (const e of saves) {
     // a passive shield (fact10 D25) is no press at all, hidden or not
     if (!e.noPressLogged || e.procSource || e.kind === "passive") continue;
@@ -202,5 +212,12 @@ export function auraOnlyActivations(
       family: "offensive",
     });
   }
-  return out.sort((a, b) => a.atSeconds - b.atSeconds);
+  // the round ends at `endMs` for every family, as the heal family's own
+  // walk reads it: the press lane (the cooldown ledger) stops there, so a
+  // save whose aura went up after it read as `(no press)` — T287,
+  // audit-1215 06 D1 (2c832cac r0 1:29: a Barkskin pressed 0.49 s after the
+  // round-ending death, its aura clamped to the death's instant)
+  return out
+    .filter((a) => matchStartMs + a.atSeconds * 1000 <= endMs)
+    .sort((a, b) => a.atSeconds - b.atSeconds);
 }
