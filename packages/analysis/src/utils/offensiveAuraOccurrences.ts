@@ -408,7 +408,12 @@ export function auraOffensiveOccurrences(
   unit: ICombatUnit,
   bounds: Bounds,
 ): IAuraOccurrenceResult {
-  const key = `${bounds.startTime}:${bounds.endTime}:${OFFENSIVE_AURA_FLAGS.demonic}`;
+  // T308: an aura shown still up past its cap runs to the round's end — a
+  // Solo Shuffle round's ending death when `bounds` is the combat (its
+  // units), else `bounds.endTime`; part of the key, as the same start / end
+  // can come with and without units
+  const roundEnd = roundEndMs(bounds);
+  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd}:${OFFENSIVE_AURA_FLAGS.demonic}`;
   let byKey = cache.get(unit);
   if (!byKey) {
     byKey = new Map();
@@ -504,10 +509,7 @@ export function auraOffensiveOccurrences(
       const nextFromS = intervals
         .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
         .reduce((m, o) => Math.min(m, o.fromS), Infinity);
-      const untilMs = Math.min(
-        roundEndMs(bounds),
-        bounds.startTime + nextFromS * 1000,
-      );
+      const untilMs = Math.min(roundEnd, bounds.startTime + nextFromS * 1000);
       if (
         auraSurelyUpPastMs(unit, unit, iv.spellId, iv.spellId, endMs, untilMs)
       )
