@@ -760,9 +760,92 @@ function observedEffectEnd(
         a.logLine.timestamp < toMs,
     );
   };
+  /** Where this press's own application of the chain's aura is: its
+   * APPLIED / REFRESH inside the press's start window (the press that
+   * refreshed an aura already up restarts it, codex 20-G167-11 #1) — not a
+   * later press's refresh (20-G167-14 #1), nor an application no press made
+   * (a rebroadcast, a talent re-application, #2). Else the last interval's
+   * start. */
+  const pressAppliedS = (b: {
+    destId: string;
+    auraId: string;
+    lastFromS: number;
+  }): number => {
+    let at: number | undefined;
+    // re-broadcast pairs dropped first, as the interval builder does (codex
+    // 20-G167-15: a REMOVED + APPLIED at 11.5 s restarted the length)
+    for (const a of dropAuraRebroadcasts(auraRowsOf(b.destId, true))) {
+      if (a.spellId !== b.auraId) continue;
+      if (
+        a.logLine.event !== LogEvent.SPELL_AURA_APPLIED &&
+        a.logLine.event !== LogEvent.SPELL_AURA_REFRESH
+      )
+        continue;
+      const t = (a.logLine.timestamp - combat.startTime) / 1000;
+      if (!startsForPress(t, b.destId, b.auraId)) continue;
+      if (t >= nextSameCastS) continue;
+      if (at === undefined || t > at) at = t;
+    }
+    return at ?? b.lastFromS;
+  };
+  // T308 (user 2026-11-27, T284 (a)): a chain the log never closes — no
+  // REMOVED, the builder's official-length cap — that the log shows still
+  // up past that cap (`auraSurelyUpPastMs`) ran on to the round's end, or
+  // to the caster's next press of the spell (41243fd2-shaped: Breath of
+  // Sindragosa's damage rows 2 s past its 8 s with no REMOVED). Without that
+  // evidence the official end stands: ~4.5 % of REMOVED rows are lost.
+  // To the round's end, not to the last evidence row (coordinator (A),
+  // 2026-11-27): the four surely-up presses of 605 + 1215 ran from their
+  // last row to the printed end 0 / 0.7 / 0.9 / 0 s (Doom Winds 33.21 → the
+  // kill 33.2, Breath of Sindragosa 223.29 → 224.0 and 39.36 → 40.3,
+  // Recklessness 139.975 → its next press). Reopen when a corpus shows the
+  // evidence stopping well before the end — a later REMOVED lost there
+  // would print past what the log proves.
+  // Read per copy, before the copies are ranked: a copy the log shows still
+  // up outranks a longer-capped or a closed one (codex 85-tk-L5-T308-1 #5:
+  // The Hunt's DoT on A ticking past its cap lost to B's REMOVED).
+  // …past THIS press's official end: the builder's cap runs from the chain's
+  // last REFRESH, and that REFRESH is itself the evidence (1215 d90bd21f r5:
+  // Recklessness pressed 102.84, refreshed 139.975 by the next press, capped
+  // 24 s after it — the press read the official 126.8).
+  const nextPressMs = combat.startTime + nextSameCastS * 1000;
+  const surelyUpEndS = (b: {
+    end: number;
+    destId: string;
+    lastFromS: number;
+    auraId: string;
+  }): number | undefined => {
+    const appliedS = pressAppliedS(b);
+    const ownFull = buffDurationOfApplication(
+      b.auraId,
+      caster,
+      combat.startTime + appliedS * 1000,
+    );
+    const capMs =
+      combat.startTime +
+      Math.min(b.end, ownFull === undefined ? b.end : appliedS + ownFull) *
+        1000;
+    const untilMs = Math.min(roundEndMs(combat), nextPressMs);
+    const holder = combat.units?.[b.destId] as ICombatUnit | undefined;
+    return holder &&
+      untilMs > capMs &&
+      auraSurelyUpPastMs(
+        caster,
+        holder,
+        b.auraId,
+        castSpellId,
+        capMs,
+        untilMs,
+        nextPressMs,
+      )
+      ? (untilMs - combat.startTime) / 1000
+      : undefined;
+  };
   let best: {
     end: number;
     observed: boolean;
+    /** T308: shown still up past its cap (`surelyUpEndS`) */
+    surelyUp?: true;
     destId: string;
     lastFromS: number;
     auraId: string;
@@ -842,6 +925,18 @@ function observedEffectEnd(
         last = iv;
       }
     }
+    const surelyUp = observed
+      ? undefined
+      : surelyUpEndS({
+          end: chainEnd,
+          destId: dest,
+          lastFromS,
+          auraId: ivs[first]!.spellId,
+        });
+    if (surelyUp !== undefined) {
+      chainEnd = surelyUp;
+      observed = true;
+    }
     if (best === null || chainEnd > best.end)
       best = {
         end: chainEnd,
@@ -849,36 +944,16 @@ function observedEffectEnd(
         destId: dest,
         lastFromS,
         auraId: ivs[first]!.spellId,
+        ...(surelyUp !== undefined ? { surelyUp: true as const } : {}),
       };
   }
-  /** Where this press's own application of the chain's aura is: its
-   * APPLIED / REFRESH inside the press's start window (the press that
-   * refreshed an aura already up restarts it, codex 20-G167-11 #1) — not a
-   * later press's refresh (20-G167-14 #1), nor an application no press made
-   * (a rebroadcast, a talent re-application, #2). Else the last interval's
-   * start. */
-  const pressAppliedS = (b: {
-    destId: string;
-    auraId: string;
-    lastFromS: number;
-  }): number => {
-    let at: number | undefined;
-    // re-broadcast pairs dropped first, as the interval builder does (codex
-    // 20-G167-15: a REMOVED + APPLIED at 11.5 s restarted the length)
-    for (const a of dropAuraRebroadcasts(auraRowsOf(b.destId, true))) {
-      if (a.spellId !== b.auraId) continue;
-      if (
-        a.logLine.event !== LogEvent.SPELL_AURA_APPLIED &&
-        a.logLine.event !== LogEvent.SPELL_AURA_REFRESH
-      )
-        continue;
-      const t = (a.logLine.timestamp - combat.startTime) / 1000;
-      if (!startsForPress(t, b.destId, b.auraId)) continue;
-      if (t >= nextSameCastS) continue;
-      if (at === undefined || t > at) at = t;
-    }
-    return at ?? b.lastFromS;
-  };
+  if (best?.surelyUp)
+    return {
+      endS: best.end,
+      holderId: best.destId,
+      auraId: best.auraId,
+      appliedS: pressAppliedS(best),
+    };
   // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
   // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
   // calls the end observed — a clamp is no observation (26bfd4f3: Kingsbane
@@ -1010,61 +1085,6 @@ function observedEffectEnd(
         };
       return null;
     }
-  }
-  // T308 (user 2026-11-27, T284 (a)): a chain the log never closes — no
-  // REMOVED, the builder's official-length cap — that the log shows still
-  // up past that cap (`auraSurelyUpPastMs`) ran on to the round's end, or
-  // to the caster's next press of the spell (41243fd2-shaped: Breath of
-  // Sindragosa's damage rows 2 s past its 8 s with no REMOVED). Without that
-  // evidence the official end stands: ~4.5 % of REMOVED rows are lost.
-  // To the round's end, not to the last evidence row (coordinator (A),
-  // 2026-11-27): the four surely-up presses of 605 + 1215 ran from their
-  // last row to the printed end 0 / 0.7 / 0.9 / 0 s (Doom Winds 33.21 → the
-  // kill 33.2, Breath of Sindragosa 223.29 → 224.0 and 39.36 → 40.3,
-  // Recklessness 139.975 → its next press). Reopen when a corpus shows the
-  // evidence stopping well before the end — a later REMOVED lost there
-  // would print past what the log proves.
-  if (best !== null && !best.observed) {
-    // …past THIS press's official end: the builder's cap runs from the
-    // chain's last REFRESH, and that REFRESH is itself the evidence (1215
-    // d90bd21f r5: Recklessness pressed 102.84, refreshed 139.975 by the
-    // next press, capped 24 s after it — the press read the official 126.8)
-    const appliedS = pressAppliedS(best);
-    const ownFull = buffDurationOfApplication(
-      best.auraId,
-      caster,
-      combat.startTime + appliedS * 1000,
-    );
-    const capMs =
-      combat.startTime +
-      Math.min(
-        best.end,
-        ownFull === undefined ? best.end : appliedS + ownFull,
-      ) *
-        1000;
-    const untilMs = Math.min(
-      roundEndMs(combat),
-      combat.startTime + nextSameCastS * 1000,
-    );
-    const holder = combat.units?.[best.destId] as ICombatUnit | undefined;
-    if (
-      holder &&
-      untilMs > capMs &&
-      auraSurelyUpPastMs(
-        caster,
-        holder,
-        best.auraId,
-        castSpellId,
-        capMs,
-        untilMs,
-      )
-    )
-      return {
-        endS: (untilMs - combat.startTime) / 1000,
-        holderId: best.destId,
-        auraId: best.auraId,
-        appliedS,
-      };
   }
   if (best?.observed)
     return {

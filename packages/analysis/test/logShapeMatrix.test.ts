@@ -19,6 +19,7 @@ import { ccFullDurationSeconds } from "../src/data/spellEffectData";
 import { buildAuraIntervals } from "../src/utils/auraIntervals";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
 import { unitCooldownAvailableAt } from "../src/utils/cooldowns";
+import { observedEffectEndSeconds } from "../src/utils/enemyCDs";
 import { untargetableEndS } from "../src/utils/enemyDefensives";
 import { interruptImmuneWindows } from "../src/utils/talentBehaviors";
 import {
@@ -31,6 +32,7 @@ import {
   type LogShape,
   lostRemoved,
   NEUTRAL_SHAPES,
+  rebroadcast,
 } from "./support/logShapes";
 
 const T0 = 1_000_000;
@@ -275,6 +277,91 @@ describe("log-shape matrix", () => {
       expect(base[1]).toBe(false);
       expect(base[3]).toBe(true);
       expectIndifferent(read);
+    });
+  });
+
+  describe("observedEffectEndSeconds — T308, an Avatar the log never closes", () => {
+    const AVATAR = "107574";
+    /** the owner's own row of Avatar (the chain reads its source by name) */
+    const own = (event: LogEvent, s: number) =>
+      ({
+        ...makeAuraEvent(event, AVATAR, ms(s), "p1", "p1", "BUFF"),
+        srcUnitName: "Owner",
+      }) as never;
+    /** the owner presses Avatar (20 s) at 10 s, no REMOVED; `evidence`: a
+     * REFRESH of it at 33 s (past its official end) */
+    const avatar = (evidence: boolean): ICombatUnit[] => {
+      const units = scenario();
+      const owner = byId(units, "p1");
+      owner.spellCastEvents.push(
+        makeSpellCastEvent(
+          AVATAR,
+          ms(10),
+          "p1",
+          "Owner",
+          "p1",
+          "Owner",
+        ) as never,
+      );
+      owner.auraEvents.push(
+        own(LogEvent.SPELL_AURA_APPLIED, 10),
+        ...(evidence ? [own(LogEvent.SPELL_AURA_REFRESH, 33)] : []),
+      );
+      owner.auraEvents.sort((a, b) => a.timestamp - b.timestamp);
+      return units;
+    };
+    const read = (units: ICombatUnit[]) => {
+      const owner = byId(units, "p1");
+      const at = owner.spellCastEvents.find((c) => c.spellId === AVATAR)!;
+      return observedEffectEndSeconds(
+        owner,
+        AVATAR,
+        r2((at.logLine.timestamp - T0) / 1000),
+        Infinity,
+        combatOf(units) as never,
+      );
+    };
+    it("is indifferent to the neutral shapes, with and without the evidence", () => {
+      for (const evidence of [true, false]) {
+        const base = read(avatar(evidence));
+        for (const shape of NEUTRAL_SHAPES)
+          expect(read(shape.apply(avatar(evidence))), shape.name).toEqual(base);
+      }
+      expect(read(avatar(true))).toBe(90);
+      expect(read(avatar(false))).toBeNull();
+    });
+    it("a re-broadcast mid-life is no lost end", () => {
+      const units = avatar(true);
+      const owner = byId(units, "p1");
+      owner.auraEvents.push(
+        own(LogEvent.SPELL_AURA_REMOVED, 25),
+        own(LogEvent.SPELL_AURA_APPLIED, 25),
+      );
+      owner.auraEvents.sort((a, b) => a.timestamp - b.timestamp);
+      expect(read(units)).toBe(read(rebroadcast.apply(avatar(true))));
+    });
+    it("a lost REMOVED reads no evidence it does not have: the official end stands", () => {
+      // REMOVED at 25 s and the REFRESH at 22 s, inside the official 20 s
+      const units = scenario();
+      const owner = byId(units, "p1");
+      owner.spellCastEvents.push(
+        makeSpellCastEvent(
+          AVATAR,
+          ms(10),
+          "p1",
+          "Owner",
+          "p1",
+          "Owner",
+        ) as never,
+      );
+      owner.auraEvents.push(
+        own(LogEvent.SPELL_AURA_APPLIED, 10),
+        own(LogEvent.SPELL_AURA_REFRESH, 22),
+        own(LogEvent.SPELL_AURA_REMOVED, 25),
+      );
+      owner.auraEvents.sort((a, b) => a.timestamp - b.timestamp);
+      expect(read(units)).toBe(25);
+      expect(read(lostRemoved([AVATAR]).apply(units))).toBeNull();
     });
   });
 

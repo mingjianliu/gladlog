@@ -3,7 +3,10 @@ import { CombatUnitType, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-import { auraSurelyUpPastMs } from "../src/utils/auraSurelyUp";
+import {
+  AURA_SURELY_UP_NEXT_PRESS_LEAD_MS,
+  auraSurelyUpPastMs,
+} from "../src/utils/auraSurelyUp";
 import {
   EFFECT_CHAIN_GAP_S,
   observedEffectEndSeconds,
@@ -574,5 +577,123 @@ describe("T308: a life the log never closes, shown still up past its official en
         T0 + 60_000,
       ),
     ).toBe(false);
+  });
+});
+
+describe("T308: what is and is not evidence (codex 85-tk-L5-T308-1)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const CAP = T0 + 30_000;
+  const END = T0 + 60_000;
+  const row = (s: number, extra: Record<string, unknown> = {}) => ({
+    srcUnitId: "c1",
+    destUnitId: "e1",
+    spellId: AVATAR,
+    spellName: "Avatar",
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + s * 1000 },
+    ...extra,
+  });
+  const caster = (rows: unknown[], auras: unknown[] = []) =>
+    ({ id: "c1", damageOut: rows, healOut: [], auraEvents: auras }) as never;
+  it("#1: a row inside the next press's lead is that press's own", () => {
+    const next = T0 + 50_000;
+    const lead = AURA_SURELY_UP_NEXT_PRESS_LEAD_MS / 1000;
+    expect(
+      auraSurelyUpPastMs(
+        caster([row(50 - lead / 2)]),
+        caster([]),
+        AVATAR,
+        AVATAR,
+        CAP,
+        next,
+        next,
+      ),
+    ).toBe(false);
+    expect(
+      auraSurelyUpPastMs(
+        caster([row(50 - 2 * lead)]),
+        caster([]),
+        AVATAR,
+        AVATAR,
+        CAP,
+        next,
+        next,
+      ),
+    ).toBe(true);
+  });
+  it("#2: another unit's copy — only hits on the holder count", () => {
+    const holder = { id: "e1", auraEvents: [] } as never;
+    const other = { id: "e2", auraEvents: [] } as never;
+    const c = caster([row(40)]);
+    expect(auraSurelyUpPastMs(c, holder, AVATAR, AVATAR, CAP, END)).toBe(true);
+    expect(auraSurelyUpPastMs(c, other, AVATAR, AVATAR, CAP, END)).toBe(false);
+  });
+  it("#8: an absorbed swing names the victim's shield, no row of the caster's", () => {
+    const absorbed = row(40, {
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: T0 + 40_000 },
+    });
+    expect(
+      auraSurelyUpPastMs(
+        caster([absorbed]),
+        caster([]),
+        AVATAR,
+        AVATAR,
+        CAP,
+        END,
+      ),
+    ).toBe(false);
+  });
+  it("#7: a re-broadcast pair mid-life is no lost end", () => {
+    const a = (ev: LogEvent, s: number) => ({
+      ...makeAuraEvent(ev, AVATAR, T0 + s * 1000, "c1", "c1", "BUFF"),
+    });
+    const holder = caster(
+      [],
+      [
+        a(LogEvent.SPELL_AURA_REMOVED, 35),
+        a(LogEvent.SPELL_AURA_APPLIED, 35),
+        a(LogEvent.SPELL_AURA_REFRESH, 40),
+      ],
+    );
+    expect(auraSurelyUpPastMs(holder, holder, AVATAR, AVATAR, CAP, END)).toBe(
+      true,
+    );
+  });
+});
+
+describe("T308: a copy shown still up outranks a closed one (codex 85-tk-L5-T308-1 #5)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  it("the caster's unclosed copy, refreshed past its cap, beats another copy's REMOVED", () => {
+    const a = (ev: LogEvent, s: number, dest: string) => ({
+      ...makeAuraEvent(ev, AVATAR, T0 + s * 1000, "c1", dest, "BUFF"),
+      srcUnitName: "Caster",
+    });
+    const caster = makeUnit("c1", {
+      name: "Caster",
+      auraEvents: [
+        a(LogEvent.SPELL_AURA_APPLIED, 10, "c1"),
+        a(LogEvent.SPELL_AURA_REFRESH, 33, "c1"),
+      ],
+    } as never);
+    const mate = makeUnit("c2", {
+      name: "Mate",
+      auraEvents: [
+        a(LogEvent.SPELL_AURA_APPLIED, 10.5, "c2"),
+        // closed past the caster's copy's refreshed cap (33 + 20 s): the
+        // longest chain before the fix, so the press read 55
+        a(LogEvent.SPELL_AURA_REMOVED, 55, "c2"),
+      ],
+    } as never);
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 60_000,
+      units: { c1: caster, c2: mate },
+    } as never;
+    expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
+      60,
+    );
   });
 });

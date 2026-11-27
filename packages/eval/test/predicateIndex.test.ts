@@ -133,6 +133,7 @@ import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as auraMasteryBranch from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import * as auraOnlyActivationsMod from "@gladlog/analysis/src/utils/auraOnlyActivations";
 import * as auraRebroadcast from "@gladlog/analysis/src/utils/auraRebroadcast";
+import * as auraSurelyUp from "@gladlog/analysis/src/utils/auraSurelyUp";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as brokenRowBreaker from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
@@ -1612,6 +1613,17 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyCDs.ts`,
     symbol: "observedEffectEndSeconds",
     mod: enemyCDs,
+  },
+  // pipeline T308: an aura with no REMOVED shown still up past its official end, read by scan5/t308
+  {
+    file: `${A}/utils/auraSurelyUp.ts`,
+    symbol: "auraSurelyUpPastMs",
+    mod: auraSurelyUp,
+  },
+  {
+    file: `${A}/utils/auraSurelyUp.ts`,
+    symbol: "AURA_SURELY_UP_PAST_MS",
+    mod: auraSurelyUp,
   },
   {
     file: `${A}/utils/kickAudit.ts`,

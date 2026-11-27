@@ -105,6 +105,7 @@ import {
   AURA_MASTERY_ID,
   auraMasteryPressWallStartMs,
 } from "./auraMasteryBranch";
+import { auraSurelyUpPastMs } from "./auraSurelyUp";
 import { binarySearchClosest } from "./binarySearch";
 import {
   buffDurationOfApplication,
@@ -9150,6 +9151,42 @@ export function hasOffensiveSpellActive(
       );
       if (fullS === undefined || timestampMs <= anchor + (fullS + 1) * 1000)
         return true;
+      // T308 (user 2026-11-27): …unless the log shows it still up past that
+      // length — the burst ledger's and the timeline's own reading
+      // (`auraSurelyUpPastMs`): then it ran on to the round's end or its
+      // next application (codex 85-tk-L5-T308-1 #6: a Breath of Sindragosa
+      // ticking 4 s past its 8 s, no REMOVED, read off by the threat gate
+      // while the timeline ran it on). The round's end only on the combat
+      // itself (its units); a caster this reader does not hold, no reading.
+      const caster =
+        srcId === unit.id
+          ? unit
+          : ((combat as { units?: Record<string, ICombatUnit> } | undefined)
+              ?.units?.[srcId] as ICombatUnit | undefined);
+      if (
+        fullS !== undefined &&
+        caster !== undefined &&
+        combat !== undefined &&
+        (combat as { units?: unknown }).units !== undefined
+      ) {
+        const untilMs = Math.min(roundEndMs(combat as never), nextApply);
+        if (
+          timestampMs <= untilMs &&
+          auraSurelyUpPastMs(
+            caster,
+            unit,
+            spellId,
+            offensiveCdOfAura(
+              spellId,
+              srcId === unit.id ? unit.spec : undefined,
+            ) ?? spellId,
+            applyTs + fullS * 1000,
+            untilMs,
+            nextApply,
+          )
+        )
+          return true;
+      }
     }
   }
   return false;
@@ -9264,9 +9301,18 @@ export function detectPanicDefensives(
   enemies: ICombatUnit[],
   combat: { startTime: number; endTime?: number },
 ): IPanicDefensive[] {
+  // …with its units when the caller has them: the occurrence reader runs
+  // an aura shown still up to the ROUND's end (a Solo Shuffle round's ending
+  // death) only on the combat itself (T308; codex 85-tk-L5-T308-1 #3 / #6)
   const round =
     typeof combat.endTime === "number"
-      ? { startTime: combat.startTime, endTime: combat.endTime }
+      ? {
+          startTime: combat.startTime,
+          endTime: combat.endTime,
+          ...((combat as { units?: unknown }).units !== undefined
+            ? { units: (combat as { units?: unknown }).units }
+            : {}),
+        }
       : undefined;
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));

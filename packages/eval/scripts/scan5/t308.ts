@@ -26,6 +26,7 @@
  * a life the corpus has seen).
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import {
   AURA_SURELY_UP_PAST_MS,
   auraSurelyUpPastMs,
@@ -61,8 +62,13 @@ export function run(ctx: IRoundCtx): void {
   }
   const endMs = roundEndMs(ctx.legacy);
   const endS = (endMs - ctx.start) / 1000;
-  const own = ((owner.auraEvents ?? []) as any[]).filter(
-    (r) => r.srcUnitId === owner.id && r.destUnitId === owner.id,
+  // re-broadcast pairs dropped, as the interval builder and the predicate
+  // read them (codex 85-tk-L5-T308-1 #7: a REMOVED / APPLIED pair mid-life
+  // read as a closed life)
+  const own = dropAuraRebroadcasts(
+    ((owner.auraEvents ?? []) as any[]).filter(
+      (r) => r.srcUnitId === owner.id && r.destUnitId === owner.id,
+    ),
   );
   const all = ledger.flatMap((x) => x.spells);
   for (const s of all) {
@@ -114,7 +120,15 @@ export function run(ctx: IRoundCtx): void {
     );
     const evidence = reapplied
       ? "lost: re-applied"
-      : auraSurelyUpPastMs(owner, owner, app.spellId, s.spellId, capMs, untilMs)
+      : auraSurelyUpPastMs(
+            owner,
+            owner,
+            app.spellId,
+            s.spellId,
+            capMs,
+            untilMs,
+            ctx.start + renewed * 1000,
+          )
         ? "surely up"
         : "can't tell";
     if (first) {

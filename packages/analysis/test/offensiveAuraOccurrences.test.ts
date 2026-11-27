@@ -588,3 +588,67 @@ describe("aura twins pair one cast with one application (codex 20-F15-25)", () =
     ]);
   });
 });
+
+describe("T308: an aura-only life the log shows still up (codex 85-tk-L5-T308-1 #1 #3 #4)", () => {
+  // Doom Winds 466772 (8 s) up at 10 s with no REMOVED; refreshed at 25 s
+  const doom = (extraCasts: any[] = []) =>
+    enh(extraCasts, [
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh"),
+      aura(LogEvent.SPELL_AURA_REFRESH, "466772", 25, "sh"),
+    ]);
+  const endOf = (u: any, bounds: any) =>
+    (auraOffensiveOccurrences(u, bounds).occurrences.find(
+      (o) => o.spellId === "384352",
+    )?.endMs ?? 0) - START;
+  const combatOf = (u: any) => ({
+    startTime: START,
+    endTime: s(60),
+    units: { sh: u },
+  });
+  it("a REFRESH past its official end is the evidence: to the round's end", () => {
+    const u = doom();
+    expect(endOf(u, combatOf(u))).toBe(60_000);
+  });
+  it("a synthetic window (no units, no round end) keeps the cap", () => {
+    const u = doom();
+    expect(endOf(u, { startTime: START, endTime: s(60) })).toBe(33_000);
+  });
+  it("the caster's next press ends it, though its application row was lost", () => {
+    const u = doom([cast("384352", 40, "sh")]);
+    expect(endOf(u, combatOf(u))).toBe(40_000);
+  });
+});
+
+describe("T308: the threat reader runs on what the timeline runs on (codex 85-tk-L5-T308-1 #6)", () => {
+  // Breath of Sindragosa's aura 1249658 (8 s) at 10 s, no REMOVED, its
+  // breath ticking at 22 s; the round ends at 60 s
+  const dk = () =>
+    makeUnit("dk", {
+      name: "Frost",
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [cast("152279", 10, "dk")],
+      auraEvents: [aura(LogEvent.SPELL_AURA_APPLIED, "1249658", 10, "dk")],
+      damageOut: [
+        {
+          srcUnitId: "dk",
+          destUnitId: "e1",
+          spellId: "1249658",
+          spellName: "Breath of Sindragosa",
+          logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(22) },
+        },
+      ],
+    } as any);
+  it("active at 30 s with the combat's units; off without them", () => {
+    const u = dk();
+    const combat = { startTime: START, endTime: s(60), units: { dk: u } };
+    expect(hasOffensiveSpellActive(u, s(30), null, undefined, combat)).toBe(
+      true,
+    );
+    expect(
+      hasOffensiveSpellActive(u, s(30), null, undefined, {
+        startTime: START,
+        endTime: s(60),
+      }),
+    ).toBe(false);
+  });
+});

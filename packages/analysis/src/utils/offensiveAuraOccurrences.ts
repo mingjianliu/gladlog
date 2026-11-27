@@ -400,6 +400,11 @@ function castTimes(unit: ICombatUnit, ids: ReadonlySet<string>): number[] {
 const cache = new WeakMap<object, Map<string, IAuraOccurrenceResult>>();
 const boundsCache = new WeakMap<object, Bounds | null>();
 
+/** T308: a cast row of the aura's press more than this after the aura went
+ * up is the caster's NEXT press — the press that put it up logs its cast row
+ * within `EFFECT_START_AFTER_S` (2 s, enemyCDs.ts) of its application */
+const EFFECT_PRESS_LEAD_MS = 2000;
+
 /**
  * The aura-evidenced offensive occurrences of one unit inside `bounds`.
  * Cached per unit + bounds (hasOffensiveSpellActive asks once per second).
@@ -408,12 +413,17 @@ export function auraOffensiveOccurrences(
   unit: ICombatUnit,
   bounds: Bounds,
 ): IAuraOccurrenceResult {
-  // T308: an aura shown still up past its cap runs to the round's end — a
-  // Solo Shuffle round's ending death when `bounds` is the combat (its
-  // units), else `bounds.endTime`; part of the key, as the same start / end
-  // can come with and without units
-  const roundEnd = roundEndMs(bounds);
-  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd}:${OFFENSIVE_AURA_FLAGS.demonic}`;
+  // T308: an aura shown still up past its cap runs to the round's end —
+  // read only when `bounds` is the combat itself (its units: a Solo Shuffle
+  // round's ending death). A synthetic window (a reader's own start / end)
+  // knows no round end and would read a strike after the round's ending
+  // death as evidence (codex 85-tk-L5-T308-1 #3); it keeps the official
+  // end. Part of the key: the same start / end come both ways.
+  const roundEnd =
+    (bounds as { units?: unknown }).units !== undefined
+      ? roundEndMs(bounds)
+      : undefined;
+  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${OFFENSIVE_AURA_FLAGS.demonic}`;
   let byKey = cache.get(unit);
   if (!byKey) {
     byKey = new Map();
@@ -500,26 +510,54 @@ export function auraOffensiveOccurrences(
     const startMs = bounds.startTime + iv.fromS * 1000;
     let endMs = bounds.startTime + iv.toS * 1000;
     const endObserved = !iv.inferredEnd;
-    // T308 (user 2026-11-27): a life the log never closes that it shows
-    // still up past its official cap ran on to the round's end, or to this
-    // aura's next application (605 90c01e7f r6: Doom Winds, pressed with only
-    // its aura in the log, struck 2 s past its 10 s with no REMOVED) — the
-    // press-row reading's own predicate (`observedEffectEnd`)
-    if (iv.inferredEnd && !iv.inferredStart) {
-      const nextFromS = intervals
-        .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
-        .reduce((m, o) => Math.min(m, o.fromS), Infinity);
-      const untilMs = Math.min(roundEnd, bounds.startTime + nextFromS * 1000);
-      if (
-        auraSurelyUpPastMs(unit, unit, iv.spellId, iv.spellId, endMs, untilMs)
-      )
-        endMs = untilMs;
-    }
     /** the aura's own official end for this caster, from its own start */
     const auraFull = buffDurationOfApplication(iv.spellId, unit, startMs);
     const auraOfficialEndMs =
       auraFull === undefined ? undefined : startMs + auraFull * 1000;
-
+    // T308 (user 2026-11-27): a life the log never closes that it shows
+    // still up past its official end ran on to the round's end, or to the
+    // caster's next press of it (605 90c01e7f r6: Doom Winds, pressed with
+    // only its aura in the log, struck 2 s past its 10 s with no REMOVED) —
+    // the press-row reading's own predicate (`observedEffectEnd`). Past the
+    // aura's own official end, not the builder's cap from a later REFRESH:
+    // that REFRESH is the evidence (codex 85-tk-L5-T308-1 #4). The next press
+    // is its next application or the caster's next cast row of it, whichever
+    // the log shows first — a press whose application row was lost still
+    // ends this life (#1).
+    if (roundEnd !== undefined && iv.inferredEnd && !iv.inferredStart) {
+      const nextFromS = intervals
+        .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
+        .reduce((m, o) => Math.min(m, o.fromS), Infinity);
+      const auraName = getEnglishSpellName(iv.spellId, iv.spellName);
+      const pressId = genericCdOfAura(iv.spellId, unit.spec);
+      const nextCastMs = successes
+        .filter(
+          (c) =>
+            c.logLine.timestamp > startMs + EFFECT_PRESS_LEAD_MS &&
+            (c.spellId === iv.spellId ||
+              c.spellId === pressId ||
+              getEnglishSpellName(c.spellId!, c.spellName ?? "") === auraName),
+        )
+        .reduce((m, c) => Math.min(m, c.logLine.timestamp), Infinity);
+      const nextPressMs = Math.min(
+        bounds.startTime + nextFromS * 1000,
+        nextCastMs,
+      );
+      const untilMs = Math.min(roundEnd, nextPressMs);
+      const capMs = Math.min(endMs, auraOfficialEndMs ?? endMs);
+      if (
+        auraSurelyUpPastMs(
+          unit,
+          unit,
+          iv.spellId,
+          pressId ?? iv.spellId,
+          capMs,
+          untilMs,
+          nextPressMs,
+        )
+      )
+        endMs = untilMs;
+    }
     const formName = OFFENSIVE_FORM_FACT_AURAS.get(iv.spellId);
     if (formName !== undefined) {
       if (iv.inferredStart) continue;

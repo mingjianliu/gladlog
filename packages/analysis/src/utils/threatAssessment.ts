@@ -98,9 +98,18 @@ export function threatActiveAt(
   const tMs = combat.startTime + tSeconds * 1000;
 
   // GH #119: the round, so aura-evidenced bursts read the timeline's bounds
+  // …with its units when the caller has them: the occurrence reader runs
+  // an aura shown still up to the ROUND's end (a Solo Shuffle round's ending
+  // death) only on the combat itself (T308; codex 85-tk-L5-T308-1 #3 / #6)
   const round =
     typeof combat.endTime === "number"
-      ? { startTime: combat.startTime, endTime: combat.endTime }
+      ? {
+          startTime: combat.startTime,
+          endTime: combat.endTime,
+          ...((combat as { units?: unknown }).units !== undefined
+            ? { units: (combat as { units?: unknown }).units }
+            : {}),
+        }
       : undefined;
   if (
     enemies.some((e) =>
