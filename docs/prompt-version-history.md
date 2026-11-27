@@ -8867,3 +8867,33 @@ on 605 28,620 -> 28,420; no violation kind rose on either corpus (fell:
 intoDefenseLanded over / under, pressImmuneTagLanded; on 605 also
 pressNamedRead / unregisteredCompanion 234 -> 229, lines T281 removes); gates
 identical on both.
+
+v676 (pipeline batch B257, WSL bundle W2: T241 T166 T246; user ruling
+2026-11-26: bundled; T166's opener rule is the user's 2026-11-26 ruling: name
+the press in the burst's first second). Per ticket, measured by its lane on its
+own base (605 | 1215):
+T241 — talent-scripted cooldowns for Voidblade 1245412, Pierce the Veil 1245483
+and Tiger's Fury 5217 (12.1.5 era): cooldownRecastScan model-impossible
+re-presses 57 / 225, 149 / 230, 14 / 283 -> 0, 77 (the rest is T271's), 0 on
+the 1215 files; 605 capture byte-identical; 1215 27 context files, 87 lines
+(27 [PRESS] Dash, 21 <cooldowns>, 39 [RES]).
+T166 — the burst ledger's opener anchor and wall school: scan5
+anchorPressedAfterOpen 15 | 6 -> 0 | 0, ledgerWallSchool (printed, the ledger
+holds none) 80 | 35 -> 0 | 0; 'Target had a major defensive up' lines without
+ledger evidence removed.
+T246 — Spiritwalker's Aegis / Grace last their talented length: raw-log fit
+(predicted length within 0.5 s of the logged life) Aegis 287 -> 402 of 412,
+Grace 316 -> 348 of 384 (605 + 1215); [PRESS] `lasts` +1 s on the 12 lines of
+its cover set, +1 to +3 s | +1 to +2 s on the changed lines of the full 605 |
+1215 (e.g. 605 a934b1af r5 2:18 Spiritwalker's Grace 16s -> 19s).
+Bundle check (wsl2 BW-2-W2, 7fc206b9e -> eb9943210, both sides on one machine;
+re-picked onto B256 071d5d415, which shares only the scan5 / predicate-index
+files): 605 — [PRESS] 42 / 42 (T246), legend/other +15 / -95 (T166), 125
+contexts; 1215 — [PRESS] 70 / 70 + [YOU] [PRESS] 5 / 5 (T246 48 Spiritwalker's
+Grace, T241 27 Dash), [RES] 39 / 39 (T241), legend/other +27 / -62 (T166 +6 /
+-41, T241 21 <cooldowns>), 108 contexts; each kind equals the sum of its
+tickets' own checks. scan5 in-total violations 30,212 -> 30,093 | 34,594 ->
+34,526; no violation kind rose (fell: anchorPressedAfterOpen, ledgerWallSchool,
+offListPressLine lastsBeyond 47 -> 23 | 159 -> 132); the only rise is the
+pressChainLasts nominated inventory 1,731 -> 1,734 (1215, not in the total);
+gates identical.

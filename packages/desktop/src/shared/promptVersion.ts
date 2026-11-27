@@ -1990,5 +1990,13 @@
  *  cast that landed before an immunity or wall opened is no longer listed as
  *  cast into it, and one leaves a wall's count only on evidence that another
  *  aura refused it. See docs/prompt-version-history.md.
+ *
+ * v676 (2026-11-26; pipeline batch B257, WSL bundle W2: T241 T166 T246):
+ *  Dash, Survival Instincts and the Devourer Demon Hunter's Voidblade /
+ *  Pierce the Veil (Voidrush: Collapsing Star takes 10 s off) follow their
+ *  talent-scripted reductions; the burst ledger names an opener pressed in
+ *  the burst's first second and states a wall's school only when the ledger
+ *  holds it; Spiritwalker's Aegis / Grace last their talented length. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 675;
+export const PROMPT_VERSION = 676;
