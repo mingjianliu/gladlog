@@ -53,9 +53,25 @@ const ids = (): string[] =>
   );
 const opts = (): unknown => vi.mocked(startBatch).mock.calls[0]![1];
 
+describe("批量分析栏:默认收起", () => {
+  it("没勾选时只显示一个展开按钮;勾选了对局就直接展开", () => {
+    const { unmount } = render(<BatchAnalyzeBar metas={metas} />);
+    expect(screen.queryByTestId("batch-skip")).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "批量 AI 分析" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+    unmount();
+    render(<BatchAnalyzeBar metas={metas} selected={new Set(["a1"])} />);
+    expect(screen.getByTestId("batch-skip")).toBeTruthy();
+  });
+});
+
 describe("批量分析栏:跳过已分析开关", () => {
   it("默认勾选:已分析的非 shuffle 预过滤掉,shuffle 永不预过滤;传 skipAnalyzed:true", async () => {
     render(<BatchAnalyzeBar metas={metas} />);
+    fireEvent.click(screen.getByRole("button", { name: "批量 AI 分析" }));
     expect((screen.getByTestId("batch-skip") as HTMLInputElement).checked).toBe(
       true,
     );
@@ -67,6 +83,7 @@ describe("批量分析栏:跳过已分析开关", () => {
 
   it("取消勾选 = 重新分析:不预过滤,传 skipAnalyzed:false", async () => {
     render(<BatchAnalyzeBar metas={metas} />);
+    fireEvent.click(screen.getByRole("button", { name: "批量 AI 分析" }));
     fireEvent.click(screen.getByTestId("batch-skip"));
     fireEvent.click(screen.getByRole("button", { name: "开始" }));
     await waitFor(() => expect(startBatch).toHaveBeenCalledTimes(1));

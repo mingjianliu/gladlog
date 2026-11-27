@@ -101,8 +101,19 @@ const fmtDayTime = (t: TFn, ms: number): string => {
   return `${fmtDay(t, ms)} ${hh}:${mm}`;
 };
 
+/** A first rating below this is a placement / fresh character, not a climb:
+ * "▲2040 from 96" reads as a 2000-point gain. Such lines say "new, from N"
+ * and show no change. User-approved threshold (2026-11-27 canvas review). */
+export const FRESH_BASELINE = 1000;
+
 function Delta({ value, from }: { value: number | null; from?: number | null }) {
   const { t } = useT();
+  if (from != null && from < FRESH_BASELINE)
+    return (
+      <span className="cs-delta cs-delta-none" data-testid="cs-fresh">
+        {t("stats.cs.fresh", { from })}
+      </span>
+    );
   if (value == null)
     return <span className="cs-delta cs-delta-none">{t("stats.cs.noDelta")}</span>;
   const cls =
@@ -206,13 +217,14 @@ export function BracketRow({ line }: { line: BracketLine }) {
         <span className="cs-line-num">{line.rating ?? "—"}</span>
         <Delta value={line.delta} from={line.baseline} />
       </span>
+      {/* The trend sits beside the number it explains (direction pass). */}
+      <MiniSpark line={line} />
       <span className="cs-line-rec">
         <span className="cs-rec-text" title={`${rec.primary} ${rec.secondary}`}>
           <b>{rec.primary}</b> <span className="cs-dim">{rec.secondary}</span>
         </span>
         <RateBar wins={line.rateWins} games={line.rateGames} />
       </span>
-      <MiniSpark line={line} />
     </div>
   );
 }
@@ -676,44 +688,34 @@ export function CharacterDetail({
             ))}
           </div>
 
-          <div className="cs-kpis">
-            <div>
-              <span className="cs-k">{t("stats.cs.kpi.current")}</span>
-              <span className="cs-v cs-v-lg">{line.rating ?? "—"}</span>
-            </div>
-            <div>
-              <span className="cs-k">{t("stats.cs.kpi.change")}</span>
-              <span className="cs-v cs-v-lg">
-                <Delta value={line.delta} />
+          {/* One headline line instead of four equal figure cards
+            (direction pass 2026-11-27): current rating large, then peak,
+            change and record as plain text. */}
+          <p className="cs-headline" data-testid="cs-headline">
+            <span className="cs-headline-num">{line.rating ?? "—"}</span>
+            {line.peak != null && (
+              <span className="cs-headline-part">
+                {line.peak === line.rating
+                  ? t("stats.cs.atPeak")
+                  : t("stats.cs.peakIs", { peak: line.peak })}
               </span>
-              {line.baseline != null && line.rating != null && (
-                <span className="cs-dim cs-small">
-                  {line.baseline} → {line.rating}
-                </span>
-              )}
-            </div>
-            <div>
-              <span className="cs-k">{t("stats.cs.kpi.peak")}</span>
-              <span className="cs-v cs-v-lg">{line.peak ?? "—"}</span>
-            </div>
-            <div>
-              <span className="cs-k">
-                {t("stats.cs.record", {
-                  unit: t(
-                    line.perRound ? "stats.cs.unitRounds" : "stats.cs.unitMatches",
-                  ),
-                })}
-              </span>
-              <span className="cs-v cs-v-lg">
-                {line.rateWins}-{line.rateGames - line.rateWins}{" "}
-                <span className="cs-sub">
-                  {line.rateGames > 0
-                    ? `${Math.round((100 * line.rateWins) / line.rateGames)}%`
-                    : ""}
-                </span>
-              </span>
-            </div>
-          </div>
+            )}
+            <span className="cs-headline-part">
+              {t("stats.cs.kpi.change")} <Delta value={line.delta} from={line.baseline} />
+            </span>
+            <span className="cs-headline-part">
+              {t("stats.cs.record", {
+                unit: t(
+                  line.perRound ? "stats.cs.unitRounds" : "stats.cs.unitMatches",
+                ),
+              })}{" "}
+              <b className="cs-headline-rec">
+                {line.rateWins}–{line.rateGames - line.rateWins}
+              </b>
+              {line.rateGames > 0 &&
+                ` ${Math.round((100 * line.rateWins) / line.rateGames)}%`}
+            </span>
+          </p>
 
           <div className="dash-card">
             <span className="dash-card-head">

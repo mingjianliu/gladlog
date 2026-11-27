@@ -11,33 +11,56 @@
 @import "@fontsource/inter/latin-500.css";
 @import "@fontsource/inter/latin-600.css";
 @import "@fontsource/inter/latin-700.css";
+@import "@fontsource/barlow-semi-condensed/latin-500.css";
+@import "@fontsource/barlow-semi-condensed/latin-600.css";
 :root {
-  --bg: #12141d;
-  --surface: #1b1e2c;
-  --surface-2: #12141f;
-  --hairline: #2c2f3d;
-  --hairline-soft: #23262f;
-  --ink: #e9e9ed;
-  --ink-2: #b2b6ca;
-  --mute: #8f93a8;
-  --accent: #9184d9;
-  --accent-text: #d2cefd;
-  --accent-soft: #b5abfc;
-  --accent-fill: #2b2741;
-  --accent-line: #5d5294;
+  /* 2026-11-27 direction pass (Design canvas «新方向样例»): no chrome accent.
+     Colour is reserved for data — ally teal, kill red; identity = class colour
+     on the spec avatar ring only. "accent" survives as a token name so the
+     ~150 call sites keep working, but it now means "selected / focused" in
+     Bone, not a brand purple. */
+  --bg: #17191e; /* Basalt */
+  --surface: #1d2026;
+  --surface-hero: #242830; /* Slate — the one raised surface per page */
+  --surface-2: #14161a;
+  --hairline: #2a2e37;
+  --hairline-soft: #23262e;
+  --ink: #e7e2d7; /* Bone */
+  --ink-2: #b8b4ab;
+  --mute: #8a8f9c; /* Ash */
+  --accent: #e7e2d7;
+  --accent-text: #e7e2d7;
+  --accent-soft: #e7e2d7;
+  --accent-fill: #2e323b;
+  --accent-line: #4a4f5c;
   --gold: #d9a842;
   --gold-dim: #8a7344;
-  --win: #7ac9a3;
-  --loss: #e08585;
+  --win: #5fb3a6; /* Ally / win */
+  --loss: #e5605a; /* Kill / loss */
+  --kill: #e5605a;
+  --kill-soft: rgb(229 96 90 / 16%);
   /* Team identity (我方/敌方). Same two hues as win/loss, named separately
      because they are a different fact: the replay's health frames already
      borrowed --win/--loss to mean friend/foe, and an overloaded token is how
      "dim the loss colour a bit" silently repaints half the roster. Aliased for
      now; they can diverge without touching a single call site. */
   --friend: var(--win);
-  --foe: var(--loss);
-  --font-ui: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
-  --font-data: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+  /* Enemies are Ash, not red: red now means a death / the kill window only. */
+  --foe: #8a8f9c;
+  /* CJK goes to an explicit Simplified-Chinese system face (PingFang SC /
+     Microsoft YaHei / Noto Sans CJK SC). Left to the generic fallback, macOS
+     picked a Japanese face for shared Han characters (门 / 骨 drawn the
+     Japanese way) — the "why is it Japanese" report. html[lang] is set by
+     LangProvider as well. */
+  --font-ui:
+    "Inter", -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", system-ui, "Segoe UI", sans-serif;
+  --font-data: var(--font-ui);
+  /* Condensed numerals for times and headline figures only (death time, KPI
+     values, ratings, meter amounts). Not for every small label — that is the
+     "monospace data label" tell the direction pass rejects. Self-hosted
+     (@fontsource) for the same offline / baseline reasons as Inter. */
+  --font-num: "Barlow Semi Condensed", var(--font-ui);
   /* 真等宽,**只给开发者页**用(JSON 树、路径、文件名)。产品 UI 仍然
      全 Inter + tabular-nums —— 上面那条注释说的「不再 monospace」没被推翻。
      JSON 树是全 app 唯一真吃字符对齐的地方:key/value 列不齐,读嵌套结构
@@ -7329,7 +7352,7 @@ li:hover .mlr-check,
   vertical-align: middle;
 }
 .radar-table tr.radar-first {
-  background: rgb(145 132 217 / 8%);
+  background: rgb(231 226 215 / 5%);
 }
 .radar-table tr.radar-nodata {
   opacity: 0.55;
@@ -7578,4 +7601,377 @@ td.radar-matrix-spec {
 .radar-cell.current {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Direction pass (2026-11-27, «新方向样例» on the Design canvas, approved).
+   Overrides the visual pass above where they disagree:
+   1. one raised surface per page (--surface-hero): the death headline + HP
+      curve on the report; everything else is flat, separated by hairlines;
+   2. no chrome accent — selection is a Bone underline; colour is data only
+      (ally teal / kill red; class colour on the spec avatar ring);
+   3. condensed numerals (--font-num) for times and headline figures only.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* wordmark: plain lower-case name, no tracked caps, no rule after it */
+.app-topbar h1 {
+  font-family: var(--font-num);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.app-topbar h1::after {
+  content: none;
+}
+
+/* flat sections instead of cards */
+.rpt-meters-card,
+.rpt-timeline,
+.dash-card,
+.rpt-ledger,
+.rpt-engage,
+.rpt-recap,
+.coach-chat-card,
+.rpt-gcd {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+}
+.rpt-meters-card,
+.dash-card,
+.rpt-ledger,
+.rpt-engage,
+.rpt-recap,
+.rpt-gcd {
+  padding: 14px 0 0;
+}
+
+/* report: the death hero */
+.rpt-death-hero {
+  background: var(--surface-hero);
+  border-radius: 6px;
+  padding: 22px 26px 14px;
+  gap: 18px;
+}
+.rpt-death-hero .rpt-timeline {
+  border-top: none;
+  padding: 0;
+}
+.rpt-hero-curve {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.rpt-verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 28px;
+}
+.rpt-verdict-time {
+  font-family: var(--font-num);
+  font-weight: 600;
+  font-size: 68px;
+  line-height: 0.95;
+  color: var(--kill);
+  letter-spacing: -0.01em;
+}
+.rpt-verdict-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  min-width: 0;
+}
+.rpt-verdict-text {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.rpt-verdict-why {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  font-size: 14px;
+}
+.rpt-verdict-row {
+  display: contents;
+}
+.rpt-verdict-why dt {
+  color: var(--mute);
+}
+.rpt-verdict-why dd {
+  margin: 0;
+}
+.rpt-verdict-open {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+  padding-top: 8px;
+}
+.rpt-verdict-open:hover {
+  text-decoration-color: var(--ink);
+}
+@media (max-width: 900px) {
+  .rpt-verdict {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rpt-verdict-time {
+    font-size: 48px;
+  }
+}
+.rpt-kpi-strip {
+  padding: 2px 4px;
+}
+.rpt-kpi-row {
+  gap: 6px 36px;
+}
+.rpt-kpi-v {
+  font-family: var(--font-num);
+  font-size: 20px;
+  font-weight: 600;
+}
+.rpt-kpi-v .rpt-kpi-major,
+.rpt-kpi-v .rpt-kpi-passive {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 400;
+}
+.rpt-hero-fact {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.rpt-hero-fact .rpt-kpi-v {
+  font-size: 15px;
+}
+
+/* HP curve: the dead unit leads, the rest step back */
+.rpt-tl-line.rpt-tl-ghost,
+.rpt-tl-seg.rpt-tl-ghost {
+  opacity: 0.22;
+}
+.rpt-tl-seg.rpt-tl-spot {
+  stroke-width: 3;
+}
+.rpt-tl-line.rpt-tl-spot {
+  stroke-width: 3;
+  opacity: 0.55;
+}
+/* the kill attempt is a kill-red stretch, not gold */
+.rpt-tl-band-burst {
+  fill: var(--kill-soft);
+  stroke: rgb(229 96 90 / 45%);
+}
+.rpt-replay-band-burst {
+  background: color-mix(in srgb, var(--kill) 30%, transparent);
+}
+
+/* replay: deaths on the scrubber + "watch the death" */
+.rpt-replay-deathmarks {
+  position: absolute;
+  inset: 2px 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.rpt-replay-deathmark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--kill);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.rpt-replay-deathmark:hover {
+  width: 5px;
+  margin-left: -2px;
+}
+.rpt-replay-jump-death {
+  border-color: var(--kill);
+  color: #f0a49d;
+}
+
+/* GCD lanes: columns share the width (no hidden 4th column), plain rows,
+   majors in bold, time axis pinned while scrolling sideways */
+.rpt-gcd-body {
+  min-width: 100%;
+}
+.rpt-gcd-col-wrap {
+  flex: 1 1 112px;
+  min-width: 112px;
+}
+.rpt-gcd-col,
+.rpt-gcd-col.compact {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rpt-gcd-axis {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--bg);
+}
+.rpt-gcd-act {
+  background: transparent;
+  border: none;
+  padding: 0 4px;
+  color: var(--ink-2);
+}
+.rpt-gcd-act:hover {
+  background: var(--surface);
+}
+.rpt-gcd-act.major {
+  background: transparent;
+  border: none;
+  font-weight: 700;
+  color: var(--ink);
+}
+.rpt-gcd-act.major .rpt-gcd-act-name,
+.rpt-gcd-act-cd,
+.rpt-gcd-legend {
+  color: var(--ink);
+}
+.rpt-gcd-divider {
+  background: var(--hairline);
+}
+
+/* sidebar: batch analysis folded into one quiet line */
+.batch-bar-folded {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.batch-toggle {
+  border: none;
+  padding: 4px 0;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.batch-toggle::before {
+  content: "+ ";
+  color: var(--mute);
+}
+.batch-toggle[aria-expanded="true"]::before {
+  content: "− ";
+}
+.batch-toggle:hover {
+  color: var(--ink);
+}
+.mlr-rating {
+  font-family: var(--font-num);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* record overview: trend beside the rating, no outer card */
+.cs-grid {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+}
+.cs-card {
+  border-top: 1px solid var(--hairline-soft);
+}
+.cs-card:first-child {
+  border-top: none;
+}
+.cs-line {
+  grid-template-columns: 104px 200px minmax(160px, 420px) 190px;
+  gap: 24px;
+}
+.cs-line-num {
+  font-family: var(--font-num);
+  font-size: 28px;
+  line-height: 1;
+}
+.cs-delta-up,
+.cs-delta-down {
+  font-family: var(--font-num);
+  font-size: 16px;
+  font-weight: 600;
+}
+.cs-delta-flat,
+.cs-delta-none,
+.cs-delta-from {
+  color: var(--mute);
+}
+.cs-spark {
+  justify-self: start;
+  max-width: 420px;
+}
+.cs-line-rec {
+  justify-self: start;
+}
+.cs-line-rec .cs-bar {
+  width: 150px;
+}
+/* win bar: teal = share won over a dim-red track; 50 % tick */
+.cs-bar {
+  background: rgb(229 96 90 / 22%);
+  border-radius: 0;
+}
+.cs-bar-fill,
+.cs-bar-win,
+.cs-bar-loss {
+  background: var(--win);
+  border-radius: 0;
+}
+.cs-bar-thin {
+  background: var(--mute);
+}
+.cs-bar-mid {
+  background: var(--ink-2);
+}
+.cs-chip {
+  background: transparent;
+  border: 1px solid var(--hairline);
+}
+.cs-chip-on {
+  background: var(--accent-fill);
+  border-color: var(--accent-line);
+}
+/* character detail: one headline line instead of four figure cards */
+.cs-headline {
+  margin: 4px 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 28px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.cs-headline-num {
+  font-family: var(--font-num);
+  font-weight: 600;
+  font-size: 48px;
+  line-height: 1;
+  color: var(--ink);
+}
+.cs-headline-rec {
+  font-family: var(--font-num);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cs-headline .cs-delta {
+  font-size: 14px;
+}
+.cs-headline .cs-delta-up,
+.cs-headline .cs-delta-down {
+  font-size: 18px;
+}
+/* dampening lane: a neutral ramp, not a fifth hue */
+.rpt-dampening-lane {
+  fill: var(--mute);
 }

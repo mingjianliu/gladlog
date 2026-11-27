@@ -113,8 +113,14 @@ export function Timeline({
   onMetric,
   flow,
   teamSides,
+  spotlightUnitId,
 }: {
   data: TimelineData;
+  /** The unit whose death the report headline is about (direction pass
+   * 2026-11-27): its curve is drawn heavier and the others step back, so the
+   * curve tells the same story as the headline above it. Hover focus still
+   * wins while the pointer is on a curve or legend entry. */
+  spotlightUnitId?: string;
   onSelectUnit?: (unitId: string) => void;
   /** Bulk setter for the SAME hidden set `onSelectUnit` toggles one entry of.
    * Exists for 只看我方, which has to change several entries at once; a
@@ -616,7 +622,13 @@ export function Timeline({
         {(isFlow ? [] : linePaths).map(({ s, d, segs }) => {
           const enemy = sideOf(s.unitId) === "enemy";
           const dim = focusUnitId != null && focusUnitId !== s.unitId;
-          const mod = `${enemy ? " rpt-tl-line-enemy" : ""}${dim ? " rpt-tl-dim" : ""}`;
+          const spot =
+            focusUnitId == null &&
+            spotlightUnitId != null &&
+            linePaths.some((p) => p.s.unitId === spotlightUnitId);
+          const ghost = spot && s.unitId !== spotlightUnitId;
+          const lead = spot && s.unitId === spotlightUnitId;
+          const mod = `${enemy ? " rpt-tl-line-enemy" : ""}${dim ? " rpt-tl-dim" : ""}${ghost ? " rpt-tl-ghost" : ""}${lead ? " rpt-tl-spot" : ""}`;
           const common = {
             fill: "none",
             stroke: classColor(s.classId),

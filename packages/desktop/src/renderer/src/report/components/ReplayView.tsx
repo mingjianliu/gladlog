@@ -67,6 +67,10 @@ interface SeekRequest {
   nonce: number;
 }
 
+/** "Watch the death" starts this far before it: the lead-up is the part
+ * worth watching, the instant itself is one frame. */
+const DEATH_LEAD_MS = 5_000;
+
 export function ReplayView({
   source,
   seekReq,
@@ -258,6 +262,17 @@ export function ReplayView({
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [playing, endTime, speed]);
+
+  // The death the report headline is about: our side's last death, else the
+  // round's last death (a round we won ends on theirs).
+  const lastDeathTrack = (() => {
+    const dead = tracks.filter((tr) => tr.deathT != null);
+    const ours = dead.filter((tr) => tr.side === "friendly");
+    const pool = ours.length > 0 ? ours : dead;
+    return pool.length > 0
+      ? pool.reduce((a, b) => (b.deathT! > a.deathT! ? b : a))
+      : null;
+  })();
 
   if (tracks.length === 0) {
     return (
@@ -1178,6 +1193,39 @@ export function ReplayView({
               );
             })}
           </div>
+          {/* Deaths on the scrubber (direction pass 2026-11-27): the report
+              is built around a death, so the replay's time axis marks it too
+              — one red tick per death, clickable like a band. */}
+          <div className="rpt-replay-deathmarks">
+            {tracks
+              .filter((tr) => tr.deathT != null)
+              .map((tr) => {
+                const span = Math.max(1, endTime - startTime);
+                const left = ((tr.deathT! - startTime) / span) * 100;
+                if (left < 0 || left > 100) return null;
+                return (
+                  <button
+                    key={tr.unitId}
+                    type="button"
+                    className="rpt-replay-deathmark"
+                    data-testid="replay-deathmark"
+                    style={{ left: `${left}%` }}
+                    aria-label={tt("report.replay.deathMark", {
+                      name: shortUnitName(tr.name),
+                      t: relTime(tr.deathT!, startTime),
+                    })}
+                    title={tt("report.replay.deathMark", {
+                      name: shortUnitName(tr.name),
+                      t: relTime(tr.deathT!, startTime),
+                    })}
+                    onClick={() => {
+                      setT(tr.deathT!);
+                      setPlaying(false);
+                    }}
+                  />
+                );
+              })}
+          </div>
           <input
             type="range"
             aria-label={tt("report.replay.scrubAria")}
@@ -1211,6 +1259,23 @@ export function ReplayView({
             </button>
           ))}
         </div>
+        {lastDeathTrack && (
+          <button
+            className="rpt-btn rpt-replay-jump-death"
+            data-testid="replay-jump-death"
+            onClick={() => {
+              setT(
+                Math.max(startTime, lastDeathTrack.deathT! - DEATH_LEAD_MS),
+              );
+              setPlaying(false);
+            }}
+          >
+            {tt("report.replay.jumpDeath", {
+              name: shortUnitName(lastDeathTrack.name),
+              s: DEATH_LEAD_MS / 1000,
+            })}
+          </button>
+        )}
         {/* "深挖此刻" (Task 6): one-click AI deep-dive on a ±10s window around
             the current playback instant — jumps to the report view where the
             result renders (same card as the toolbar's "AI 分析此段"). */}

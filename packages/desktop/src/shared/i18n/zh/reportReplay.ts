@@ -68,6 +68,8 @@ export const zhReportReplay = {
   "report.replay.damp": "衰减 {pct}%",
   "report.replay.diveTitle": "对当前时刻前后 10s 做一次 AI 深挖(密集快照)",
   "report.replay.dive": "深挖此刻",
+  "report.replay.deathMark": "{name} 阵亡 {t}",
+  "report.replay.jumpDeath": "看 {name} 阵亡前 {s} 秒",
   "report.replay.helpAria": "快捷键与图例说明",
 
   // ── Timeline.tsx ──

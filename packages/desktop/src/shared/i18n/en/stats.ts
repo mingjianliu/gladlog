@@ -103,6 +103,9 @@ export const enStats = {
     `${plural(p.n, "more character", "more characters")} with fewer than ${p.min} matches:`,
   "stats.cs.unnamed": (p: MessageParams) =>
     `· ${plural(p.n, "older match", "older matches")} without a recorded character, not on the cards`,
+  "stats.cs.fresh": "New character, from {from}",
+  "stats.cs.atPeak": "also the peak for this period",
+  "stats.cs.peakIs": "peak {peak}",
   "stats.cs.noDelta": "Not enough ratings for a change",
   "stats.cs.deltaFrom": " from {from}",
   "stats.cs.unitRounds": "rounds",

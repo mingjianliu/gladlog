@@ -215,15 +215,14 @@ export const enReportCards = {
 
   // ── KpiChips.tsx ──
   // ── VerdictLine.tsx ──
-  "report.verdict.died": "{time} {name} died",
-  "report.verdict.unpressed": "{spell} was up and not pressed",
+  "report.verdict.died": "{name} died",
   "report.verdict.yours": "You",
   "report.verdict.whose": "{name}",
-  "report.verdict.missed": "{caster} could have given {spell}",
-  "report.verdict.blocked": "{caster} could not give {spell} (CC'd)",
-  "report.verdict.sep": "; ",
-  "report.verdict.end": ".",
-  "report.verdict.open": "Open death recap",
+  "report.verdict.castSpell": "{caster}: {spell}",
+  "report.verdict.lblUnpressed": "Up, not pressed",
+  "report.verdict.lblMissed": "Could have given",
+  "report.verdict.lblBlocked": "CC'd, couldn't give",
+  "report.verdict.open": "Open full death recap",
   "report.kpi.findings": "Findings",
   "report.kpi.majorN": "{n} major",
   "report.kpi.restN": "{n} average",

@@ -77,6 +77,8 @@ export const enReportReplay = {
   "report.replay.diveTitle":
     "Run an AI deep dive on the 10s around this moment (dense snapshot)",
   "report.replay.dive": "Deep dive here",
+  "report.replay.deathMark": "{name} died at {t}",
+  "report.replay.jumpDeath": "Watch {name}'s last {s}s",
   "report.replay.helpAria": "Shortcuts and legend",
 
   // ── Timeline.tsx ──

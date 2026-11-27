@@ -1110,9 +1110,10 @@ export function MatchReport({
         )}
         {view === "report" && L1 && (
           <div className="rpt-body">
-            {/* KPI chips row (UI redesign 1a): whole-match glance, never linked
-              to the time window */}
-            <div className="rpt-summary">
+            {/* Hero (direction pass 2026-11-27): the one raised surface on
+              the page — the death headline over the HP curve it happened
+              on. Whole-match figures sit under it as a plain row. */}
+            <div className="rpt-summary rpt-death-hero">
               {verdictRecap && (
                 <VerdictLine
                   recap={verdictRecap}
@@ -1122,6 +1123,118 @@ export function MatchReport({
                   }}
                 />
               )}
+              <div className="rpt-hero-curve">
+                <div className="rpt-toolbar-row">
+                  <TimeRangeBar
+                    bands={vulnBands ?? NO_BANDS}
+                    range={timeRange}
+                    onChange={setTimeRange}
+                  />
+                  {timeRange && (
+                    <button
+                      className="rpt-btn"
+                      data-testid="window-ai-btn"
+                      title={t("report.match.windowAiTitle")}
+                      onClick={() => void runWindowAi(timeRange)}
+                    >
+                      {t("report.common.analyzeSpan")}
+                    </button>
+                  )}
+                  {/* Workflow actions live in the ⋯ menu (UI review #1):
+                    they are what you do after reading, not while. */}
+                  <ReportOverflowMenu
+                    items={[
+                      {
+                        key: "md",
+                        label: t("report.match.copyMd"),
+                        title: t("report.match.copyMdTitle"),
+                        onClick: () =>
+                          void navigator.clipboard.writeText(
+                            buildReportMarkdown(source, timeRange, lang),
+                          ),
+                      },
+                      {
+                        key: "img",
+                        label: t("report.match.exportImg"),
+                        title: t("report.match.exportImgTitle"),
+                        onClick: () => {
+                          try {
+                            void bridge().matches.exportImage({
+                              matchId: resolvedMatchId,
+                              roundSeq:
+                                source.kind === "shuffleRound"
+                                  ? source.sequenceNumber
+                                  : null,
+                              range: timeRange,
+                            });
+                          } catch {
+                            /* fixture/test bed has no bridge → stay silent */
+                          }
+                        },
+                      },
+                      {
+                        key: "bug",
+                        label: t("report.match.reportBug"),
+                        title: t("report.match.reportBugTitle"),
+                        testId: "bug-report-btn",
+                        onClick: () => {
+                          setBugOpen(true);
+                          setBugState({ phase: "idle" });
+                        },
+                      },
+                    ]}
+                  />
+                </div>
+                {winAi && (
+                  <WindowAnalysisCard
+                    state={winAi.state}
+                    range={winAi.range}
+                    rich={rich}
+                    onJumpT={handleSeekEvent}
+                    onRetry={() =>
+                      void runWindowAi(winAi.range, {
+                        // Only an audit-empty retry needs to bypass the cache
+                        // (#21 item11 review-round fix): error/busy are never
+                        // cached to disk so force is a no-op for them, but pass
+                        // it only when actually needed so the semantics aren't
+                        // misread on the other branches.
+                        force: winAi.state.phase === "audit-empty",
+                      })
+                    }
+                  />
+                )}
+                <Timeline
+                  data={timeline!}
+                  hidden={hidden}
+                  onSelectUnit={toggleUnit}
+                  // 同一份 hidden,不新开 state:曲线与伤害榜共用可见性是
+                  // 有意设计(styles.css 的 .rpt-meter-name 注释写着名字可点
+                  // 就是为了过滤生命曲线),拆成两份就会各走各的。
+                  onSetHidden={setHidden}
+                  onDeathClick={openRecap}
+                  bands={vulnBands ?? NO_BANDS}
+                  onBandClick={(tS) => handleSeekEvent(tS, [])}
+                  cursorT={lastReplayT}
+                  range={timeRange}
+                  onRangeSelect={(fromS, toS) => setTimeRange({ fromS, toS })}
+                  marks={mistakesAll ?? NO_MISTAKES}
+                  onMarkClick={(tS) =>
+                    handleSeekEvent(Math.max(0, tS - 3), [])
+                  }
+                  pressure={pressure}
+                  dampening={dampening!}
+                  metric={curveMetric}
+                  onMetric={handleCurveMetric}
+                  flow={flow}
+                  teamSides={teamSides}
+                  spotlightUnitId={verdictRecap?.unitId}
+                />
+                <WindowList bands={vulnBands!} onSeek={handleSeekEvent} />
+              </div>
+            </div>
+            {/* KPI row (UI redesign 1a): whole-match glance, never linked to
+              the time window */}
+            <div className="rpt-kpi-strip">
               {mistakesAll && vulnBands ? (
                 <KpiChips
                   mistakes={mistakesAll}
@@ -1139,115 +1252,6 @@ export function MatchReport({
               component tree is unchanged) */}
             <div className="rpt-report-grid">
               <div className="rpt-col-main">
-                {/* Main card: HP curve + window list (1c); time-window toolbar
-                  (phase 4 ①) */}
-                <div>
-                  <div className="rpt-toolbar-row">
-                    <TimeRangeBar
-                      bands={vulnBands ?? NO_BANDS}
-                      range={timeRange}
-                      onChange={setTimeRange}
-                    />
-                    {timeRange && (
-                      <button
-                        className="rpt-btn"
-                        data-testid="window-ai-btn"
-                        title={t("report.match.windowAiTitle")}
-                        onClick={() => void runWindowAi(timeRange)}
-                      >
-                        {t("report.common.analyzeSpan")}
-                      </button>
-                    )}
-                    {/* Workflow actions live in the ⋯ menu (UI review #1):
-                      they are what you do after reading, not while. */}
-                    <ReportOverflowMenu
-                      items={[
-                        {
-                          key: "md",
-                          label: t("report.match.copyMd"),
-                          title: t("report.match.copyMdTitle"),
-                          onClick: () =>
-                            void navigator.clipboard.writeText(
-                              buildReportMarkdown(source, timeRange, lang),
-                            ),
-                        },
-                        {
-                          key: "img",
-                          label: t("report.match.exportImg"),
-                          title: t("report.match.exportImgTitle"),
-                          onClick: () => {
-                            try {
-                              void bridge().matches.exportImage({
-                                matchId: resolvedMatchId,
-                                roundSeq:
-                                  source.kind === "shuffleRound"
-                                    ? source.sequenceNumber
-                                    : null,
-                                range: timeRange,
-                              });
-                            } catch {
-                              /* fixture/test bed has no bridge → stay silent */
-                            }
-                          },
-                        },
-                        {
-                          key: "bug",
-                          label: t("report.match.reportBug"),
-                          title: t("report.match.reportBugTitle"),
-                          testId: "bug-report-btn",
-                          onClick: () => {
-                            setBugOpen(true);
-                            setBugState({ phase: "idle" });
-                          },
-                        },
-                      ]}
-                    />
-                  </div>
-                  {winAi && (
-                    <WindowAnalysisCard
-                      state={winAi.state}
-                      range={winAi.range}
-                      rich={rich}
-                      onJumpT={handleSeekEvent}
-                      onRetry={() =>
-                        void runWindowAi(winAi.range, {
-                          // Only an audit-empty retry needs to bypass the cache
-                          // (#21 item11 review-round fix): error/busy are never
-                          // cached to disk so force is a no-op for them, but pass
-                          // it only when actually needed so the semantics aren't
-                          // misread on the other branches.
-                          force: winAi.state.phase === "audit-empty",
-                        })
-                      }
-                    />
-                  )}
-                  <Timeline
-                    data={timeline!}
-                    hidden={hidden}
-                    onSelectUnit={toggleUnit}
-                    // 同一份 hidden,不新开 state:曲线与伤害榜共用可见性是
-                    // 有意设计(styles.css 的 .rpt-meter-name 注释写着名字可点
-                    // 就是为了过滤生命曲线),拆成两份就会各走各的。
-                    onSetHidden={setHidden}
-                    onDeathClick={openRecap}
-                    bands={vulnBands ?? NO_BANDS}
-                    onBandClick={(tS) => handleSeekEvent(tS, [])}
-                    cursorT={lastReplayT}
-                    range={timeRange}
-                    onRangeSelect={(fromS, toS) => setTimeRange({ fromS, toS })}
-                    marks={mistakesAll ?? NO_MISTAKES}
-                    onMarkClick={(tS) =>
-                      handleSeekEvent(Math.max(0, tS - 3), [])
-                    }
-                    pressure={pressure}
-                    dampening={dampening!}
-                    metric={curveMetric}
-                    onMetric={handleCurveMetric}
-                    flow={flow}
-                    teamSides={teamSides}
-                  />
-                  <WindowList bands={vulnBands!} onSeek={handleSeekEvent} />
-                </div>
                 {/* Left column, two panes: meters | engagement panel (kick /
                   dispel / aura / CC chain merged into tabs) */}
                 <div className="rpt-body-cols">

@@ -39,6 +39,11 @@ export function BatchAnalyzeBar({
   const [st, setSt] = useState<BatchStatus>(getBatchStatus);
   const [n, setN] = useState(10);
   const [skipAnalyzed, setSkipAnalyzed] = useState(true);
+  // Folded by default (direction pass 2026-11-27): batch analysis is an
+  // occasional chore, not what the match list is for, so it no longer takes
+  // the top two rows of the sidebar. A ticked selection unfolds it — that is
+  // the user asking for it.
+  const [open, setOpen] = useState(false);
   // Which empty work set the last start hit, worded at render time (a
   // language switch re-words it).
   const [emptyNote, setEmptyNote] = useState<"selected" | "recent" | null>(
@@ -130,11 +135,36 @@ export function BatchAnalyzeBar({
     );
   }
 
+  if (!open && selCount === 0 && emptyNote == null) {
+    return (
+      <div className="batch-bar batch-bar-folded" data-testid="batch-bar">
+        <button
+          className="batch-toggle"
+          aria-expanded={false}
+          title={t("batch.titleHint")}
+          onClick={() => setOpen(true)}
+        >
+          {t("batch.title")}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="batch-bar" data-testid="batch-bar">
-      <span className="batch-title" title={t("batch.titleHint")}>
-        {t("batch.title")}
-      </span>
+      {selCount > 0 ? (
+        <span className="batch-title" title={t("batch.titleHint")}>
+          {t("batch.title")}
+        </span>
+      ) : (
+        <button
+          className="batch-toggle"
+          aria-expanded={true}
+          title={t("batch.titleHint")}
+          onClick={() => setOpen(false)}
+        >
+          {t("batch.title")}
+        </button>
+      )}
       {selCount > 0 ? (
         <span className="batch-sel" data-testid="batch-sel">
           {t("batch.selected", { n: selCount })}

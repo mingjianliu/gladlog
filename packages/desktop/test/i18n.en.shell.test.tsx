@@ -3,7 +3,14 @@
 // no CJK in English mode. Player-facing data in the fixtures is ASCII, so any
 // CJK left in the DOM is UI copy that missed the dictionary.
 import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { StoredMatchMeta } from "../src/main/matchStore";
@@ -157,6 +164,8 @@ describe("英文模式:应用外壳与对局列表不漏中文", () => {
     await waitFor(() =>
       expect(container.querySelectorAll(".mlr").length).toBe(2),
     );
+    // The batch bar is folded by default; unfold it so its labels are checked.
+    fireEvent.click(screen.getByRole("button", { name: "Batch AI analysis" }));
     const text = container.textContent ?? "";
     for (const s of [
       "Matches",

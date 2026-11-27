@@ -75,6 +75,7 @@ describe("批量栏:切换语言后状态文案跟着换", () => {
         <BatchAnalyzeBar metas={[]} />
       </LangProvider>,
     );
+    fireEvent.click(await screen.findByText("批量 AI 分析"));
     fireEvent.click(await screen.findByText("开始"));
     await waitFor(() =>
       expect(container.querySelector(".batch-note")?.textContent).toBe(
