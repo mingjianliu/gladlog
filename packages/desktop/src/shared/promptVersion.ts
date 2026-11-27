@@ -2023,5 +2023,15 @@
  *  byte-identical, but the model does feed printed lines (the
  *  `locked N of the last 12s` lockout tally), so a round outside both corpora
  *  can print a different number. See docs/prompt-version-history.md.
+ *
+ * v680 (2026-11-27; pipeline batch B262, WSL bundle W4: T273 T230): three
+ *  lengths the [PRESS] line printed short (Roll the Bones lasts its
+ *  enhancement's length, Between the Eyes counts supercharged points,
+ *  Everlasting Elements' Earth Elemental), with the Restless Blades ledger's
+ *  Adrenaline Rush readiness in [RES]; the Aura Mastery [CD PRIOR] cohort is
+ *  the wall's (no line changes on the 605 or 12.1.5 corpus, but a round
+ *  outside them can lose a [CD PRIOR] line, and the shipped reference table
+ *  keeps the pooled cohort until it is regenerated). See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 679;
+export const PROMPT_VERSION = 680;

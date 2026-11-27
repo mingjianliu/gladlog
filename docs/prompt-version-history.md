@@ -8988,3 +8988,30 @@ one machine): captures identical on 605 and 1215; scan5 in-total violations
 identical. Re-picked onto v678 (8fa500591), whose captures are line-identical
 to v677's: the capture evidence carries over, while the scan totals above were
 measured with v677's scanners (v678 changes scan readers) and were not re-run.
+
+v680 (pipeline batch B262, WSL bundle W4: T273 T230; user ruling 2026-11-26:
+bundled). Measured by the lanes on their own bases (605 | 1215):
+T273 — three lengths the [PRESS] line printed short: a Roll the Bones press
+lasts its enhancement's length (30 s plus 30 s per Keep It Rolling inside it),
+Between the Eyes counts its supercharged points, and an Everlasting Elements
+holder's Earth Elemental lives 36 s; the Restless Blades ledger keeps one
+supercharged point a press. Cover set (117 archives): scan5 offListPressLine
+lastsBeyond 15 rows / 5 facts -> 12 / 4.
+T230 — the Aura Mastery [CD PRIOR] cohort is the wall's: immunity-branch
+presses never switched in the 31821 cohort 19 of 324 -> 0 (605), 0 on 12.1.5;
+captures byte-identical on both corpora. A round outside both corpora can lose
+a [CD PRIOR] line (an Aura Mastery held unspent through Concentration Aura),
+and the shipped reference table keeps the pooled cohort until it is
+regenerated.
+Bundle check (wsl2 BW-4-W4, the W3 code -> the bundle's code, both sides on
+one machine; every change is T273's, T230's own capture being byte-identical):
+605 [PRESS] 79 + [YOU] [PRESS] 19 lines changed (Roll the Bones 71, Between
+the Eyes 6, Earth Elemental 2); 1215 [PRESS] 248 + [YOU] [PRESS] 112 (Between
+the Eyes 170, Roll the Bones 53, Earth Elemental 15 change their length; 10
+change only their back time: Between the Eyes 2, Keep It Rolling 2, Killing
+Spree 2, Sprint 4) and [RES] 6 (Adrenaline Rush's cooldown under Restless
+Blades). scan5 in-total violations 28,366 ->
+28,361 | 32,795 -> 32,723: offListPressLine lastsBeyond fell 26 -> 21 | 135
+-> 63; only inventory rows rose (pressLastsCutShort, offListPressLine
+lastsOvershoot: lines that now print `lasts` are checked); gates identical.
+Re-picked onto v679 (20f1f2c16) with every changed line identical.
