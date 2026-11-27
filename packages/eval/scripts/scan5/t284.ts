@@ -173,7 +173,7 @@ function presses(ctx: IRoundCtx): void {
       name,
       ctx.start + p.timeSeconds * 1000,
       `${ctx.roundKey}|${caster.id}|${p.spellId}|${p.timeSeconds}`,
-      `${name} at ${p.timeSeconds.toFixed(2)}s prints lasts ${p.durationSeconds}s from ${da.spellId}, handed off at +${((tsOf(handoff) - da.atMs) / 1000).toFixed(2)}s to ${handoff.spellId}`,
+      `${name} at ${p.timeSeconds.toFixed(2)}s prints lasts ${p.durationSeconds}s from ${da.spellId}, handed off at +${((tsOf(handoff.row) - da.atMs) / 1000).toFixed(2)}s to ${handoff.row.spellId} on ${handoff.unit.id === caster.id ? "the caster" : "another unit"}`,
     );
   }
 }

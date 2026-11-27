@@ -798,7 +798,7 @@ export function pressEffectCutShort(
           len,
           untilMs,
           allUnits,
-        ) ?? c.row);
+        )?.row ?? c.row);
   };
   const holders = pressAuraCandidates(caster, cast, allUnits, nextPressMs);
   if (
@@ -834,9 +834,11 @@ export function pressEffectCutShort(
  * Bulwark's 432607 shield, re-laid every 2 s), nor one applied at or past
  * `untilMs` (the caster's next press of the button, the round's end).
  */
-export function pressEffectHandoffRow(
+export function pressEffectHandoffRow<
+  U extends Pick<ICombatUnit, "auraEvents">,
+>(
   caster: Pick<ICombatUnit, "id">,
-  unit: Pick<ICombatUnit, "auraEvents">,
+  unit: U,
   castSpellId: string,
   row: ICombatUnit["auraEvents"][number],
   lengthS: number,
@@ -846,61 +848,114 @@ export function pressEffectHandoffRow(
    * early (codex 85-tk-L5-T284-1c #2, a38e62d8 r0: the rogue's own 57934
    * gone 2 ms after the press, the target's 221630 from that instant, its
    * 57934 running its 30 s; 1d #1, e9306c04 r3: the rogue's copy applied
-   * 6 ms ahead of the cast row) */
-  others: ReadonlyArray<Pick<ICombatUnit, "auraEvents">> = [],
-): ICombatUnit["auraEvents"][number] | undefined {
+   * 6 ms ahead of the cast row), and the successor may be on the copy's
+   * unit (1e #1, 6e3bcedf r2: both windows closed at +330 ms, the 221630 on
+   * the rogue only) */
+  others: readonly U[] = [],
+): { unit: U; row: ICombatUnit["auraEvents"][number] } | undefined {
   if (PRESS_EFFECT_CHAIN_AURAS[row.spellId ?? ""]) return undefined;
+  // the auras that can take over: the press's own id and its effect
+  // auras, less the window's — none for most presses, and then nothing is
+  // read (codex 85-tk-L5-T284-1e #2: the copy search doubled
+  // `extractOffListPresses` on a 176-unit round)
+  const successorIds = new Set([
+    castSpellId,
+    ...effectAurasOfCast(castSpellId),
+  ]);
+  successorIds.delete(row.spellId!);
+  if (!successorIds.size) return undefined;
   const window = pressWindowEarlyEnd(caster, unit, row, lengthS, untilMs);
   const own = window?.own ?? row;
-  const ends = [
-    window?.endMs,
-    ...others
-      .filter((o) => o !== unit)
-      .map((o) => {
-        const copy = pressWindowCopyRow(caster, o, own);
-        return copy
-          ? pressWindowEarlyEnd(caster, o, copy, lengthS, untilMs)?.endMs
-          : undefined;
-      }),
-  ]
+  const copies: Array<{
+    unit: U;
+    own: ICombatUnit["auraEvents"][number];
+    endMs?: number;
+  }> = [{ unit, own, endMs: window?.endMs }];
+  for (const o of others) {
+    if (o === unit) continue;
+    const copy = pressWindowCopyRow(caster, o, own);
+    if (!copy) continue;
+    const end = pressWindowEarlyEnd(caster, o, copy, lengthS, untilMs);
+    copies.push({ unit: o, own: end?.own ?? copy, endMs: end?.endMs });
+  }
+  const ends = copies
+    .map((c) => c.endMs)
     .filter((t): t is number => t !== undefined)
     .sort((x, y) => x - y);
-  if (!ends.length) return undefined;
-  const events = dropAuraRebroadcasts(unit.auraEvents ?? []);
-  // after the window's own application in log order: a successor logged in
-  // its millisecond counts (codex 85-tk-L5-T284-1d #2, f156e7ac r0: the
-  // target's 57934 and its 221630 both at +1 ms)
+  for (const endMs of ends)
+    // the successor on the row's unit first, then on a copy's
+    for (const c of copies) {
+      const next = handoffOn(
+        caster,
+        c.unit,
+        c.own,
+        successorIds,
+        endMs,
+        untilMs,
+      );
+      if (next) return { unit: c.unit, row: next };
+    }
+  return undefined;
+}
+
+/** `pressEffectHandoffRow`'s successor on one unit: the caster's APPLIED of
+ * one of `successorIds` there within `PRESS_CHAIN_HANDOVER_MS` of `endMs`,
+ * after the window's copy `own` in log order (codex 85-tk-L5-T284-1d #2,
+ * f156e7ac r0: the target's 57934 and its 221630 both at +1 ms) and before
+ * `untilMs` — never an id the caster already laid there while the window
+ * ran (a recurring aura of the press, not its successor). */
+function handoffOn(
+  caster: Pick<ICombatUnit, "id">,
+  unit: Pick<ICombatUnit, "auraEvents">,
+  own: ICombatUnit["auraEvents"][number],
+  successorIds: ReadonlySet<string>,
+  endMs: number,
+  untilMs: number,
+): ICombatUnit["auraEvents"][number] | undefined {
+  const ids = new Set(successorIds);
+  const events = rebroadcastFree(unit);
   const afterOwn = (a: ICombatUnit["auraEvents"][number]) =>
     a.logLine.timestamp > own.logLine.timestamp ||
     (a.logLine.timestamp === own.logLine.timestamp &&
       (a.logLine.lineIndex ?? -Infinity) > (own.logLine.lineIndex ?? Infinity));
-  for (const endMs of ends) {
-    const ids = new Set([castSpellId, ...effectAurasOfCast(castSpellId)]);
-    ids.delete(row.spellId!);
-    const byCaster = (a: ICombatUnit["auraEvents"][number]) =>
-      a.srcUnitId === caster.id && !!a.spellId && ids.has(a.spellId);
-    // laid while the window ran: a recurring aura of the press, not its
-    // successor
-    for (const a of events)
-      if (
-        byCaster(a) &&
-        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        afterOwn(a) &&
-        a.logLine.timestamp < endMs - PRESS_CHAIN_HANDOVER_MS
-      )
-        ids.delete(a.spellId!);
-    const next = events.find(
-      (a) =>
-        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-        byCaster(a) &&
-        afterOwn(a) &&
-        a.logLine.timestamp < untilMs &&
-        Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS,
-    );
-    if (next) return next;
+  const byCaster = (a: ICombatUnit["auraEvents"][number]) =>
+    a.srcUnitId === caster.id && !!a.spellId && ids.has(a.spellId);
+  for (const a of events)
+    if (
+      byCaster(a) &&
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+      afterOwn(a) &&
+      a.logLine.timestamp < endMs - PRESS_CHAIN_HANDOVER_MS
+    )
+      ids.delete(a.spellId!);
+  return events.find(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      byCaster(a) &&
+      afterOwn(a) &&
+      a.logLine.timestamp < untilMs &&
+      Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS,
+  );
+}
+
+/** A unit's aura rows with re-broadcasts dropped (`dropAuraRebroadcasts`),
+ * built once per row array: the hand-off reading asks it of every unit for
+ * every press (codex 85-tk-L5-T284-1e #2). */
+const rebroadcastFreeMemo = new WeakMap<
+  readonly ICombatUnit["auraEvents"][number][],
+  ICombatUnit["auraEvents"]
+>();
+function rebroadcastFree(
+  unit: Pick<ICombatUnit, "auraEvents">,
+): ICombatUnit["auraEvents"] {
+  const rows = unit.auraEvents ?? [];
+  let out = rebroadcastFreeMemo.get(rows);
+  if (!out) {
+    out = dropAuraRebroadcasts(rows);
+    rebroadcastFreeMemo.set(rows, out);
   }
-  return undefined;
+  return out;
 }
 
 /** The press's copy of a window aura on another unit: the caster's
@@ -914,19 +969,20 @@ function pressWindowCopyRow(
   own: ICombatUnit["auraEvents"][number],
 ): ICombatUnit["auraEvents"][number] | undefined {
   const at = own.logLine.timestamp;
-  return dropAuraRebroadcasts(unit.auraEvents ?? [])
-    .filter(
-      (a) =>
-        a.spellId === own.spellId &&
-        a.srcUnitId === caster.id &&
-        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        Math.abs(a.logLine.timestamp - at) <= PRESS_CHAIN_HANDOVER_MS,
+  let best: ICombatUnit["auraEvents"][number] | undefined;
+  for (const a of rebroadcastFree(unit))
+    if (
+      a.spellId === own.spellId &&
+      a.srcUnitId === caster.id &&
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+      Math.abs(a.logLine.timestamp - at) <= PRESS_CHAIN_HANDOVER_MS &&
+      (!best ||
+        Math.abs(a.logLine.timestamp - at) <
+          Math.abs(best.logLine.timestamp - at))
     )
-    .sort(
-      (x, y) =>
-        Math.abs(x.logLine.timestamp - at) - Math.abs(y.logLine.timestamp - at),
-    )[0];
+      best = a;
+  return best;
 }
 
 /** Where a press's window aura `row` on `unit` ended before its length
@@ -948,7 +1004,7 @@ function pressWindowEarlyEnd(
       endMs: number;
     }
   | undefined {
-  const events = dropAuraRebroadcasts(unit.auraEvents ?? []);
+  const events = rebroadcastFree(unit);
   const own = events.includes(row)
     ? row
     : events
@@ -1148,7 +1204,7 @@ export function pressDuration(
           )
         : undefined;
     if (handoff) {
-      candidates.splice(k, 1, { unit, row: handoff });
+      candidates.splice(k, 1, handoff);
       k--;
       continue;
     }

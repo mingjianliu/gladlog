@@ -431,6 +431,29 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
     expect(d?.durationSeconds).toBe(10);
   });
 
+  it("the successor on the rogue only, both windows closed in one instant (codex 85-tk-L5-T284-1e #1, 6e3bcedf r2)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 330, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 330, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T + 10_334, "rog", "rog", "BUFF"),
+      ],
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 330, "rog", "hun", "BUFF"),
+      ],
+    });
+    const d = pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+    expect(d?.unit.id).toBe("rog");
+    expect(d?.row.spellId).toBe("221630");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
   it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
     expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
   });
