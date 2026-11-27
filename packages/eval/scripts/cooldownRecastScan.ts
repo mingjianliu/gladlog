@@ -55,6 +55,10 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { classSetPiecesOf } from "@gladlog/analysis/src/data/classSetBonuses";
 import {
+  OFF_GCD_SPELL_IDS,
+  ON_GCD_SPELL_IDS,
+} from "@gladlog/analysis/src/data/offGcdGenerated";
+import {
   enemySourceIds,
   spellPressBlockedAt,
 } from "@gladlog/analysis/src/utils/cannotCastIntervals";
@@ -67,10 +71,6 @@ import {
   empowerSpans,
   pressRidesAlong,
 } from "@gladlog/analysis/src/utils/castCommitSpans";
-import {
-  OFF_GCD_SPELL_IDS,
-  ON_GCD_SPELL_IDS,
-} from "@gladlog/analysis/src/data/offGcdGenerated";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
 import {
   CD_INSTANT_SLACK_S,

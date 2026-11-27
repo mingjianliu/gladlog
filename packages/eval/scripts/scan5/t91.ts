@@ -50,8 +50,8 @@ import {
   buildRosterSides,
   type RosterSides,
 } from "@gladlog/analysis/src/utils/rosterSide";
-import { dangerLabel } from "@gladlog/analysis/src/utils/spellDanger";
 import { roundDamageEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import { dangerLabel } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { APPLIED, ev, fmtS, type IRoundCtx, REFRESH, tsOf } from "./ctx";
 

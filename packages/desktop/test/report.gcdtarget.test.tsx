@@ -110,13 +110,20 @@ describe("GCD 泳道施法对象", () => {
   // the caster's current target; neither the chip nor its tooltip names it
   it("只能给自己的防御技能:chip 和悬浮提示都不写施法行里的目标", () => {
     const s = JSON.parse(JSON.stringify(m)) as StoredMatch;
-    const units = s.units as Record<string, any>;
+    type LaneUnit = {
+      id: string;
+      name: string;
+      info?: unknown;
+      reaction?: string;
+      casts?: unknown[];
+    };
+    const units = s.units as unknown as Record<string, LaneUnit>;
     const caster = Object.values(units).find(
-      (u: any) => u.info && u.reaction === "Friendly",
-    ) as any;
+      (u) => u.info && u.reaction === "Friendly",
+    )!;
     const enemy = Object.values(units).find(
-      (u: any) => u.info && u.reaction === "Hostile",
-    ) as any;
+      (u) => u.info && u.reaction === "Hostile",
+    )!;
     caster.casts = [
       {
         eventName: "SPELL_CAST_SUCCESS",

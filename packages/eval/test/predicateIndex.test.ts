@@ -55,8 +55,8 @@ import * as observedConsequences from "@gladlog/analysis/src/context/observedCon
 import * as peakSpikePlacement from "@gladlog/analysis/src/context/peakSpikePlacement";
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
-import * as resRowMod from "@gladlog/analysis/src/context/resRow";
 import * as resourceSnapshot from "@gladlog/analysis/src/context/resourceSnapshot";
+import * as resRowMod from "@gladlog/analysis/src/context/resRow";
 import * as spellOutcomeLines from "@gladlog/analysis/src/context/spellOutcomeLines";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
