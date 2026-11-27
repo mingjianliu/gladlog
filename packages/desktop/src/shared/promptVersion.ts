@@ -2008,5 +2008,11 @@
  *  goes to the reflect its own millisecond names when that reflect is inside
  *  the direct-return window; a cut empower hold's cast row is matched
  *  exactly, in log order. See docs/prompt-version-history.md.
+ *
+ * v678 (2026-11-27; pipeline batch B259, Mac eval-only bundle E1: T277
+ *  T304): no prompt line changes (captures on 605 and 1215 identical to
+ *  v677's); scan readers that flagged right product lines are corrected,
+ *  and the periodic-aura table counts an aura-226 trigger. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 677;
+export const PROMPT_VERSION = 678;

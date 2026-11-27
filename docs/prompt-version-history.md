@@ -8942,3 +8942,29 @@ machine; 605 | 1215, contexts 3,519 | 2,955): changed contexts 555 | 595; scan5
 in-total violations on 605 28,377 -> 28,363; one kind rose on each corpus,
 resEnemySameSecondPressMissing / noAura (inventory) 205 -> 221 | 176 -> 194,
 T260's own exemption as in B212; gates identical on both.
+
+v678 (pipeline batch B259, Mac eval-only bundle E1: T277 T304; the first bundle
+on the user's 2026-11-26 eval-only check). No prompt line changes: the
+captures of the bundle's code on 605 and 1215 are line-identical to v677's.
+T277 — five scan readers that over-flagged right product lines: the
+kill-window absorb reading tracks each shield id on its own (Reversion's
+removal no longer ends its Echo copy; kwAbsorbedNotTargets, absorbShieldSide);
+a teammate's Emerald Communion is a team heal, as the product holds it
+(TEAM_HEAL_CD_IDS; anothersSelfOnlyHealCdAnswers); Nether Ward's reflect
+pairing keeps only damaging reflects, through the product's
+reflectedSpellDealsDamage (reflectReturn); the Spirit of Redemption immunity
+reader cuts at the round's end and reads the product's own kill-attempt span
+(sorImmune); and the external-share line's press is the one whose length lands
+on the aura's removal or refresh (duringExternalShare; 820bc81e r3 1:21: the
+second Pain Suppression's refresh closes the first's 0.1 s span). T304 — the channel-tail check reads the
+printed burst's own ledger window, so a channel still running at that
+window's end is not a dropped tick (user ruling 2026-11-27: channel damage
+past the window's end stays out of the burst total); aura 226 with a trigger
+id counts as a periodic trigger (triggers 63 -> 71; no rendered change).
+Eval-only check (Mac, dev 1cb75c532, scanned with v677's code and with the
+bundle's; 605 | 1215): rose 0 | 0; fell absorbShieldSide (on the attacker
+only at the row; inventory) 1,086 -> 433 | 3,222 -> 546,
+anothersSelfOnlyHealCdAnswers 5 -> 0 | 21 -> 0, kwAbsorbedNotTargets 0 | 21
+-> 0 (and attacker-side spans 72 -> 51 on 1215), duringExternalShare 0 | 6 ->
+0, channelLastTickDropped 0 | 2 -> 0; corpusFactScan reflectReturn 3 -> 0 |
+12 -> 0, fact2Scan sorImmune 2 -> 0 | 9 -> 0; gates identical on both.
