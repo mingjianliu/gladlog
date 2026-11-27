@@ -23,6 +23,7 @@ import {
   sanitizeSettingsPatch,
   type SettingsStore,
 } from "./settingsStore";
+import { fetchSpecTiming, specRadarConfig } from "./specRadar";
 import type { UpdaterService } from "./updater";
 
 type CoachChatService = ReturnType<typeof createCoachChatService>;
@@ -33,6 +34,7 @@ import {
   type OpenTraceRead,
   type OpenTraceRecord,
 } from "../shared/openTrace";
+import type { SpecTimingQuery } from "../shared/specRadar";
 import { vodUrl } from "../shared/vod";
 import type { ObsAudioDevice } from "./managedObsBackend";
 import type { ObsInstallProgress } from "./obsAssets";
@@ -109,6 +111,10 @@ export function registerIpc(deps: {
   ipcMain.handle("gladlog:logs:getStatus", () => deps.getStatus());
   ipcMain.handle("gladlog:icon:get", (_e, name: string) =>
     deps.icons.get(String(name)),
+  );
+  ipcMain.handle("gladlog:specRadar:getConfig", () => specRadarConfig());
+  ipcMain.handle("gladlog:specRadar:fetch", (_e, q: SpecTimingQuery) =>
+    fetchSpecTiming(q),
   );
   ipcMain.handle("gladlog:matches:list", () => deps.store.list());
   ipcMain.handle("gladlog:matches:get", (_e, id: string) => deps.store.get(id));

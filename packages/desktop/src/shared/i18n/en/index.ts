@@ -6,6 +6,7 @@ import { enDialogs } from "./dialogs";
 import { enErrors } from "./errors";
 import { enMatchList } from "./matchList";
 import { enNav } from "./nav";
+import { enRadar } from "./radar";
 import { enRecorder } from "./recorder";
 import { enReportAi } from "./reportAi";
 import { enReportCards } from "./reportCards";
@@ -26,6 +27,7 @@ export const enMessages = {
   ...enRecorder,
   ...enDev,
   ...enStats,
+  ...enRadar,
   ...enErrors,
   ...enDialogs,
   ...enReportDerive,

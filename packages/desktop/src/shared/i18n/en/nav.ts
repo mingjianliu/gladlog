@@ -4,6 +4,7 @@ export const enNav = {
   "nav.tab.matches": "Matches",
   "nav.tab.stats": "Statistics",
   "nav.tab.settings": "Settings",
+  "nav.tab.radar": "Timing radar",
   "nav.tab.dev": "Developer",
   "nav.loading": "Loading...",
   "nav.selectMatch": "Select a match",

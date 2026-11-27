@@ -4,6 +4,7 @@ export const zhNav = {
   "nav.tab.matches": "对局",
   "nav.tab.stats": "战绩",
   "nav.tab.settings": "设置",
+  "nav.tab.radar": "择时雷达",
   "nav.tab.dev": "开发者",
   "nav.loading": "加载中...",
   "nav.selectMatch": "选择一场对局",

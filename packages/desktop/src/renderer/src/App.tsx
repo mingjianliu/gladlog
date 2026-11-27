@@ -40,6 +40,7 @@ import {
   openRoundsArrived,
   type OpenTraceToken,
 } from "./openTrace";
+import { SpecTimingRadar } from "./radar/SpecTimingRadar";
 import { MatchReport } from "./report/components/MatchReport";
 import {
   ReportShell,
@@ -50,10 +51,11 @@ import { MatchPageActiveContext } from "./report/pageActive";
 import { useSidebarWidth } from "./sidebarWidth";
 import { applyUiZoom } from "./uiZoom";
 
-type AppView = "matches" | "stats" | "settings" | "dev";
+type AppView = "matches" | "stats" | "radar" | "settings" | "dev";
 const APP_VIEW_LABEL: Record<AppView, MessageKey> = {
   matches: "nav.tab.matches",
   stats: "nav.tab.stats",
+  radar: "nav.tab.radar",
   settings: "nav.tab.settings",
   dev: "nav.tab.dev",
 };
@@ -68,6 +70,20 @@ export default function App({
 } = {}) {
   const { t } = useT();
   const [appView, setAppView] = useState<AppView>(initialAppView);
+  // The timing radar tab is hidden until it ships: main/specRadar.ts says
+  // whether this run shows it (dev / GLADLOG_SPEC_RADAR=1). A bridge without
+  // the surface (fixtures, the dev:ui bed) keeps it hidden.
+  const [radarEnabled, setRadarEnabled] = useState(false);
+  useEffect(() => {
+    try {
+      void bridge()
+        .specRadar?.getConfig()
+        .then((c) => setRadarEnabled(c.enabled))
+        .catch(() => {});
+    } catch {
+      /* noop */
+    }
+  }, []);
   const [metas, setMetas] = useState<StoredMatchMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doc, setDoc] = useState<any | null>(null);
@@ -411,15 +427,17 @@ export default function App({
       <header className="app-topbar">
         <h1>gladlog</h1>
         <div className="rpt-view-tabs app-view-tabs">
-          {(Object.keys(APP_VIEW_LABEL) as AppView[]).map((v) => (
-            <button
-              key={v}
-              className={v === appView ? "active" : ""}
-              onClick={() => setAppView(v)}
-            >
-              {t(APP_VIEW_LABEL[v])}
-            </button>
-          ))}
+          {(Object.keys(APP_VIEW_LABEL) as AppView[])
+            .filter((v) => v !== "radar" || radarEnabled)
+            .map((v) => (
+              <button
+                key={v}
+                className={v === appView ? "active" : ""}
+                onClick={() => setAppView(v)}
+              >
+                {t(APP_VIEW_LABEL[v])}
+              </button>
+            ))}
         </div>
         <UpdateBanner />
       </header>
@@ -428,6 +446,8 @@ export default function App({
       )}
       {appView === "dev" ? (
         <DevPanel initialZone={initialDevZone} />
+      ) : appView === "radar" ? (
+        <SpecTimingRadar />
       ) : appView === "settings" ? (
         <SettingsPanel />
       ) : appView === "stats" ? (

@@ -50,6 +50,24 @@ export const SPEC_NAMES_ZH: Record<string, string> = {
   "Augmentation Evoker": "增辉唤魔师",
 };
 
+/** English class name (as `specToString`'s class half and the radar server
+ * spell it) → Chinese class name. Display only. */
+export const CLASS_NAMES_ZH: Record<string, string> = {
+  "Death Knight": "死亡骑士",
+  "Demon Hunter": "恶魔猎手",
+  Druid: "德鲁伊",
+  Evoker: "唤魔师",
+  Hunter: "猎人",
+  Mage: "法师",
+  Monk: "武僧",
+  Paladin: "圣骑士",
+  Priest: "牧师",
+  Rogue: "潜行者",
+  Shaman: "萨满",
+  Warlock: "术士",
+  Warrior: "战士",
+};
+
 /** English spec phrase → specId (same key set as specIconsGenerated). The key
  * set must stay identical to SPEC_NAMES_ZH's (specNames.test guards against
  * drift). */

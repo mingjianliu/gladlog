@@ -15,6 +15,11 @@ import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 import type { OpenTraceIo, OpenTraceRecord } from "../shared/openTrace";
 import type { LazyDocPayload } from "../shared/parseLazyDoc";
 import type { FileStatus } from "../shared/protocol";
+import type {
+  SpecRadarConfig,
+  SpecTimingQuery,
+  SpecTimingResult,
+} from "../shared/specRadar";
 
 export interface LogsStatusSnapshot {
   watching: boolean;
@@ -505,6 +510,11 @@ export interface GladlogApi {
   };
   icon: {
     get(name: string): Promise<string | null>;
+  };
+  /** Solo Shuffle timing radar (hidden page; main/specRadar.ts). */
+  specRadar: {
+    getConfig(): Promise<SpecRadarConfig>;
+    fetch(q: SpecTimingQuery): Promise<SpecTimingResult>;
   };
   /** UI scale (界面缩放). webFrame lives in the preload context, so the
    * renderer never has to import electron itself. Deliberately narrow: one

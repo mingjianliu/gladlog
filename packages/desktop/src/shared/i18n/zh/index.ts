@@ -5,6 +5,7 @@ import { zhDialogs } from "./dialogs";
 import { zhErrors } from "./errors";
 import { zhMatchList } from "./matchList";
 import { zhNav } from "./nav";
+import { zhRadar } from "./radar";
 import { zhRecorder } from "./recorder";
 import { zhReportAi } from "./reportAi";
 import { zhReportCards } from "./reportCards";
@@ -26,6 +27,7 @@ export const zhMessages = {
   ...zhRecorder,
   ...zhDev,
   ...zhStats,
+  ...zhRadar,
   ...zhErrors,
   ...zhDialogs,
   ...zhReportDerive,

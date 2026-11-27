@@ -1,0 +1,148 @@
+// English dictionary for the `radar.*` namespace. Must mirror zh/radar.ts
+// key-for-key (enforced by `satisfies Messages` in en/index.ts).
+export const enRadar = {
+  "radar.title": "Shuffle timing radar",
+  "radar.subtitle":
+    "All specs, Solo Shuffle: ② timing index (vs the spec's own normal) and ① spec strength (vs its role pool), independent of each other",
+  "radar.source": "Source",
+  "radar.source.apply": "Apply",
+  "radar.refresh": "Refresh",
+  "radar.loading": "Loading…",
+  "radar.error": "Failed to load: {error}",
+  "radar.error.hint":
+    "Check that the radar server is running (locally: the collector's track_shuffle_activity.py --ui), or change the source URL at the top right.",
+  "radar.fetchedFrom": "From {url} · fetched {at}",
+
+  "radar.label.tier": "Bracket (pre-match rating)",
+  "radar.label.region": "Region",
+  "radar.label.hour": "Window",
+  "radar.label.role": "Role",
+  "radar.label.specs": "Specs (multi-select)",
+  "radar.label.search": "Search",
+  "radar.label.empty": "Zero-sample specs",
+  "radar.label.classes": "Classes:",
+
+  "radar.tier.all": "All brackets",
+  "radar.region.us": "US",
+  "radar.region.eu": "EU",
+  "radar.region.all": "US + EU",
+  "radar.tz.us": "US Eastern ET (UTC−5)",
+  "radar.tz.eu": "Central European CET (UTC+1)",
+  "radar.hour.live": "Live (2 h from the current hour)",
+
+  "radar.role.all": "All",
+  "radar.role.healer": "Healer",
+  "radar.role.dps": "DPS",
+  "radar.role.tank": "Tank",
+  "radar.pool.healer": "Healer pool",
+  "radar.pool.dps": "DPS pool",
+  "radar.pool.tank": "Tank pool",
+  "radar.pool.all": "All-spec pool",
+  "radar.vsPool": "vs {pool}",
+
+  "radar.specs.none": "All specs (open to pick specs to compare)",
+  "radar.specs.more": "and {n} total",
+  "radar.specs.selectClass": "Select class",
+  "radar.specs.unselectClass": "Clear class",
+  "radar.search.placeholder": "Spec / class / role",
+  "radar.clear": "Clear",
+  "radar.noMatch": "No spec matches the current filters",
+  "radar.empty.hidden": "✓ Hidden",
+  "radar.empty.shown": "Shown",
+  "radar.classes.all": "All classes",
+  "radar.chips.picked": "Picked:",
+  "radar.roster.save": "Save as my roster",
+  "radar.roster.load": "Load my roster ({n})",
+  "radar.roster.loaded": "✓ Roster loaded ({n})",
+  "radar.roster.forget": "Forget it",
+  "radar.resetFilters": "↺ Reset filters",
+
+  "radar.banner.window": "Window {w}",
+  "radar.banner.clock": "{tz} · server time {now}",
+  "radar.banner.backToLive": "Back to live",
+  "radar.banner.pool":
+    "{label}: win {wr}% · avg {diff} · big loss {bl}% · {n} records",
+  "radar.banner.activity":
+    "Filtered records in this window {cur} (mean {mean},",
+  "radar.banner.activityTip":
+    "Snapshot records of the filtered specs in this 2-hour window vs the mean over all 24 windows; a proxy from snapshot counts, not real queue data",
+  "radar.banner.span": "Data span {d} days",
+  "radar.banner.note":
+    "Neither index changes with the filters. ② Timing index = this spec in this window vs its own all-day level (50 = normal; spec strength is removed). ① Spec strength = this spec all day vs its role pool in this bracket (does not change by hour). Brackets use pre-match rating. Backtest (7 days → next 7 days): spec strength reproduces where samples are large; the timing index has weak out-of-sample correlation, and cells under 30 records are shrunk toward 50 and dimmed.",
+
+  "radar.top.byTiming": "In view · best window vs its own normal",
+  "radar.top.byStrength": "In view · strongest spec",
+  "radar.top.timing": "Timing {s} · {tier}",
+  "radar.top.strength": "Strength {s} · {tier}",
+  "radar.top.best": "Best start hours",
+  "radar.top.worst": "worst",
+  "radar.top.wr": "Win rate here (vs normal)",
+  "radar.top.diff": "Avg change here (vs normal)",
+  "radar.top.bl": "Big losses here (vs normal)",
+  "radar.top.samples": "Window / all-day records",
+  "radar.lowSample": "few samples",
+  "radar.lowSampleSuffix": " (few samples)",
+  "radar.noData": "No records in this bracket",
+
+  "radar.table.title": "All-spec timing table",
+  "radar.table.sub":
+    "Timing index 50 = this spec's normal; spec strength 50 = level with its role pool in this bracket. Click a 24h bar or an hour number to switch to that window.",
+  "radar.table.showing": "Showing {n} / {total} specs",
+  "radar.table.hiddenEmpty": "({n} zero-sample specs hidden,",
+  "radar.table.showEmpty": "show)",
+  "radar.sort": "Sort:",
+  "radar.sort.timing": "② Timing",
+  "radar.sort.strength": "① Strength",
+  "radar.sort.matches": "Window samples",
+  "radar.col.spec": "Spec",
+  "radar.col.timing": "② Timing",
+  "radar.col.timingTip":
+    "This window vs the spec's own all-day level; 50 = normal",
+  "radar.col.window": "This window (vs normal)",
+  "radar.col.windowTip":
+    "In brackets: difference from the spec's all-day level",
+  "radar.col.next": "Next window",
+  "radar.col.nextTip": "Timing index of the 2 h from the next hour − now",
+  "radar.col.hours": "Good / bad hours",
+  "radar.col.hoursTip":
+    "Start hours where this spec does best / worst vs itself; dimmed italic = few samples; click to switch",
+  "radar.col.sparkTip":
+    "Timing index of the 24 two-hour windows; outlined = current",
+  "radar.col.strength": "① Strength",
+  "radar.col.strengthTip":
+    "All day vs the role pool in this bracket; unaffected by hour or filters",
+  "radar.col.allday": "All day (vs role pool)",
+  "radar.col.alldayTip": "In brackets: difference from the role pool",
+  "radar.compare.add": "+compare",
+  "radar.compare.picked": "picked",
+  "radar.compare.addTip": "Add to comparison",
+  "radar.compare.removeTip": "Remove from comparison",
+  "radar.wr": "Win",
+  "radar.diff": "Avg",
+  "radar.bl": "Big loss",
+  "radar.records": "{n} records",
+  "radar.good": "Good",
+  "radar.bad": "Bad",
+  "radar.nextTip": "Next window (2 h from the next hour): timing index {s}",
+  "radar.hourLinkTip": "Timing index {score}{low}",
+  "radar.hourTip":
+    "{spec} · 2 h from {hour}:00\nTiming index {score} ({tier})\nWin {wr}% (vs normal {dwr})\nAvg {diff} (vs normal {ddiff})\n{n} records{low}",
+  "radar.method":
+    "Method: deltas = differences in (win rate, avg rating change, big-loss rate). ① Strength = spec all day − role pool all day, shrunk toward 0 with {k} pseudo-records; ② Timing = spec in this window − spec all day, shrunk with {kh} pseudo-records. Each delta is divided by its typical spread (strength {ss}, timing {ts}) and weighted {w} into z; score = 100 / (1 + e^−z), so z = ±1 gives 73 / 27.",
+
+  "radar.timingTier.t0": "Much better than usual",
+  "radar.timingTier.t1": "Better than usual",
+  "radar.timingTier.t2": "About usual",
+  "radar.timingTier.t3": "Worse than usual",
+  "radar.timingTier.avoid": "Much worse than usual",
+  "radar.strengthTier.t0": "Well above pool",
+  "radar.strengthTier.t1": "Above pool",
+  "radar.strengthTier.t2": "Level with pool",
+  "radar.strengthTier.t3": "Below pool",
+  "radar.strengthTier.avoid": "Well below pool",
+
+  "radar.matrix.title": "24-hour timing matrix (each row vs itself)",
+  "radar.matrix.sub":
+    "Each cell = this spec in the 2 h from that hour vs its own all-day level. Colours compare who is in form across specs, not who is stronger. Dimmed italic = under 30 records, shrunk toward 50. Click a cell to switch.",
+  "radar.matrix.corner": "Spec \\ start hour",
+};

@@ -229,6 +229,10 @@ const api: GladlogApi = {
   icon: {
     get: (name) => ipcRenderer.invoke("gladlog:icon:get", name),
   },
+  specRadar: {
+    getConfig: () => ipcRenderer.invoke("gladlog:specRadar:getConfig"),
+    fetch: (q) => ipcRenderer.invoke("gladlog:specRadar:fetch", q),
+  },
   ui: {
     // Clamped here as well as in settingsStore, not out of superstition: this
     // is the last line before the value reaches Chromium, and it is also the
