@@ -866,7 +866,7 @@ export function pressEffectHandoffRow<
   if (!successorIds.size) return undefined;
   const window = pressWindowEarlyEnd(caster, unit, row, lengthS, untilMs);
   const own = window?.own ?? row;
-  type End = { ms: number; line?: number };
+  type End = { ms: number };
   const copies: Array<{
     unit: U;
     own: ICombatUnit["auraEvents"][number];
@@ -875,7 +875,7 @@ export function pressEffectHandoffRow<
     {
       unit,
       own,
-      end: window && { ms: window.endMs, line: window.endLine },
+      end: window && { ms: window.endMs },
     },
   ];
   for (const o of others) {
@@ -886,7 +886,7 @@ export function pressEffectHandoffRow<
     copies.push({
       unit: o,
       own: end?.own ?? copy,
-      end: end && { ms: end.endMs, line: end.endLine },
+      end: end && { ms: end.endMs },
     });
   }
   const ends = copies
@@ -903,20 +903,22 @@ export function pressEffectHandoffRow<
 }
 
 /** `pressEffectHandoffRow`'s successor on one unit: the caster's APPLIED of
- * one of `successorIds` there logged after the window's end (its REMOVED,
- * `end`, in log order — codex 85-tk-L5-T284-1d #2, f156e7ac r0: a 57934
- * and its 221630 at +1 ms) and within `PRESS_CHAIN_HANDOVER_MS` of it, and
- * before `untilMs` — never an aura put up beside the window (605 cover
- * 39-17-343 4:08: Berserker Shout's 384102 applied with its 384100 in one
- * instant, the window removed 70 ms later — `lasts 6s` lost), nor an id the
- * caster already laid there while the window ran (a recurring aura of the
- * press, not its successor). */
+ * one of `successorIds` there within `PRESS_CHAIN_HANDOVER_MS` of the
+ * window's end, after the window's copy `own` in log order (codex
+ * 85-tk-L5-T284-1d #2, f156e7ac r0: the target's 57934 and its 221630 both
+ * at +1 ms) and before `untilMs`, that runs on past the window — not
+ * REMOVED within `PRESS_CHAIN_HANDOVER_MS` of its end (605 cover 39-17-343
+ * 4:08: Berserker Shout's 384102 put up with its 384100 and removed with it
+ * 70 ms later — `lasts 6s` lost; a successor logged ahead of the window's
+ * REMOVED in its millisecond counts, codex 85-tk-L5-T284-1g #1, 6e3bcedf r2)
+ * — and never an id the caster already laid there while the window ran (a
+ * recurring aura of the press, not its successor). */
 function handoffOn(
   caster: Pick<ICombatUnit, "id">,
   unit: Pick<ICombatUnit, "auraEvents">,
   own: ICombatUnit["auraEvents"][number],
   successorIds: ReadonlySet<string>,
-  end: { ms: number; line?: number },
+  end: { ms: number },
   untilMs: number,
 ): ICombatUnit["auraEvents"][number] | undefined {
   const endMs = end.ms;
@@ -942,11 +944,17 @@ function handoffOn(
       a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
       byCaster(a) &&
       afterOwn(a) &&
-      (a.logLine.timestamp > endMs ||
-        (a.logLine.timestamp === endMs &&
-          (a.logLine.lineIndex ?? -Infinity) > (end.line ?? Infinity))) &&
       a.logLine.timestamp < untilMs &&
-      a.logLine.timestamp - endMs <= PRESS_CHAIN_HANDOVER_MS,
+      Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS &&
+      // it runs on past the window: not REMOVED with it
+      !events.some(
+        (r) =>
+          r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          r.spellId === a.spellId &&
+          r.srcUnitId === caster.id &&
+          r.logLine.timestamp >= a.logLine.timestamp &&
+          r.logLine.timestamp <= endMs + PRESS_CHAIN_HANDOVER_MS,
+      ),
   );
 }
 
@@ -1013,7 +1021,6 @@ function pressWindowEarlyEnd(
       own: ICombatUnit["auraEvents"][number];
       startMs: number;
       endMs: number;
-      endLine?: number;
     }
   | undefined {
   const events = rebroadcastFree(unit);
@@ -1043,12 +1050,7 @@ function pressWindowEarlyEnd(
   if (endMs >= untilMs) return undefined;
   if ((endMs - startMs) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
     return undefined;
-  return {
-    own: own ?? row,
-    startMs,
-    endMs,
-    endLine: removed.logLine.lineIndex,
-  };
+  return { own: own ?? row, startMs, endMs };
 }
 
 /** The duration a press's line prints, and the APPLIED row it is read

@@ -437,8 +437,10 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
       spellCastEvents: [cast],
       auraEvents: [
         makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
-        makeAuraEvent(REMOVED, "57934", T + 330, "rog", "rog", "BUFF"),
+        // the log's own order: the successor ahead of the windows' REMOVED
+        // in their millisecond (codex 85-tk-L5-T284-1g #1)
         makeAuraEvent(APPLIED, "221630", T + 330, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 330, "rog", "rog", "BUFF"),
         makeAuraEvent(REMOVED, "221630", T + 10_334, "rog", "rog", "BUFF"),
       ],
     });
