@@ -273,9 +273,20 @@ describe("two Gladiator's Badges — two items, a cooldown each (GH #176)", () =
 describe("[PRESS] lasts — a window the press's effect took over from (T284)", () => {
   const T = 1_000_000;
   const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REMOVED: REMOVED } = LogEvent;
+  // the log's own shape (52816a5f lines 4858–4889): the window on the
+  // rogue and on its target, removed together when the rogue's next hit
+  // consumes it
   const tricks = (windowEndsMs: number | undefined) => {
     const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
-    const rog = makeUnit("rog", { spellCastEvents: [cast] });
+    const rogRows = [makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF")];
+    if (windowEndsMs !== undefined)
+      rogRows.push(
+        makeAuraEvent(REMOVED, "57934", T + windowEndsMs, "rog", "rog", "BUFF"),
+      );
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: rogRows,
+    });
     const rows = [makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF")];
     if (windowEndsMs !== undefined)
       rows.push(
@@ -306,7 +317,13 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
   // the window on the hunter closed at 627 ms; `extra` adds rows
   const tricksWith = (extra: any[], roundEndAtMs = Infinity) => {
     const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
-    const rog = makeUnit("rog", { spellCastEvents: [cast] });
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 627, "rog", "rog", "BUFF"),
+      ],
+    });
     const hun = makeUnit("hun", {
       auraEvents: [
         makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
@@ -500,6 +517,59 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
         5,
         Infinity,
         [pal, petB, petA],
+      ),
+    ).toBeUndefined();
+  });
+
+  it("the successor 1 ms ahead of both windows' REMOVED is the hand-off (codex 85-tk-L5-T284-1i #1, 11475755 r1)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "59628", T + 292, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 293, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "59628", T + 10_302, "rog", "rog", "BUFF"),
+      ],
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 293, "rog", "hun", "BUFF"),
+      ],
+    });
+    const d = pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+    expect(d?.row.spellId).toBe("59628");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
+  it("other units' stuns broken as the DoT lands on the target close nothing (codex 85-tk-L5-T284-1i #2, a8b818af r5)", () => {
+    const cast = makeSpellCastEvent("255937", T, "pet", "Pet", "pal", "Pal");
+    const pal = makeUnit("pal", { spellCastEvents: [cast] });
+    const pet = makeUnit("pet", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "255941", T, "pal", "pet", "DEBUFF"),
+        makeAuraEvent(APPLIED, "403695", T + 18, "pal", "pet", "DEBUFF"),
+        makeAuraEvent(REMOVED, "255941", T + 4_975, "pal", "pet", "DEBUFF"),
+      ],
+    });
+    const guards = ["g1", "g2"].map((id) =>
+      makeUnit(id, {
+        auraEvents: [
+          makeAuraEvent(APPLIED, "255941", T, "pal", id, "DEBUFF"),
+          makeAuraEvent(REMOVED, "255941", T + 18, "pal", id, "DEBUFF"),
+        ],
+      }),
+    );
+    expect(
+      pressEffectHandoffRow(
+        { id: "pal" },
+        pet,
+        "255937",
+        pet.auraEvents[0] as any,
+        5,
+        Infinity,
+        [pal, pet, ...guards],
       ),
     ).toBeUndefined();
   });

@@ -821,11 +821,12 @@ export function pressEffectCutShort(
 }
 
 /**
- * T284 (audit-1215 04 D2): the press's aura on `unit` that `row` handed off
- * to — `row`'s aura REMOVED on that unit before its length (`lengthS`, less
- * `BUFF_FADE_EARLY_TOLERANCE_S`), in the instant (`PRESS_CHAIN_HANDOVER_MS`)
- * another aura of the press (its id or `effectAurasOfCast`) is APPLIED there
- * by the caster. Tricks of the Trade's 57934 is the window the rogue's next
+ * T284 (audit-1215 04 D2): the press's aura that `row` (on `unit`) handed
+ * off to — the caster's own copy of `row`'s aura REMOVED before its length
+ * (`lengthS`, less `BUFF_FADE_EARLY_TOLERANCE_S`), in the instant
+ * (`PRESS_CHAIN_HANDOVER_MS`) another aura of the press (its id or
+ * `effectAurasOfCast`) is APPLIED by the caster on `unit` or on a copy's
+ * unit. Tricks of the Trade's 57934 is the window the rogue's next
  * hit closes (52816a5f r5: 0.6 s), its 221630 the 10 s it gives: the line
  * printed `lasts 30s` off the window. Undefined when `row` ran on, or no
  * aura of the press took over. A series (`PRESS_EFFECT_CHAIN_AURAS`) has
@@ -835,7 +836,7 @@ export function pressEffectCutShort(
  * `untilMs` (the caster's next press of the button, the round's end).
  */
 export function pressEffectHandoffRow<
-  U extends Pick<ICombatUnit, "auraEvents">,
+  U extends Pick<ICombatUnit, "id" | "auraEvents">,
 >(
   caster: Pick<ICombatUnit, "id">,
   unit: U,
@@ -889,7 +890,15 @@ export function pressEffectHandoffRow<
       end: end && { ms: end.endMs },
     });
   }
+  // the window that closes is the caster's own copy — the window its next
+  // action consumes (Tricks of the Trade's 57934 on the rogue). A copy on
+  // another unit ending early is that unit's (a stun broken, an aura
+  // dispelled) and closes nothing (codex 85-tk-L5-T284-1h, a1cc7584 r1;
+  // 1i #2, a8b818af r5 7.517 s / b5f8af9d r0 87.575 s: Wake of Ashes'
+  // stun on two guardians broken as its DoT landed on the pet, whose own
+  // stun ran 5 s — `lasts 5s` read as 13s / 9s off the DoT)
   const ends = copies
+    .filter((c) => c.unit.id === caster.id)
     .map((c) => c.end)
     .filter((t): t is End => t !== undefined)
     .sort((x, y) => x.ms - y.ms);
@@ -945,13 +954,10 @@ function handoffOn(
       byCaster(a) &&
       afterOwn(a) &&
       a.logLine.timestamp < untilMs &&
-      // in the window's end millisecond or after it — an aura put up while
-      // the window still ran is the press's other effect, not what the
-      // window handed off to (codex 85-tk-L5-T284-1h, a1cc7584 r1 10.938 s:
-      // Wake of Ashes' 403695 on a pet 129 ms before the other pet's stun
-      // broke; the 6e3bcedf successor shares its window's millisecond)
-      a.logLine.timestamp >= endMs &&
-      a.logLine.timestamp - endMs <= PRESS_CHAIN_HANDOVER_MS &&
+      // either side of the end (codex 85-tk-L5-T284-1i #1, 11475755 r1
+      // 79.094 s: the rogue's 59628 at +292 ms, both 57934 windows removed
+      // at +293 ms)
+      Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS &&
       // it runs on past the window: not REMOVED with it
       !events.some(
         (r) =>
