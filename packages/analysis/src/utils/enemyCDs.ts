@@ -36,6 +36,7 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
+import { auraSurelyUpPastMs } from "./auraSurelyUp";
 import { buffDurationOfApplication } from "./buffDuration";
 import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
 import {
@@ -1009,6 +1010,54 @@ function observedEffectEnd(
         };
       return null;
     }
+  }
+  // T308 (user 2026-11-27, T284 (a)): a chain the log never closes — no
+  // REMOVED, the builder's official-length cap — that the log shows still
+  // up past that cap (`auraSurelyUpPastMs`) ran on to the round's end, or
+  // to the caster's next press of the spell (41243fd2-shaped: Breath of
+  // Sindragosa's damage rows 2 s past its 8 s with no REMOVED). Without that
+  // evidence the official end stands: ~4.5 % of REMOVED rows are lost.
+  if (best !== null && !best.observed) {
+    // …past THIS press's official end: the builder's cap runs from the
+    // chain's last REFRESH, and that REFRESH is itself the evidence (1215
+    // d90bd21f r5: Recklessness pressed 102.84, refreshed 139.975 by the
+    // next press, capped 24 s after it — the press read the official 126.8)
+    const appliedS = pressAppliedS(best);
+    const ownFull = buffDurationOfApplication(
+      best.auraId,
+      caster,
+      combat.startTime + appliedS * 1000,
+    );
+    const capMs =
+      combat.startTime +
+      Math.min(
+        best.end,
+        ownFull === undefined ? best.end : appliedS + ownFull,
+      ) *
+        1000;
+    const untilMs = Math.min(
+      roundEndMs(combat),
+      combat.startTime + nextSameCastS * 1000,
+    );
+    const holder = combat.units?.[best.destId] as ICombatUnit | undefined;
+    if (
+      holder &&
+      untilMs > capMs &&
+      auraSurelyUpPastMs(
+        caster,
+        holder,
+        best.auraId,
+        castSpellId,
+        capMs,
+        untilMs,
+      )
+    )
+      return {
+        endS: (untilMs - combat.startTime) / 1000,
+        holderId: best.destId,
+        auraId: best.auraId,
+        appliedS,
+      };
   }
   if (best?.observed)
     return {

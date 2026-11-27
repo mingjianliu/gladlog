@@ -10,6 +10,7 @@ import {
 } from "../data/spellEffectData";
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
+import { auraSurelyUpPastMs } from "./auraSurelyUp";
 import {
   buffDurationOfApplication,
   buffFullDurationForCaster,
@@ -24,6 +25,7 @@ import {
 import { relistedRunAt } from "./hiddenPress";
 import { logInstantOf } from "./logEra";
 import { isResyncBatchAt } from "./resyncBatch";
+import { roundEndMs } from "./roundEnd";
 import { offensiveDangerWeight } from "./spellDanger";
 import { talentOwnershipOf } from "./talentOwnership";
 
@@ -491,8 +493,26 @@ export function auraOffensiveOccurrences(
   );
   for (const iv of intervals) {
     const startMs = bounds.startTime + iv.fromS * 1000;
-    const endMs = bounds.startTime + iv.toS * 1000;
+    let endMs = bounds.startTime + iv.toS * 1000;
     const endObserved = !iv.inferredEnd;
+    // T308 (user 2026-11-27): a life the log never closes that it shows
+    // still up past its official cap ran on to the round's end, or to this
+    // aura's next application (605 90c01e7f r6: Doom Winds, pressed with only
+    // its aura in the log, struck 2 s past its 10 s with no REMOVED) — the
+    // press-row reading's own predicate (`observedEffectEnd`)
+    if (iv.inferredEnd && !iv.inferredStart) {
+      const nextFromS = intervals
+        .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
+        .reduce((m, o) => Math.min(m, o.fromS), Infinity);
+      const untilMs = Math.min(
+        roundEndMs(bounds),
+        bounds.startTime + nextFromS * 1000,
+      );
+      if (
+        auraSurelyUpPastMs(unit, unit, iv.spellId, iv.spellId, endMs, untilMs)
+      )
+        endMs = untilMs;
+    }
     /** the aura's own official end for this caster, from its own start */
     const auraFull = buffDurationOfApplication(iv.spellId, unit, startMs);
     const auraOfficialEndMs =

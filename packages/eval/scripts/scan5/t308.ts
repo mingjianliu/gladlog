@@ -11,14 +11,14 @@
  *
  * Check `burstAuraPastSpan`, kind = the evidence (the spell in the detail;
  * `report()` splits per spell):
- *  - `surely up: aura rows` — a REFRESH / APPLIED_DOSE / REMOVED_DOSE of the
- *    aura on the owner by the owner more than 1 s past the printed end;
- *  - `surely up: effect rows` — a damage / heal row of the owner under the
- *    aura's or the press's English name more than 1 s past the printed end;
+ *  - `surely up` (in the total) — the producer's own reading
+ *    (`auraSurelyUpPastMs`: the aura's REFRESH / DOSE rows, or the owner's
+ *    damage / heal rows under its name, more than 1 s past the printed
+ *    end): the span should have run on (T308);
  *  - `lost: re-applied` — an APPLIED of the aura on the owner later in the
  *    round with no REMOVED before it: the first life ended unlogged;
- *  - `can't tell` — none of these.
- * Every kind is out of the total (an inventory for the ruling).
+ *  - `can't tell` — neither.
+ * `lost` and `can't tell` are out of the total (an inventory).
  *
  * `report()` adds, per aura, the lives the log does close (APPLIED to its
  * REMOVED, no later ledger entry of the spell inside) and how many of the
@@ -26,6 +26,10 @@
  * a life the corpus has seen).
  */
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  AURA_SURELY_UP_PAST_MS,
+  auraSurelyUpPastMs,
+} from "@gladlog/analysis/src/utils/auraSurelyUp";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -33,13 +37,7 @@ import { APPLIED, ev, type IRoundCtx, REFRESH, REMOVED, tsOf } from "./ctx";
 
 export const CHECKS = ["burstAuraPastSpan"] as const;
 
-const KINDS = [
-  "surely up: aura rows",
-  "surely up: effect rows",
-  "lost: re-applied",
-  "can't tell",
-] as const;
-const PAST_MS = 1000;
+const KINDS = ["surely up", "lost: re-applied", "can't tell"] as const;
 
 /** aura id → closed lives (s); spell name → official span (s) seen */
 const lives = new Map<string, number[]>();
@@ -49,12 +47,6 @@ const undecided: Array<{ aura: string; spell: string; toEndS: number }> = [];
 const seen = new Set<string>();
 /** spell → evidence → distinct facts */
 const perSpell = new Map<string, Map<string, number>>();
-
-function effectName(r: any): string {
-  return r.attackSpellId
-    ? getEnglishSpellName(String(r.attackSpellId), r.attackSpellName ?? "")
-    : getEnglishSpellName(String(r.spellId), r.spellName ?? "");
-}
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -111,41 +103,20 @@ export function run(ctx: IRoundCtx): void {
     const upTo = Math.min(renewed, endS);
     if (s.spanToSeconds >= upTo - 1) continue;
     ctx.bump("burstAuraPastSpan");
-    const pastMs = ctx.start + s.spanToSeconds * 1000 + PAST_MS;
+    const capMs = ctx.start + s.spanToSeconds * 1000;
     const untilMs = Math.min(endMs, ctx.start + renewed * 1000);
     const reapplied = own.some(
       (r) =>
         r.spellId === app.spellId &&
         ev(r) === APPLIED &&
-        tsOf(r) > tsOf(app) + PAST_MS &&
+        tsOf(r) > tsOf(app) + AURA_SURELY_UP_PAST_MS &&
         tsOf(r) <= untilMs,
     );
-    const auraRows = own.some(
-      (r) =>
-        r.spellId === app.spellId &&
-        (ev(r) === REFRESH ||
-          ev(r) === "SPELL_AURA_APPLIED_DOSE" ||
-          ev(r) === "SPELL_AURA_REMOVED_DOSE") &&
-        tsOf(r) > pastMs &&
-        tsOf(r) <= untilMs,
-    );
-    const names = new Set([
-      s.spellName,
-      getEnglishSpellName(app.spellId, app.spellName ?? ""),
-    ]);
-    const effectRows = [...(owner.damageOut ?? []), ...(owner.healOut ?? [])]
-      .filter((r: any) => r.srcUnitId === owner.id)
-      .some(
-        (r: any) =>
-          tsOf(r) > pastMs && tsOf(r) <= untilMs && names.has(effectName(r)),
-      );
     const evidence = reapplied
       ? "lost: re-applied"
-      : auraRows
-        ? "surely up: aura rows"
-        : effectRows
-          ? "surely up: effect rows"
-          : "can't tell";
+      : auraSurelyUpPastMs(owner, owner, app.spellId, s.spellId, capMs, untilMs)
+        ? "surely up"
+        : "can't tell";
     if (first) {
       const m = perSpell.get(s.spellName) ?? new Map<string, number>();
       m.set(evidence, (m.get(evidence) ?? 0) + 1);
@@ -167,10 +138,11 @@ export function run(ctx: IRoundCtx): void {
   }
 }
 
-/** every kind is an inventory */
-export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
-  KINDS.map((k) => `burstAuraPastSpan|${k}`),
-);
+/** the undecided kinds are an inventory */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "burstAuraPastSpan|lost: re-applied",
+  "burstAuraPastSpan|can't tell",
+]);
 
 export function report(): string[] {
   const out = [

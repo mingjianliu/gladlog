@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- test fixtures */
 import { CombatUnitType, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { auraSurelyUpPastMs } from "../src/utils/auraSurelyUp";
 import {
   EFFECT_CHAIN_GAP_S,
   observedEffectEndSeconds,
@@ -493,5 +495,84 @@ describe("observedEffectEndSeconds", () => {
         13.75,
       );
     });
+  });
+});
+
+describe("T308: a life the log never closes, shown still up past its official end", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  // Avatar 20 s pressed at 10 s, no REMOVED; the round's log ends at 60 s
+  const open = (extra: Array<[LogEvent, number]>, damage: number[] = []) => {
+    const { caster, combat } = scene([
+      [LogEvent.SPELL_AURA_APPLIED, 10],
+      ...extra,
+    ]);
+    (combat as any).endTime = T0 + 60_000;
+    (caster as any).damageOut = damage.map((s) => ({
+      srcUnitId: "c1",
+      destUnitId: "e1",
+      spellId: AVATAR,
+      spellName: "Avatar",
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + s * 1000 },
+    }));
+    return { caster, combat };
+  };
+
+  it("no evidence past the official end: the official end stands (null)", () => {
+    const { caster, combat } = open([]);
+    expect(
+      observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat),
+    ).toBeNull();
+  });
+
+  it("its own REFRESH past the official end: it ran on to the round's end", () => {
+    const { caster, combat } = open([[LogEvent.SPELL_AURA_REFRESH, 33]]);
+    expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
+      60,
+    );
+  });
+
+  it("a row under its name past the official end: to the round's end, or to the next press", () => {
+    const { caster, combat } = open([], [35]);
+    expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
+      60,
+    );
+    expect(observedEffectEndSeconds(caster, AVATAR, 10, 50, combat)).toBe(50);
+  });
+
+  it("evidence inside the cap's own second is none; a re-APPLIED is a lost end", () => {
+    expect(
+      auraSurelyUpPastMs(
+        open([]).caster,
+        open([]).caster,
+        AVATAR,
+        AVATAR,
+        T0 + 30_000,
+        T0 + 60_000,
+      ),
+    ).toBe(false);
+    const near = open([], [30.6]);
+    expect(
+      auraSurelyUpPastMs(
+        near.caster,
+        near.caster,
+        AVATAR,
+        AVATAR,
+        T0 + 30_000,
+        T0 + 60_000,
+      ),
+    ).toBe(false);
+    const lost = open([[LogEvent.SPELL_AURA_APPLIED, 40]], [45]);
+    expect(
+      auraSurelyUpPastMs(
+        lost.caster,
+        lost.caster,
+        AVATAR,
+        AVATAR,
+        T0 + 30_000,
+        T0 + 60_000,
+      ),
+    ).toBe(false);
   });
 });
