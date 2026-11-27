@@ -84,7 +84,10 @@
  *    merged) on the Target from the first own press of the header's opening
  *    second. Counted: every entry with such a trailing tick — one inside
  *    the round, before the aura is back up (a channel chained into its next
- *    one: that row is the next channel's first tick).
+ *    one: that row is the next channel's first tick), of a channel whose
+ *    REMOVED falls inside the producer's own window (its entry's
+ *    `toSeconds`, pipeline T304): one still running at the window's end is
+ *    summed to that end, its tail no part of the line.
  *  - summonDiedBeforePulse (class 6, D10): a `[CC AVOIDED?] … did not
  *    land` line of a press whose summon (SPELL_SUMMON within the press's
  *    instant, owned by the caster) died (`nonPlayerUnitKill`) before any row
@@ -137,6 +140,7 @@ import {
 } from "@gladlog/analysis/src/data/spellTags";
 import { staleMaxHpRows } from "@gladlog/analysis/src/utils/advancedActions";
 import { kitNameWithoutNoWallTag } from "@gladlog/analysis/src/utils/auraMasteryBranch";
+import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis/src/utils/castBarOutcomes";
 import {
@@ -1002,12 +1006,35 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
   const auras = ((o.auraEvents ?? []) as any[]).filter(
     (a) => a.srcUnitId === o.id && a.destUnitId === o.id,
   );
+  // the producer's own entries (pipeline T304): the ledger sums to its
+  // window's end (`toSeconds`), so a channel still running then — its
+  // REMOVED and its last tick both past that end — left out no tick of a
+  // run the line counts (0679f16b r1 0:23: Fists of Fury off at 39.199 s,
+  // the window over at 39.036 s with Blood Fury; 820bc81e r1 0:09: off at
+  // 25.391 s, Zenith over at 24.797 s)
+  let ledger: ReturnType<typeof analyzeBurstLedger> | undefined;
+  const ledgerOf = (): ReturnType<typeof analyzeBurstLedger> => {
+    if (ledger) return ledger;
+    try {
+      // as buildMatchContext reads it: the owner's teammates, the owner apart
+      const mates = ctx.players.filter(
+        (u) => u.reaction === o.reaction && u.id !== o.id,
+      );
+      const enemies = ctx.players.filter((u) => u.reaction !== o.reaction);
+      ledger = analyzeBurstLedger(o, mates, enemies, ctx.legacy);
+    } catch {
+      ledger = [];
+    }
+    return ledger;
+  };
   const roundEnd = roundEndMs(ctx.legacy);
-  let head: { from: number; to: number; opener: string } | null = null;
+  let head: { n: number; from: number; to: number; opener: string } | null =
+    null;
   for (const l of ctx.text.split("\n")) {
     const h = BURST_HEAD.exec(l);
     if (h) {
       head = {
+        n: +(/Burst #(\d+)/.exec(l)?.[1] ?? 0),
         from: mss(h[1]!, h[2]!),
         to: mss(h[3]!, h[4]!),
         opener:
@@ -1025,28 +1052,56 @@ function channelLastTickDropped(ctx: IRoundCtx): void {
     const lo = ctx.start + from * 1000;
     const hi = ctx.start + (to + 1) * 1000;
     const opener = head.opener;
-    const first = succ
-      .filter(
-        (c) =>
-          tsOf(c) >= lo &&
-          tsOf(c) < lo + 1000 &&
-          nameOf(c.spellId, c.spellName) === opener,
-      )
-      .map(tsOf);
+    // the printed `Burst #N` is the ledger's N-th entry (rendered in order),
+    // checked against the header's own seconds; its span is the one the
+    // figure was summed over — opened by a press or by a proc (`X (no
+    // press)`, codex 85-tk-L6-T304-1 #1: 90c57b63 r4 Burst #7, no cast row
+    // of that name), two entries on one rendered second told apart (#3)
+    const cand = ledgerOf()[head.n - 1];
+    const entry =
+      cand &&
+      toRenderSecond(cand.fromSeconds) === from &&
+      toRenderSecond(cand.toSeconds) === to
+        ? cand
+        : undefined;
     head = null;
-    if (first.length === 0) continue;
-    const fromMs = Math.min(...first);
+    let fromMs: number;
+    let windowEndMs: number;
+    if (entry) {
+      fromMs = Math.round(ctx.start + entry.fromSeconds * 1000);
+      windowEndMs = Math.round(ctx.start + entry.toSeconds * 1000);
+    } else {
+      const first = succ
+        .filter(
+          (c) =>
+            tsOf(c) >= lo &&
+            tsOf(c) < lo + 1000 &&
+            nameOf(c.spellId, c.spellName) === opener,
+        )
+        .map(tsOf);
+      if (first.length === 0) continue;
+      fromMs = Math.min(...first);
+      // no entry to read the exact end from: only a REMOVED surely inside
+      // the printed window counts (it ended in [to, to + 1); codex
+      // 85-tk-L6-T304-2)
+      windowEndMs = ctx.start + to * 1000;
+    }
     let tickEnd: number | null = null;
     let removedAt = 0;
     for (const c of succ) {
       const id = String(c.spellId);
-      if (!CHANNELED_SPELL_IDS.has(id) || tsOf(c) < fromMs || tsOf(c) >= hi)
+      if (
+        !CHANNELED_SPELL_IDS.has(id) ||
+        tsOf(c) < fromMs ||
+        tsOf(c) >= hi ||
+        tsOf(c) > windowEndMs
+      )
         continue;
       const rem = auras.find(
         (a) =>
           String(a.spellId) === id && ev(a) === REMOVED && tsOf(a) > tsOf(c),
       );
-      if (!rem) continue;
+      if (!rem || tsOf(rem) > windowEndMs) continue;
       const name = nameOf(id, c.spellName);
       // the aura back up at once is the channel chained into its next one,
       // and the ledger reads no row past the round's end (pipeline T248:

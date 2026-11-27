@@ -19,6 +19,13 @@
  * EffectTriggerSpell ids it fires each period, observed auras only. The
  * aura's last trigger can be logged a few ms after its REMOVED (Boomstick
  * 1261193 → its volley 1261215, 1–12 ms on 1cbbdcb3).
+ *
+ * Pipeline T304: and an aura 226 (PERIODIC_DUMMY) that names its
+ * EffectTriggerSpell — the spell fires that spell each period as well:
+ * Fists of Fury 113656 → 117418 every 166 ms, its last one logged 1 ms
+ * after the channel's REMOVED (0679f16b r1 0:39, 820bc81e r1 0:25). A 226
+ * aura with no trigger id fires nothing the table can name, and never
+ * joins the scripted set.
  */
 import fs from "fs-extra";
 
@@ -32,6 +39,8 @@ import {
 
 export const PERIODIC_DAMAGE_AURAS = new Set(["3", "53", "89"]);
 const PERIODIC_TRIGGER_AURAS = new Set(["23", "227"]);
+/** PERIODIC_DUMMY: a trigger aura only where it names its trigger spell */
+const PERIODIC_DUMMY_AURA = "226";
 
 async function main() {
   const build = await resolveBuild(process.argv[2]);
@@ -62,7 +71,8 @@ async function main() {
     if (PERIODIC_DAMAGE_AURAS.has(r.EffectAura ?? "")) ids.add(r.SpellID);
     const t = r.EffectTriggerSpell ?? "0";
     if (
-      PERIODIC_TRIGGER_AURAS.has(r.EffectAura ?? "") &&
+      (PERIODIC_TRIGGER_AURAS.has(r.EffectAura ?? "") ||
+        r.EffectAura === PERIODIC_DUMMY_AURA) &&
       t !== "0" &&
       observed.has(r.SpellID)
     ) {
@@ -93,12 +103,12 @@ async function main() {
     "../../src/data/periodicAuraGenerated.ts",
     import.meta.url,
   ).pathname;
-  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: SpellEffect aura 3 / 53 / 89 (PERIODIC_DAMAGE / PERIODIC_LEECH /\n *   PERIODIC_DAMAGE_PERCENT) on the spell itself; every id, not only observed ones\n * ids: ${sorted.length}; periodic-trigger auras (23 / 227, observed): ${triggerRows.length}; scripted: ${scriptedIds.length}\n */\n\n`;
+  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: SpellEffect aura 3 / 53 / 89 (PERIODIC_DAMAGE / PERIODIC_LEECH /\n *   PERIODIC_DAMAGE_PERCENT) on the spell itself; every id, not only observed ones\n * ids: ${sorted.length}; periodic-trigger auras (23 / 227, or 226 with a trigger id; observed): ${triggerRows.length}; scripted: ${scriptedIds.length}\n */\n\n`;
   writeArtifact(
     outPath,
     header +
       `export const PERIODIC_DAMAGE_AURA_IDS: ReadonlySet<string> = new Set(\n  ${JSON.stringify(sorted)},\n);\n\n` +
-      `/** aura (effect 23 / 227, observed) → the spells it triggers each period */\n` +
+      `/** aura (effect 23 / 227, or 226 naming its trigger spell; observed) → the spells it triggers each period */\n` +
       `export const PERIODIC_TRIGGER_SPELLS: ReadonlyMap<string, readonly string[]> = new Map(\n  ${JSON.stringify(triggerRows)} as [string, string[]][],\n);\n\n` +
       `/** aura (effect 23 / 227, observed) with no trigger id on any row: the game scripts what it fires */\n` +
       `export const SCRIPTED_PERIODIC_TRIGGER_AURA_IDS: ReadonlySet<string> = new Set(\n  ${JSON.stringify(scriptedIds)},\n);\n`,

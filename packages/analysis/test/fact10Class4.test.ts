@@ -276,3 +276,46 @@ describe("pipeline T248 — the burst ledger's damage reads on to a trailing las
     expect(endMs(121.77, 300, 121.766, 121.9)).toBe(at(121.77));
   });
 });
+
+describe("pipeline T304 — an aura 226 that names its trigger spell is a periodic trigger", () => {
+  const FISTS_OF_FURY = "113656";
+  const FOF_TICK = "117418";
+  const endOf = (tickS: number, tickId = FOF_TICK) => {
+    const { unit, combat } = combatWith(120.3);
+    const monk = unit as any;
+    monk.spellCastEvents[0] = {
+      ...monk.spellCastEvents[0],
+      spellId: FISTS_OF_FURY,
+      spellName: "Fists of Fury",
+    };
+    monk.auraEvents = monk.auraEvents.map((a: any) => ({
+      ...a,
+      spellId: FISTS_OF_FURY,
+      spellName: "Fists of Fury",
+    }));
+    monk.damageOut = [
+      { ...hit(120.3, FOF_TICK), spellName: "Fists of Fury" },
+      { ...hit(tickS, tickId), spellName: "Fists of Fury" },
+    ];
+    return observedEffectEndSeconds(
+      monk,
+      FISTS_OF_FURY,
+      119.247,
+      Infinity,
+      combat,
+    );
+  };
+  it("DB2: Fists of Fury is aura 226 with trigger 117418", () => {
+    expect(PERIODIC_TRIGGER_SPELLS.get(FISTS_OF_FURY)).toContain(FOF_TICK);
+    expect(SCRIPTED_PERIODIC_TRIGGER_AURA_IDS.has(FISTS_OF_FURY)).toBe(false);
+  });
+  it("0679f16b r1 0:39 / 820bc81e r1 0:25: its tick 1 ms after the REMOVED ends the effect", () => {
+    expect(endOf(121.767)).toBeCloseTo(121.767, 6);
+  });
+  it("a row past the slack, or of another id, does not", () => {
+    expect(
+      endOf(121.766 + (PERIODIC_LAST_TRIGGER_SLACK_MS + 1) / 1000),
+    ).toBeCloseTo(121.766, 6);
+    expect(endOf(121.767, "107270")).toBeCloseTo(121.766, 6);
+  });
+});
