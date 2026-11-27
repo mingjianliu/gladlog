@@ -91,5 +91,5 @@ export async function openAiView(page: Page): Promise<void> {
     timeout: BOOT_TIMEOUT_MS,
   });
   await matchRows(page).first().click();
-  await page.getByRole("button", { name: "AI 分析" }).click();
+  await page.getByRole("button", { name: "AI 分析", exact: true }).click();
 }
