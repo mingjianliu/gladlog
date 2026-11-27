@@ -504,6 +504,9 @@ describe("战绩页改版:按角色 × 赛制", () => {
     expect(screen.getByTestId("cs-sessions").querySelectorAll("tbody tr").length).toBe(2);
     fireEvent.click(screen.getByRole("tab", { name: /Solo Shuffle/ }));
     expect(screen.getByRole("tab", { name: /Solo Shuffle/ }).getAttribute("aria-selected")).toBe("true");
+    // switching character is a dropdown now, not a row of chips
+    const sw = screen.getByTestId("cs-switch") as HTMLSelectElement;
+    expect([...sw.options].map((o) => o.textContent)).toContain("Dr");
     fireEvent.click(screen.getByText("‹ 全部角色"));
     expect(await screen.findByTestId("cs-overview")).toBeTruthy();
   });

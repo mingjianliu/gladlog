@@ -634,18 +634,23 @@ export function CharacterDetail({
         <button className="cs-back" onClick={onBack}>
           ‹ {t("stats.allCharacters")}
         </button>
-        <span className="cs-dim">{t("stats.cs.switch")}</span>
-        {characters.map((n) => (
-          <button
-            key={n}
-            className={n === character ? "cs-chip cs-chip-on" : "cs-chip"}
-            aria-pressed={n === character}
-            onClick={() => onPick(n)}
+        {/* A dropdown, not a row of 14 chips wrapping onto two lines
+          (direction pass 2026-11-27): the page is about one character; the
+          others are one click away, not on display. */}
+        <label className="cs-switch">
+          <span className="cs-dim">{t("stats.cs.switch")}</span>
+          <select
+            value={character}
+            data-testid="cs-switch"
+            onChange={(e) => onPick(e.target.value)}
           >
-            <SpecAvatar name={n} size="sm" {...latestSpecOf(metas, n)} />
-            {shortUnitName(n)}
-          </button>
-        ))}
+            {characters.map((n) => (
+              <option key={n} value={n}>
+                {shortUnitName(n)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="cs-hero">

@@ -112,7 +112,7 @@ export const enStats = {
   "stats.cs.unitMatches": "matches",
   "stats.cs.lobbies": (p: MessageParams) => plural(p.n, "lobby", "lobbies"),
   "stats.cs.smallSample": "small sample",
-  "stats.cs.switch": "/ Switch:",
+  "stats.cs.switch": "Switch character",
   "stats.cs.periodGames": (p: MessageParams) =>
     `${plural(p.n, "match", "matches")} in this period`,
   "stats.cs.kpi.current": "Current rating",

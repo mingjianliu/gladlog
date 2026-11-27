@@ -97,3 +97,40 @@ describe("战绩:新角色不显示涨跌", () => {
     expect(container.textContent).toContain("17");
   });
 });
+
+describe("GCD 泳道:死亡回顾的结论钉在对应玩家那一列", () => {
+  it("可给未给 / 被控 / 无敌未按 各进各的列;没有这一列的施法者不猜", async () => {
+    const { laneNotesFromRecaps } = await import(
+      "../src/renderer/src/report/derive/deathReasons"
+    );
+    const r = recap({
+      unitId: "zt",
+      deathS: 150,
+      availableImmunities: [
+        { spellId: "1", spellName: "Unending Resolve", wasInCC: false },
+        { spellId: "2", spellName: "Dark Pact", wasInCC: true },
+      ],
+      missedExternals: [
+        { casterName: "Steviebb", spellId: "3", spellName: "Darkness", casterWasInCC: false },
+        { casterName: "Me", spellId: "4", spellName: "Spirit Link Totem", casterWasInCC: true },
+        { casterName: "Me", spellId: "5", spellName: "Earth Shield", casterWasInCC: false, casterCouldNotPay: true },
+        { casterName: "Ghost", spellId: "6", spellName: "X", casterWasInCC: false },
+      ],
+    } as unknown as Partial<DeathRecap>);
+    const notes = laneNotesFromRecaps(
+      [r],
+      1_000_000,
+      new Map([
+        ["Steviebb", "st"],
+        ["Me", "me"],
+        ["Ztlivid-Illidan", "zt"],
+      ]),
+    );
+    const tMs = 1_000_000 + 150_000;
+    expect(notes).toEqual({
+      zt: [{ tMs, kind: "unpressed", spellName: "Unending Resolve" }],
+      st: [{ tMs, kind: "missed", spellName: "Darkness" }],
+      me: [{ tMs, kind: "blocked", spellName: "Spirit Link Totem" }],
+    });
+  });
+});

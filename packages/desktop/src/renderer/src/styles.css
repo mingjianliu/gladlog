@@ -7975,3 +7975,65 @@ td.radar-matrix-spec {
 .rpt-dampening-lane {
   fill: var(--mute);
 }
+/* GCD lanes: death-recap notes above the death line (dashed = "could have,
+   didn't": teal when it was available, red when control stopped it) */
+.rpt-gcd-notes {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  z-index: 2;
+  transform: translateY(-100%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rpt-gcd-note {
+  padding: 3px 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  background: var(--bg);
+  border: 1px dashed var(--win);
+  color: #8fd0c5;
+}
+.rpt-gcd-note-blocked {
+  border-color: var(--kill);
+  color: #f0a49d;
+}
+/* sessions table: sized to its content so 涨跌 sits next to 分数 instead of
+   at the far edge of a full-width table */
+.cs-table {
+  width: auto;
+  min-width: min(100%, 560px);
+}
+.cs-table th,
+.cs-table td {
+  padding-right: 44px;
+}
+.cs-table th:last-child,
+.cs-table td:last-child {
+  padding-right: 0;
+}
+.cs-table td.cs-num {
+  font-family: var(--font-num);
+  font-size: 15px;
+}
+.cs-table th.cs-num {
+  font-weight: 500;
+}
+/* character switcher: one dropdown */
+.cs-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+.cs-switch select {
+  color-scheme: dark;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  min-height: 30px;
+}

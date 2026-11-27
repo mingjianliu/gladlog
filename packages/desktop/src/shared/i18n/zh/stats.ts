@@ -91,7 +91,7 @@ export const zhStats = {
   "stats.cs.unitMatches": "场",
   "stats.cs.lobbies": "{n} 局",
   "stats.cs.smallSample": "样本少",
-  "stats.cs.switch": "/ 切换：",
+  "stats.cs.switch": "切换角色",
   "stats.cs.periodGames": "这段时间 {n} 场",
   "stats.cs.kpi.current": "当前分数",
   "stats.cs.kpi.change": "这段时间涨跌",

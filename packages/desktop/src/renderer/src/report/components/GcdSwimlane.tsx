@@ -17,6 +17,7 @@ import {
   deriveGcdCasts,
   isMajorCd,
 } from "../derive/casts";
+import type { LaneNote } from "../derive/deathReasons";
 import { clusterGcdCasts } from "../derive/gcdCluster";
 import type { ReplayTrack } from "../derive/replay";
 import { spellLabel } from "../derive/spellLabel";
@@ -93,6 +94,21 @@ function Dot({ track }: { track: ReplayTrack }) {
   );
 }
 
+/** Notes of one lane grouped by death instant: each group is one stack that
+ * ends just above that death line (the stack grows upward, so wrapped notes
+ * never cover the line itself). */
+function groupNotes(notes: LaneNote[] | undefined): Array<[number, LaneNote[]]> {
+  if (!notes || notes.length === 0) return [];
+  const m = new Map<number, LaneNote[]>();
+  for (const n of notes) (m.get(n.tMs) ?? m.set(n.tMs, []).get(n.tMs)!).push(n);
+  return [...m.entries()];
+}
+const NOTE_KEY = {
+  unpressed: "report.gcd.noteUnpressed",
+  missed: "report.gcd.noteMissed",
+  blocked: "report.gcd.noteBlocked",
+} as const;
+
 type Laid = { cl: import("../derive/gcdCluster").GcdCluster; y: number };
 
 type FlashReq = { tMs: number; unitNames: string[]; nonce: number } | null;
@@ -123,6 +139,7 @@ const LaneBody = memo(function LaneBody({
   onSeek,
   onDeath,
   yFor,
+  notes,
 }: {
   cols: ReplayTrack[];
   laidByUnit: Record<string, Laid[]>;
@@ -140,6 +157,7 @@ const LaneBody = memo(function LaneBody({
   onSeek: (tMs: number) => void;
   onDeath: (unitId: string, tMs: number) => void;
   yFor: (ts: number) => number;
+  notes?: Record<string, LaneNote[]>;
 }) {
   // a context consumer: re-renders through memo() when the language or the
   // English name table (namesVersion) changes, so the names below follow
@@ -301,6 +319,27 @@ const LaneBody = memo(function LaneBody({
                     </div>
                   );
                 })}
+                {/* Death-recap notes (direction pass 2026-11-27): what the
+                    recap established — up and not given, CC'd, immunity
+                    unpressed — stacked just above the death line in the lane
+                    of the player it is about. */}
+                {groupNotes(notes?.[tr.unitId]).map(([tMs, group]) => (
+                  <div
+                    key={`notes${tMs}`}
+                    className="rpt-gcd-notes"
+                    style={{ top: yFor(tMs) - 2 }}
+                  >
+                    {group.map((n, k) => (
+                      <div
+                        key={k}
+                        className={`rpt-gcd-note rpt-gcd-note-${n.kind}`}
+                        data-testid="gcd-note"
+                      >
+                        {tt(NOTE_KEY[n.kind], { spell: n.spellName })}
+                      </div>
+                    ))}
+                  </div>
+                ))}
                 {tr.deathT != null && (
                   <div
                     className={
@@ -354,6 +393,7 @@ export function GcdSwimlane({
   bands,
   compact = false,
   onCompactChange,
+  notes,
 }: {
   source: ReportSource;
   tracks: ReplayTrack[];
@@ -378,6 +418,8 @@ export function GcdSwimlane({
    * badge, minis fold into ×N. */
   compact?: boolean;
   onCompactChange?: (v: boolean) => void;
+  /** Death-recap notes keyed by unitId (laneNotesFromRecaps). */
+  notes?: Record<string, LaneNote[]>;
 }) {
   const { t: tt, lang } = useT();
   const durationSec = Math.max(1, (endTime - startTime) / 1000);
@@ -685,6 +727,7 @@ export function GcdSwimlane({
             onSeek={stableSeek}
             onDeath={stableDeath}
             yFor={yFor}
+            notes={notes}
           />
 
           {/* Shared time cursor (kept outside the memo boundary: smooth at

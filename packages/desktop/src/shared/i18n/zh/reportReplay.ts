@@ -33,6 +33,9 @@ export const zhReportReplay = {
   "report.gcd.density.compact": "紧凑",
   "report.gcd.sharedAxis": "与地图共享时间轴",
   "report.gcd.bandChipTitle": "点击定位(地图同步)",
+  "report.gcd.noteMissed": "{spell} 可用，没交",
+  "report.gcd.noteBlocked": "{spell} 被控，交不了",
+  "report.gcd.noteUnpressed": "{spell} 可用未按",
   "report.gcd.scrollAria": "GCD 泳道(可滚动)",
 
   // ── ReplayView.tsx ──

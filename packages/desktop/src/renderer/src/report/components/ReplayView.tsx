@@ -9,6 +9,8 @@ import { classColor, classGlyph, specIconName } from "../data/gameConstants";
 import { castBarAt, deriveCastBars } from "../derive/castBars";
 import { deriveCasts } from "../derive/casts";
 import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
+import { laneNotesFromRecaps } from "../derive/deathReasons";
+import type { DeathRecap } from "../derive/deathRecap";
 import {
   deathPosition,
   deriveReplay,
@@ -77,8 +79,13 @@ export function ReplayView({
   onDeathClick,
   onLastT,
   onMomentDive,
+  deathRecaps,
 }: {
   source: ReportSource;
+  /** The report's death recaps: their established reasons (immunity left
+   * unpressed, external not given / CC'd) are pinned in the GCD lanes at the
+   * death, through the same deathReasons predicate as the report headline. */
+  deathRecaps?: DeathRecap[];
   seekReq?: SeekRequest | null;
   /** Click the death ✕ → death recap (#6 v2). t is an absolute ms timestamp. */
   onDeathClick?: (unitId: string, tMs: number) => void;
@@ -108,6 +115,17 @@ export function ReplayView({
     tracks.map((tr) => specIconName(tr.specId)),
   );
   const vulnBands = useMemo(() => deriveVulnBands(source), [source]);
+  const laneNotes = useMemo(
+    () =>
+      deathRecaps && deathRecaps.length > 0
+        ? laneNotesFromRecaps(
+            deathRecaps,
+            source.startTime,
+            new Map(tracks.map((tr) => [tr.name, tr.unitId])),
+          )
+        : undefined,
+    [deathRecaps, source.startTime, tracks],
+  );
   const dampSeries = useMemo(() => deriveDampeningSeries(source), [source]);
   // Cast flash (#11b): flashes at the SUCCESS instant (instants are visible too)
   const castsByUnit = useMemo(
@@ -1132,6 +1150,7 @@ export function ReplayView({
             bands={vulnBands}
             compact={gcdCompact}
             onCompactChange={setGcdCompact}
+            notes={laneNotes}
           />
         )}
       </div>

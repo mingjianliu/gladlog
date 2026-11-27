@@ -1395,6 +1395,7 @@ export function MatchReport({
             onLastT={setLastReplayT}
             matchId={videoMatchId ?? resolvedMatchId}
             onMomentDive={handleMomentDive}
+            deathRecaps={deathRecaps}
           />
         )}
         {/* not gated on `timeline`: a round switch restarts the staged fill

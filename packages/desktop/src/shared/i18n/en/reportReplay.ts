@@ -39,6 +39,9 @@ export const enReportReplay = {
   "report.gcd.density.compact": "Compact",
   "report.gcd.sharedAxis": "Shares the map's clock",
   "report.gcd.bandChipTitle": "Click to seek (map follows)",
+  "report.gcd.noteMissed": "{spell} up, not given",
+  "report.gcd.noteBlocked": "{spell}: CC'd, couldn't give",
+  "report.gcd.noteUnpressed": "{spell} up, not pressed",
   "report.gcd.scrollAria": "GCD lanes (scrollable)",
 
   // ── ReplayView.tsx ──

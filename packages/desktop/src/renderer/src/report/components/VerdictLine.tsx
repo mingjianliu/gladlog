@@ -2,6 +2,7 @@ import { fmtTime } from "@gladlog/analysis";
 
 import { useT } from "../../i18n/LangProvider";
 import type { DeathRecap } from "../derive/deathRecap";
+import { deathReasons } from "../derive/deathReasons";
 import { shortUnitName } from "../derive/teamSide";
 
 /**
@@ -33,23 +34,22 @@ export function VerdictLine({
       spell,
     });
   const rows: Array<{ k: string; label: string; value: string }> = [];
-  const unpressed = recap.availableImmunities.find((i) => !i.wasInCC);
+  const why = deathReasons(recap);
+  const unpressed = why.unpressed[0];
   if (unpressed)
     rows.push({
       k: "unpressed",
       label: t("report.verdict.lblUnpressed"),
       value: unpressed.spellName,
     });
-  const missed = recap.missedExternals.find(
-    (m) => !m.casterWasInCC && !m.casterCouldNotPay,
-  );
+  const missed = why.missed[0];
   if (missed)
     rows.push({
       k: "missed",
       label: t("report.verdict.lblMissed"),
       value: castSpell(missed.casterName, missed.spellName, missed.casterIsOwner),
     });
-  const blocked = recap.missedExternals.find((m) => m.casterWasInCC);
+  const blocked = why.blocked[0];
   if (blocked)
     rows.push({
       k: "blocked",
