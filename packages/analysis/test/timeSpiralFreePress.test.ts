@@ -21,6 +21,7 @@ import {
   timeSpiralFreePressMs,
 } from "../src/data/talentScriptedCooldowns";
 import {
+  cdAvailableAt,
   chargeSpendTimesOf,
   pressReadyAgainAtSeconds,
   unitCooldownEntry,
@@ -115,8 +116,14 @@ describe("Time Spiral — the free movement press", () => {
     const u = botbRogue([10, 40, 200], [removed(ROGUE_SPIRAL, 40_005)]);
     const entry = unitCooldownEntry(u, combatOf(u), SPRINT)!;
     expect(entry.casts[1]!.freeRecast).toBe(true);
-    expect(pressReadyAgainAtSeconds(entry, 10)).toBeCloseTo(10 + plain * 0.85, 6);
-    expect(pressReadyAgainAtSeconds(entry, 40)).toBeCloseTo(10 + plain * 0.85, 6);
+    expect(pressReadyAgainAtSeconds(entry, 10)).toBeCloseTo(
+      10 + plain * 0.85,
+      6,
+    );
+    expect(pressReadyAgainAtSeconds(entry, 40)).toBeCloseTo(
+      10 + plain * 0.85,
+      6,
+    );
   });
 
   it("Blessing of the Bronze's price is the base Restless Blades' give-back starts from (codex 20-F25-03 #2)", () => {
@@ -213,5 +220,35 @@ describe("Time Spiral — the free movement press", () => {
       40 + entry.cooldownSeconds,
       6,
     );
+  });
+
+  it("a free press under a recovery-rate window keeps the paid press's warped deadline (codex 85-tk-L6-T292-5 #4)", () => {
+    // Sprint ×3 (1259614) for 12–22 s: the paid press at 10 s is back 20 s early
+    const self = (event: LogEvent, atMs: number): any => ({
+      logLine: { event, timestamp: T0 + atMs },
+      timestamp: T0 + atMs,
+      spellId: "1259614",
+      srcUnitId: PID,
+      destUnitId: PID,
+    });
+    const u = rogue(
+      [10, 40],
+      [
+        self(LogEvent.SPELL_AURA_APPLIED, 12_000),
+        self(LogEvent.SPELL_AURA_REMOVED, 22_000),
+        removed(ROGUE_SPIRAL, 40_010),
+      ],
+    );
+    const entry = unitCooldownEntry(u, combatOf(u), SPRINT)!;
+    expect(entry.casts[1]!.freeRecast).toBe(true);
+    const back = 10 + entry.cooldownSeconds - 20;
+    expect(pressReadyAgainAtSeconds(entry, 40)).toBeCloseTo(back, 6);
+    expect(cdAvailableAt(entry, back - 1)).toBe(false);
+    expect(cdAvailableAt(entry, back + 0.6)).toBe(true);
+    expect(
+      (entry.readyWindows ?? []).some(
+        (w) => Math.abs(w.fromSeconds - back) < 1e-6,
+      ),
+    ).toBe(true);
   });
 });

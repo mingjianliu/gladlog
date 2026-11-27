@@ -38,13 +38,31 @@
  * (observedSpellIdsGenerated.json — 15 of 64; the rest are raid and item
  * auras an arena log never carries, 20,000 rows of dead weight).
  *
+ * A fourth pass (pipeline T292, 2026-11-27): a buff that raises a charge
+ * pool's cap (aura 411 MOD_MAX_CHARGES, misc0 = the ChargeCategory) while it
+ * is up — Call of the Elder Druid 319454's +1 Frenzied Regeneration (DB2
+ * SpellEffect 1005992, category 1568): a Restoration Druid's two presses
+ * 1.15–1.46 s apart under it are two charges, 9 of 9 such pairs in 605 +
+ * 1215. kind "charges", n = points × PvpMultiplier (`pvpBasePoints`: an
+ * explicit 0 stays 0). Observed carriers only; a passive talent's row (the
+ * inventory's "passive", Innate Resolve 377811) is a standing charge
+ * `talentModifiers.json` already prices. A proc aura (a SpellAuraOptions row
+ * with a ProcChance or ProcCharges — Shadowy Insight 375981, Shot in the
+ * Dark 257506, Time Spiral 3752xx, Save the Day 458650, …) is a free cast
+ * the next press spends, not a raised cap while it is up (codex
+ * 85-tk-L6-T292-1 #1/#2: a Mind Blast paid by Shadowy Insight is no second
+ * charge of a running recharge), and stays with the free-press readings
+ * (Time Spiral, `FREE_RECAST_WINDOWS`). Call of the Elder Druid and Heart of
+ * the Wild have no SpellAuraOptions row.
+ *
  * Output: src/data/conditionalCooldownsGenerated.json
  *   { [targetSpellId]: [{ carrier, kind: "rate", mult } | { carrier, kind:
- *     "snapshot", flatS?, pct? }] }
+ *     "snapshot", flatS?, pct? } | { carrier, kind: "charges", n }] }
  */
 import fs from "fs-extra";
 
 import { writeArtifact } from "./lib/emit";
+import { PVP_MULTIPLIER_COLUMN, pvpBasePoints } from "./lib/pvpMultiplier";
 import {
   assertColumns,
   fetchTable,
@@ -64,7 +82,8 @@ interface Row {
 }
 type Mod =
   | { carrier: string; kind: "rate"; mult: number }
-  | { carrier: string; kind: "snapshot"; flatS?: number; pct?: number };
+  | { carrier: string; kind: "snapshot"; flatS?: number; pct?: number }
+  | { carrier: string; kind: "charges"; n: number };
 
 const RATE_CAP = 20;
 
@@ -108,6 +127,21 @@ async function main() {
   );
   // the second pass's tables
   const effects = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  // a renamed column would read as 0 / NaN and drop rows silently (codex
+  // 85-tk-L6-T292-2 #3)
+  assertColumns(
+    effects.header,
+    [
+      "SpellID",
+      "DifficultyID",
+      "Effect",
+      "EffectAura",
+      "EffectMiscValue_0",
+      "EffectBasePointsF",
+      PVP_MULTIPLIER_COLUMN,
+    ],
+    "SpellEffect",
+  );
   const classOpts = parseCsv(
     await fetchTable("SpellClassOptions", build, cacheDir),
   );
@@ -271,6 +305,44 @@ async function main() {
             },
       );
     }
+  }
+  // Fourth pass (T292): aura 411 on a buff — its charge category's spells
+  // hold `n` more charges while it is up
+  const passiveCarriers = new Set(
+    inv.rows.filter((r) => r.activation === "passive").map((r) => r.spellId),
+  );
+  const auraOpts = parseCsv(
+    await fetchTable("SpellAuraOptions", build, cacheDir),
+  );
+  assertColumns(
+    auraOpts.header,
+    ["SpellID", "DifficultyID", "ProcChance", "ProcCharges"],
+    "SpellAuraOptions",
+  );
+  const procAuras = new Set(
+    auraOpts.rows
+      .filter(
+        (r) =>
+          (!r.DifficultyID || r.DifficultyID === "0") &&
+          (Number(r.ProcChance ?? 0) > 0 || Number(r.ProcCharges ?? 0) > 0),
+      )
+      .map((r) => r.SpellID ?? ""),
+  );
+  for (const r of effects.rows) {
+    if (Number(r.Effect ?? 0) !== 6 || Number(r.EffectAura ?? 0) !== 411)
+      continue;
+    if (r.DifficultyID && r.DifficultyID !== "0") continue;
+    const carrier = r.SpellID ?? "";
+    if (
+      !observed.has(carrier) ||
+      passiveCarriers.has(carrier) ||
+      procAuras.has(carrier)
+    )
+      continue;
+    const n = Math.round(pvpBasePoints(r as Record<string, string>));
+    if (!(n > 0)) continue;
+    for (const t of chargeCat.get(Number(r.EffectMiscValue_0 ?? 0)) ?? [])
+      if (hasCooldown(t)) add(t, { carrier, kind: "charges", n });
   }
   const sorted = Object.fromEntries(
     Object.entries(out).sort((a, b) => Number(a[0]) - Number(b[0])),

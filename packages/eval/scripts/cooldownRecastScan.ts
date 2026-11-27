@@ -126,14 +126,15 @@ function freePressTimes(
   );
 }
 
-type FreeSource = "unreleased" | "window" | "spiral";
+type FreeSource = "unreleased" | "window" | "bonus" | "spiral";
 
 /** Each press the model reads as free, with the reason it is free (T195,
  * GH #218 item 1.9): `unreleased` — a hold or release the model reads as
  * never gone out (`unreleased`: an interrupted empower, a release that hit
  * nothing, a cleanse that removed nothing); `window` — inside a held
  * talent's free-recast window: the model anchored it (`freeRecastOf`) on an
- * opener whose `freeRecastUntil` covers it; `spiral` — any other free press,
+ * opener whose `freeRecastUntil` covers it; `bonus` — a buff's bonus charge
+ * spent (T292, `bonusChargeSpent`); `spiral` — any other free press,
  * Time Spiral's (anchored on the last press that was not free). Read from the
  * model's own anchor, not the spell: Leap of Faith is both a window spell
  * (Save the Day) and a Time Spiral one (review 85-tk-CD-T195-1). */
@@ -155,9 +156,11 @@ function freePressesBySource(
       t: Math.round(c.timeSeconds * 10) / 10,
       by: c.unreleased
         ? ("unreleased" as const)
-        : inWindow(c)
-          ? ("window" as const)
-          : ("spiral" as const),
+        : c.bonusChargeSpent
+          ? ("bonus" as const)
+          : inWindow(c)
+            ? ("window" as const)
+            : ("spiral" as const),
     }));
 }
 
@@ -389,7 +392,7 @@ for (const f of files) {
           modelRatios: [],
           modelChargeRatios: [],
           modelPresses: 0,
-          free: { unreleased: 0, window: 0, spiral: 0 },
+          free: { unreleased: 0, window: 0, bonus: 0, spiral: 0 },
           eras: {},
           eraMinModelRatio: {},
         };
@@ -759,7 +762,7 @@ console.log(
           for (const k of Object.keys(s) as FreeSource[]) s[k] += r.free[k];
           return s;
         },
-        { unreleased: 0, window: 0, spiral: 0 },
+        { unreleased: 0, window: 0, bonus: 0, spiral: 0 },
       ),
       eras: eraTotals,
       spells: rows,

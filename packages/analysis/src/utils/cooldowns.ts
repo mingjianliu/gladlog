@@ -1744,6 +1744,24 @@ export interface ICooldownCast {
   /** This press WAS the free recast: it neither spends nor restarts the
    * cooldown (its override is anchored on the press that opened the window). */
   freeRecast?: boolean;
+  /** After this press a buff's bonus charge (aura 411, a raised charge cap:
+   * Call of the Elder Druid's Frenzied Regeneration) was in hand over this
+   * span — the spell was available then though this press's recharge ran
+   * (pipeline T292, codex 85-tk-L6-T292-4 #1/#2). */
+  bonusChargeHeld?: {
+    fromSeconds: number;
+    toSeconds: number;
+    /** the press that cut the span (the one that spent the charge, or the
+     *  next press) and where it ran to without it — a view that drops
+     *  that press (`{ before: true }`) reads the open end (codex
+     *  85-tk-L6-T292-7 #2) */
+    cutBySeconds?: number;
+    openToSeconds?: number;
+  };
+  /** This free press spent a buff's bonus charge (T292) — not a Time
+   * Spiral consumption (codex 85-tk-L6-T292-6 #4: the recast audit read
+   * 517810f2 r5 18.485 s as Time Spiral). */
+  bonusChargeSpent?: boolean;
   /** This press's own cooldown before event reductions, when it is not the
    * entry's (`PER_PRESS_STACK_COOLDOWNS`: Cycle of Hatred's stacks) —
    * `applyEventReductions` starts from it. */
@@ -3120,6 +3138,20 @@ function warpedView<
     ...(c.freeRecastOf !== undefined
       ? { freeRecastOf: tau(c.freeRecastOf) }
       : {}),
+    ...(c.bonusChargeHeld
+      ? {
+          bonusChargeHeld: {
+            fromSeconds: tau(c.bonusChargeHeld.fromSeconds),
+            toSeconds: tau(c.bonusChargeHeld.toSeconds),
+            ...(c.bonusChargeHeld.cutBySeconds !== undefined
+              ? { cutBySeconds: tau(c.bonusChargeHeld.cutBySeconds) }
+              : {}),
+            ...(c.bonusChargeHeld.openToSeconds !== undefined
+              ? { openToSeconds: tau(c.bonusChargeHeld.openToSeconds) }
+              : {}),
+          },
+        }
+      : {}),
     // a press's reductions and resets happen at real instants too (codex
     // 59-POSTHOC-11e #5: a Preparation at 40 s, compared unwarped with a
     // warped clock already past 40, reset Adrenaline Rush at 31 s)
@@ -3321,6 +3353,23 @@ type CdAvailabilityInput = Pick<
  * (`availableWindows`, fact4 D55). */
 export const CHARGE_WINDOW_STEP_S = 0.25;
 
+/** Where a bonus charge in hand (`bonusChargeHeld`, T292) stops in a view:
+ *  at the press that cut it while that press is in the view, else at its
+ *  open end (a view that dropped the press — `{ before: true }`). One rule
+ *  for `cdAvailableAt` and `entryAvailabilityTransitions` (codex
+ *  85-tk-L6-T292-8 #3). */
+export function bonusHeldEnd(
+  held: NonNullable<ICooldownCast["bonusChargeHeld"]>,
+  lockCasts: ReadonlyArray<Pick<ICooldownCast, "timeSeconds">>,
+): { endSeconds: number; endIsPress: boolean } {
+  const cut = held.cutBySeconds;
+  if (cut === undefined || held.openToSeconds === undefined)
+    return { endSeconds: held.toSeconds, endIsPress: false };
+  return lockCasts.some((c) => Math.abs(c.timeSeconds - cut) < 1e-6)
+    ? { endSeconds: cut, endIsPress: true }
+    : { endSeconds: held.openToSeconds, endIsPress: false };
+}
+
 export function cdAvailableAt(
   cd: CdAvailabilityInput,
   tSeconds: number,
@@ -3366,6 +3415,15 @@ function cdAvailableAtConsumed(
     );
   }
   const last = [...lock].filter((c) => c.timeSeconds <= t).pop();
+  // a buff's bonus charge in hand after the last press (T292)
+  const held = last?.bonusChargeHeld;
+  if (held && t >= held.fromSeconds) {
+    const { endSeconds, endIsPress } = bonusHeldEnd(held, lock);
+    // a press ends it through the slack, like any spend; a buff's end or
+    // the recharge is read at t itself (codex -8 #2: 755e175d, the bonus
+    // read spent at 64.840 s before the 64.876 press, the buff off 65.322)
+    if ((endIsPress ? t : tSeconds) <= endSeconds) return true;
+  }
   // an open, unused free-recast window (Escape from Reality) — talent impact
   // audit 2026-09-26
   if (last?.freeRecastUntil !== undefined && t <= last.freeRecastUntil)
@@ -3396,10 +3454,17 @@ export function cdMaybeAvailableAt(
     | "isProcOnly"
     | "earliestCooldownSeconds"
     | "sharedCasts"
-  >,
+  > &
+    Partial<Pick<IMajorCooldownInfo, "rateWindows">>,
   tSeconds: number,
 ): boolean {
   if (cd.earliestCooldownSeconds === undefined) return false;
+  // the floor from a free press's anchor, on the clock cdAvailableAt reads
+  // it on (codex -5 #5: under ×20 the wall-clock difference put the floor
+  // after cdSecondsUntilReady's)
+  const tauOf = cd.rateWindows?.length
+    ? warpClock(cd.rateWindows).tau
+    : (x: number) => x;
   const earliestCd = cd.earliestCooldownSeconds;
   cd = gridConsumedView(cd, tSeconds);
   if (cdAvailableAt(cd, tSeconds)) return false;
@@ -3415,10 +3480,17 @@ export function cdMaybeAvailableAt(
   // So does an idle-credited press (Control of the Dream): the credit is
   // exact, but other unmodelled sources still shorten the spell.
   const earliest = earliestCd;
+  // A free press's override is its anchor's deadline, not a number of its
+  // own: the floor bounds it from the anchor (T292, `cdSecondsUntilReady`)
+  const anchoredFree = (c: ICooldownCast) =>
+    c.freeRecast === true &&
+    c.freeRecastOf !== undefined &&
+    c.cooldownSecondsOverride !== undefined;
   if (
     last?.cooldownSecondsOverride !== undefined &&
     !last.reductions &&
-    last.idleCreditSeconds === undefined
+    last.idleCreditSeconds === undefined &&
+    !anchoredFree(last)
   )
     return false;
   return cdAvailableAt(
@@ -3426,16 +3498,29 @@ export function cdMaybeAvailableAt(
       ...cd,
       cooldownSeconds: earliest,
       casts: cd.casts.map((c) =>
-        (c.reductions || c.idleCreditSeconds !== undefined) &&
-        c.cooldownSecondsOverride !== undefined
+        anchoredFree(c) && !c.reductions && c.idleCreditSeconds === undefined
           ? {
               ...c,
               cooldownSecondsOverride: Math.min(
-                c.cooldownSecondsOverride,
-                earliest,
+                c.cooldownSecondsOverride as number,
+                Math.max(
+                  0,
+                  tauOf(c.freeRecastOf as number) +
+                    earliest -
+                    tauOf(c.timeSeconds),
+                ),
               ),
             }
-          : c,
+          : (c.reductions || c.idleCreditSeconds !== undefined) &&
+              c.cooldownSecondsOverride !== undefined
+            ? {
+                ...c,
+                cooldownSecondsOverride: Math.min(
+                  c.cooldownSecondsOverride,
+                  earliest,
+                ),
+              }
+            : c,
       ),
     },
     tSeconds,
@@ -3544,6 +3629,22 @@ function cdSecondsUntilReadyConsumed(
               last.idleCreditSeconds,
         ) -
         tSeconds,
+    );
+  // a free press (Time Spiral, a buff's bonus charge) carries its anchor's
+  // deadline as its override — no number of its own: the given bound acts
+  // on the anchor (T292: 36 [RES] rows read Frenzied Regeneration `(35s)`
+  // exact after a bonus-charge press where the paid one read `(a–Ns)`)
+  if (
+    last.freeRecast &&
+    last.freeRecastOf !== undefined &&
+    last.cooldownSecondsOverride !== undefined
+  )
+    return Math.max(
+      0,
+      Math.min(
+        last.timeSeconds + last.cooldownSecondsOverride,
+        last.freeRecastOf + cooldown,
+      ) - tSeconds,
     );
   const own = last.cooldownSecondsOverride ?? cooldown;
   return Math.max(0, last.timeSeconds + own - tSeconds);
@@ -3662,6 +3763,27 @@ export function cdRealisedSecondsUntilReady(
     ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(realised) } : {}),
   };
   const latest = cdSecondsUntilReady(view, tSeconds);
+  // a buff's bonus charge that came into hand later (T292): the spell was
+  // back then (codex 85-tk-L6-T292-7 #4: 2c68ad74 r3, pressed 53.949 s, the
+  // bonus from 72.102 s, read 36 s here and 72.102 in the transitions)
+  if (latest > 0) {
+    const last = lockCastsOf(cd)
+      .filter((c) => pressSpentBy(c.timeSeconds, tSeconds))
+      .pop();
+    const from = last?.bonusChargeHeld?.fromSeconds;
+    if (from !== undefined && from > tSeconds && from - tSeconds < latest) {
+      const rest = cdRealisedSecondsUntilReady(
+        {
+          ...cd,
+          casts: cd.casts.map((c) =>
+            c === last ? { ...c, bonusChargeHeld: undefined } : c,
+          ),
+        },
+        tSeconds,
+      );
+      return Math.min(rest, from - tSeconds);
+    }
+  }
   // a multi-charge entry with event effects (resets, give-backs): the charge
   // that actually came back — the simulation over every effect, the later
   // ones too (codex R6C-11 #1: Soul Immolation read `(6–18s)` at 0:21, a
@@ -3827,14 +3949,53 @@ export function pressSpentBy(pressSeconds: number, tSeconds: number): boolean {
  *  slack-based consumption below it counts it. Idempotent. */
 export function gridConsumedView<
   T extends Pick<IMajorCooldownInfo, "casts"> &
-    Partial<Pick<IMajorCooldownInfo, "sharedCasts">>,
+    Partial<Pick<IMajorCooldownInfo, "sharedCasts" | "rateWindows">>,
 >(cd: T, tSeconds: number): T {
   const at = tSeconds + CD_INSTANT_SLACK_S;
   const late = (c: ICooldownCast) =>
     c.timeSeconds > at && pressSpentBy(c.timeSeconds, tSeconds);
   if (!cd.casts.some(late) && !(cd.sharedCasts ?? []).some(late)) return cd;
+  // a bonus charge in hand from the press itself is read from where the
+  // press is (codex 85-tk-L6-T292-6 #1: 755e175d 1:03 read Frenzied
+  // Regeneration `(3–36s)` with the bonus in hand after 63.725 s)
+  // a free press anchored on an earlier one keeps that deadline (codex
+  // 85-tk-L6-T292-7 #3: f281cc6f r4, 163.591 s read at 163.5 moved
+  // 192.075 to 191.984 — `(≤28s)` at 2:43 for 29)
+  const tau = cd.rateWindows?.length
+    ? warpClock(cd.rateWindows).tau
+    : (x: number) => x;
+  const keepDeadline = (c: ICooldownCast) =>
+    c.freeRecast === true &&
+    c.freeRecastOf !== undefined &&
+    c.cooldownSecondsOverride !== undefined
+      ? {
+          // an override of 0 is a recharge already done before the press
+          // (codex 85-tk-L6-T292-8 #1: d90bd21f r4 Demonic Circle:
+          // Teleport, back at 41.417 s, free press 60.782 s read on cooldown
+          // on the 1:00 row)
+          cooldownSecondsOverride:
+            c.cooldownSecondsOverride > 0
+              ? c.cooldownSecondsOverride + tau(c.timeSeconds) - tau(at)
+              : 0,
+        }
+      : {};
   const clamp = (c: ICooldownCast): ICooldownCast =>
-    late(c) ? { ...c, timeSeconds: at } : c;
+    late(c)
+      ? {
+          ...c,
+          timeSeconds: at,
+          ...keepDeadline(c),
+          ...(c.bonusChargeHeld &&
+          c.bonusChargeHeld.fromSeconds <= c.timeSeconds
+            ? {
+                bonusChargeHeld: {
+                  ...c.bonusChargeHeld,
+                  fromSeconds: at,
+                },
+              }
+            : {}),
+        }
+      : c;
   return {
     ...cd,
     casts: cd.casts.map(clamp),
@@ -5354,7 +5515,8 @@ function stackedRateWindows(
 /** Batch C table lookup (generated; see genConditionalCooldowns.ts). */
 type ConditionalMod =
   | { carrier: string; kind: "rate"; mult: number }
-  | { carrier: string; kind: "snapshot"; flatS?: number; pct?: number };
+  | { carrier: string; kind: "snapshot"; flatS?: number; pct?: number }
+  | { carrier: string; kind: "charges"; n: number };
 function conditionalCooldownsOf(spellId: string): readonly ConditionalMod[] {
   return (
     (CONDITIONAL_COOLDOWNS.byTarget as Record<string, ConditionalMod[]>)[
@@ -6354,9 +6516,15 @@ export function pressReadyAgainAtSeconds(
   entry: IMajorCooldownInfo,
   pressSeconds: number,
 ): number | null {
-  if (!entry.casts.some((c) => Math.abs(c.timeSeconds - pressSeconds) < 0.05))
-    return null;
-  return pressSeconds + cdRealisedSecondsUntilReady(entry, pressSeconds);
+  const press = entry.casts.find(
+    (c) => Math.abs(c.timeSeconds - pressSeconds) < 0.05,
+  );
+  if (!press) return null;
+  const ready = pressSeconds + cdRealisedSecondsUntilReady(entry, pressSeconds);
+  // a buff's bonus charge in hand after the press is the spell back (T292,
+  // codex -5 #3: paid 5 s, the bonus from 10 s, read back at 41 s)
+  const bonusFrom = press.bonusChargeHeld?.fromSeconds;
+  return bonusFrom !== undefined && bonusFrom < ready ? bonusFrom : ready;
 }
 /**
  * "Did `unit` have `spellId` in hand at `tSeconds`" under the shared model
@@ -6430,19 +6598,48 @@ export function entryAvailabilityTransitions(
     );
   }
   const out: Array<{ atSeconds: number; available: boolean }> = [];
-  let readyAt = Number.NEGATIVE_INFINITY;
+  // A buff's bonus charge in hand after a press (T292) is a span of its
+  // own: in at its start, out at its end when the ordinary recharge is not
+  // back by then (codex 85-tk-L6-T292-6 #2: 2c68ad74 r3, pressed 17.231 s,
+  // the bonus expired unused at 23.437 s, the charge back at 53.231 s)
+  const plain = entry.casts.some((c) => c.bonusChargeHeld)
+    ? {
+        ...entry,
+        casts: entry.casts.map(({ bonusChargeHeld: _b, ...c }) => c),
+      }
+    : entry;
+  let available = true;
+  let pending: Array<{ atSeconds: number; available: boolean }> = [];
+  const flush = (upTo: number) => {
+    for (const f of pending)
+      if (f.atSeconds <= upTo && f.available !== available) {
+        out.push(f);
+        available = f.available;
+      }
+    pending = pending.filter((f) => f.atSeconds > upTo);
+  };
   for (const t of presses) {
-    if (readyAt < Number.POSITIVE_INFINITY && readyAt > t) {
-      // pressed while out: re-anchor on this press
-    } else {
-      if (readyAt > Number.NEGATIVE_INFINITY && readyAt <= t)
-        out.push({ atSeconds: readyAt, available: true });
-      out.push({ atSeconds: t, available: false });
-    }
-    readyAt = pressReadyAgainAtSeconds(entry, t) ?? t + entry.cooldownSeconds;
+    flush(t);
+    pending = [];
+    // pressed while out: re-anchor on this press
+    if (available) out.push({ atSeconds: t, available: false });
+    available = false;
+    const readyAt =
+      pressReadyAgainAtSeconds(plain, t) ?? t + entry.cooldownSeconds;
+    const bonus = entry.casts.find(
+      (c) => Math.abs(c.timeSeconds - t) < 0.05,
+    )?.bonusChargeHeld;
+    if (bonus && bonus.fromSeconds < readyAt) {
+      const { endSeconds } = bonusHeldEnd(bonus, lockCastsOf(entry));
+      pending.push({ atSeconds: bonus.fromSeconds, available: true });
+      if (endSeconds < readyAt)
+        pending.push(
+          { atSeconds: endSeconds, available: false },
+          { atSeconds: readyAt, available: true },
+        );
+    } else pending.push({ atSeconds: readyAt, available: true });
   }
-  if (readyAt > Number.NEGATIVE_INFINITY && readyAt <= untilSeconds)
-    out.push({ atSeconds: readyAt, available: true });
+  flush(untilSeconds);
   return out;
 }
 const unitCooldownEntryCache = new WeakMap<
@@ -6852,11 +7049,108 @@ function buildCooldownEntry(
       spiralFree.add(c);
     }
   const pressed = new Set<ICooldownCast>(castRawCasts);
+  // Batch C rows (conditionalCooldownsGenerated.json): the unit's own
+  // buffs that change this cooldown — read before the presses are folded,
+  // which a raised charge cap and the rate-warped recharge clock decide
+  const conditional = conditionalCooldownsOf(spell.spellId);
+  const carriers = conditional.length
+    ? selfBuffIntervalsOf(unit, combat)
+    : undefined;
+  // Batch C rate rows (conditionalCooldownsGenerated.json): a buff of the
+  // unit's own that speeds the recovery warps the clock — read before the
+  // event reductions, which act on that clock
+  let rateWindows: IRateWindow[] | undefined;
+  for (const m of conditional) {
+    if (m.kind !== "rate") continue;
+    const ivs = carriers?.get(m.carrier) ?? [];
+    if (!ivs.length) continue;
+    const perStack = STACKED_RATE_CARRIERS[m.carrier];
+    rateWindows = [
+      ...(rateWindows ?? []),
+      ...(perStack
+        ? stackedRateWindows(unit, m.carrier, ivs, perStack, matchStartMs)
+        : ivs.map((iv) => ({
+            fromSeconds: iv.fromS,
+            toSeconds: iv.toS,
+            mult: m.mult,
+          }))),
+    ];
+  }
+  // the recharge a paid press started, on the rate-warped clock (Berserk /
+  // Incarnation run Frenzied Regeneration's ×20) — event reductions and a
+  // per-press base (set later) are not read here
+  const paidReadyAt = (k: ICooldownCast): number => {
+    if (!rateWindows) return k.timeSeconds + cooldownSeconds;
+    const { tau, inverse } = warpClock(rateWindows);
+    return inverse(tau(k.timeSeconds) + cooldownSeconds);
+  };
+  // The pool's cap at a press: a buff of the unit's own that raises it while
+  // up (aura 411 by charge category, the "charges" rows of
+  // conditionalCooldownsGenerated.json — pipeline T292: a Restoration
+  // Druid's second Frenzied Regeneration 1.15–1.46 s after the first under
+  // Call of the Elder Druid 319454, 9 of 9 such pairs in 605 + 1215, had no
+  // line). Only this collapse reads it; the entry's `charges` stays the
+  // standing cap.
+  const capBuffs = conditionalCooldownsOf(spell.spellId).filter(
+    (m): m is Extract<ConditionalMod, { kind: "charges" }> =>
+      m.kind === "charges",
+  );
+  const capBuffIvs = capBuffs.length ? carriers : undefined;
+  // One slot per buff application: `n` bonus charges, each spent once
+  // (codex 85-tk-L6-T292-3 #2: one Call of the Elder Druid funded presses
+  // at 18.5 and 20 s after a 17 s one)
+  const capSlots = capBuffs.flatMap((m) =>
+    (capBuffIvs?.get(m.carrier) ?? []).map((iv) => ({
+      iv,
+      n: m.n,
+      left: m.n,
+      spentAt: [] as number[],
+    })),
+  );
+  const slotsAt = (s: number) =>
+    capSlots.filter((k) => k.left > 0 && k.iv.fromS <= s && s <= k.iv.toS);
+  const chargesAt = (s: number): number =>
+    baselineCharges + slotsAt(s).reduce((n, k) => n + k.left, 0);
+  const spendSlot = (c: ICooldownCast): boolean => {
+    const k = slotsAt(c.timeSeconds)[0];
+    if (!k) return false;
+    k.left--;
+    k.spentAt.push(c.timeSeconds);
+    return true;
+  };
+  // A one-charge spell's press made while the last paid press's recharge
+  // still runs, with a bonus charge in hand, spends that charge: it neither
+  // restarts the recharge nor stands on its own (codex 85-tk-L6-T292-2 #1:
+  // 84.249 / 85.929 s read ready at 121.929 for 120.249) — the Time Spiral
+  // free-press path below anchors it. Assigned in press order, inside the
+  // 2 s fold or past it (codex -3 #1, -4 #3); only where no free-recast
+  // table rules the spell (`freeWindow` reads it then).
+  const capFunded = new Set<ICooldownCast>();
+  const fundsCap =
+    capSlots.length > 0 && baselineCharges <= 1 && freeWindow === undefined;
+  let lastPaid: ICooldownCast | undefined;
+  const fundable = (c: ICooldownCast): boolean =>
+    fundsCap &&
+    lastPaid !== undefined &&
+    c.timeSeconds < paidReadyAt(lastPaid) &&
+    !resetBetween(lastPaid.timeSeconds, c.timeSeconds) &&
+    slotsAt(c.timeSeconds).length > 0;
+  const markPaid = (c: ICooldownCast): void => {
+    if (fundsCap && !spiralFree.has(c) && pressed.has(c)) lastPaid = c;
+  };
+  const classify = (c: ICooldownCast): void => {
+    if (!fundsCap || spiralFree.has(c) || !pressed.has(c)) return;
+    if (fundable(c)) {
+      spendSlot(c);
+      capFunded.add(c);
+    } else lastPaid = c;
+  };
   const casts: ICooldownCast[] = [];
   for (const c of rawCasts) {
     const last = casts[casts.length - 1];
     if (!last || c.timeSeconds - last.timeSeconds > 2) {
       casts.push(c);
+      classify(c);
       continue;
     }
     // a released retry after a hold never released is its own press at any
@@ -6865,6 +7159,7 @@ function buildCooldownEntry(
     // and the retry each carry an empower start of their own
     if (last.unreleased === true && pressed.has(c) && !c.unreleased) {
       casts.push(c);
+      markPaid(c);
       continue;
     }
     // a Time Spiral free press spends no charge: not one of the window's
@@ -6884,22 +7179,54 @@ function buildCooldownEntry(
     // and a non-holder never logs two inside 30 s. One extra press per
     // 2 s — the window grants one.
     if (
-      pressed.has(c) &&
-      pressed.has(last) &&
-      c.timeSeconds - last.timeSeconds >= MULTI_CHARGE_MIN_GAP_S &&
-      ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
-        (freeWindow !== undefined && pressesInWindow < 2) ||
-        resetBetween(last.timeSeconds, c.timeSeconds) ||
-        spentBuffStack(c) ||
-        spentBuffStack(last) ||
-        // a retry after a hold never released (GH #183 codex review: Fire
-        // Breath cut at 10.3 s, pressed again at 11.5 s and released)
-        last.unreleased === true ||
-        // a Time Spiral free press after an ordinary one is its own press
-        // (the row echoing one is out already, `timeSpiralEchoMs`)
-        spiralFree.has(c))
+      !pressed.has(c) ||
+      !pressed.has(last) ||
+      c.timeSeconds - last.timeSeconds < MULTI_CHARGE_MIN_GAP_S
     )
+      continue;
+    // under a recovery-rate window the last paid press's recharge can run
+    // out inside 2 s: a press after it is a paid press of its own (codex
+    // 85-tk-L6-T292-5 #1: ×20 for 17–22 s, presses 17 / 18.3 / 19.4 s —
+    // the charge was back at 18.8)
+    const prevPaid = rateWindows
+      ? [...casts]
+          .reverse()
+          .find(
+            (k) => pressed.has(k) && !spiralFree.has(k) && !capFunded.has(k),
+          )
+      : undefined;
+    const otherReason =
+      (prevPaid !== undefined && c.timeSeconds >= paidReadyAt(prevPaid)) ||
+      (freeWindow !== undefined && pressesInWindow < 2) ||
+      resetBetween(last.timeSeconds, c.timeSeconds) ||
+      // a press spending a buff stack is its own press (T240: two
+      // tea-empowered kicks inside 2 s)
+      spentBuffStack(c) ||
+      spentBuffStack(last) ||
+      // a retry after a hold never released (GH #183 codex review: Fire
+      // Breath cut at 10.3 s, pressed again at 11.5 s and released)
+      last.unreleased === true ||
+      // a Time Spiral free press after an ordinary one is its own press
+      // (the row echoing one is out already, `timeSpiralEchoMs`)
+      spiralFree.has(c);
+    if (
+      (baselineCharges > 1 && pressesInWindow < baselineCharges) ||
+      otherReason
+    ) {
       casts.push(c);
+      markPaid(c);
+    } else if (
+      baselineCharges > 1 &&
+      pressesInWindow < chargesAt(c.timeSeconds)
+    ) {
+      // a charge spell: the raised cap admits one more press per slot
+      casts.push(c);
+      spendSlot(c);
+    } else if (fundable(c)) {
+      casts.push(c);
+      spendSlot(c);
+      capFunded.add(c);
+    }
   }
 
   // Presses of another spell from the same DB2 charge pool
@@ -7020,14 +7347,10 @@ function buildCooldownEntry(
   // Sprint under Blessing of the Bronze lost the discount once Restless
   // Blades' reductions set its override). The free presses below stand on
   // the opener's priced cooldown (fact10 D6).
-  const conditional = conditionalCooldownsOf(spell.spellId);
-  const carriers = conditional.length
-    ? selfBuffIntervalsOf(unit, combat)
-    : undefined;
   const snapshotPriced = new Set<ICooldownCast>();
   if (carriers && baselineCharges <= 1)
     for (const m of conditional) {
-      if (m.kind === "rate") continue;
+      if (m.kind !== "snapshot") continue;
       const ivs = carriers.get(m.carrier) ?? [];
       if (!ivs.length) continue;
       for (const c of casts) {
@@ -7055,25 +7378,47 @@ function buildCooldownEntry(
   // simulation takes no per-press override.
   // Control of the Dream's idle credit rides the same per-press pass.
   const idleCap = idleCreditCapFor(spell.spellId, holds);
-  // Batch C rate rows (conditionalCooldownsGenerated.json): a buff of the
-  // unit's own that speeds the recovery warps the clock — read before the
-  // event reductions, which act on that clock
-  let rateWindows: IRateWindow[] | undefined;
-  for (const m of conditional) {
-    if (m.kind !== "rate") continue;
-    const ivs = carriers?.get(m.carrier) ?? [];
-    if (!ivs.length) continue;
-    const perStack = STACKED_RATE_CARRIERS[m.carrier];
-    rateWindows = [
-      ...(rateWindows ?? []),
-      ...(perStack
-        ? stackedRateWindows(unit, m.carrier, ivs, perStack, matchStartMs)
-        : ivs.map((iv) => ({
-            fromSeconds: iv.fromS,
-            toSeconds: iv.toS,
-            mult: m.mult,
-          }))),
-    ];
+  // Where a bonus charge sat in hand after a paid press: from the later of
+  // the press and the buff's start, to the press that spent it, else the
+  // buff's end, the next press or the press's own recharge (codex -4 #1:
+  // a burst opened 1.0 s after the first Frenzied Regeneration read "no
+  // defensive CD available" while the bonus charge was in hand; #2: both
+  // ends of the buff count)
+  const bonusWindows: Array<[number, number]> = [];
+  if (fundsCap)
+    for (let i = 0; i < casts.length; i++) {
+      const c = casts[i]!;
+      if (capFunded.has(c) || spiralFree.has(c) || !pressed.has(c)) continue;
+      const next = casts[i + 1];
+      const limit = Math.min(
+        next?.timeSeconds ?? matchDurationSeconds,
+        paidReadyAt(c),
+      );
+      // a slot still holding a charge after the press, until its last
+      // charge was spent — read from the spend times, so a later spend
+      // does not erase the span it sat in hand before (codex -5 #2: paid
+      // 5 / 42 s, buff 35–50 s, bonus spent at 45 s: in hand 35–41 s)
+      let held: [number, number, number] | undefined;
+      for (const k of capSlots) {
+        if (k.spentAt.filter((t) => t <= c.timeSeconds).length >= k.n) continue;
+        const from = Math.max(c.timeSeconds, k.iv.fromS);
+        const exhausted = k.spentAt[k.n - 1] ?? Number.POSITIVE_INFINITY;
+        const open = Math.min(k.iv.toS, paidReadyAt(c));
+        const to = Math.min(open, limit, exhausted);
+        if (to > from && (!held || from < held[0])) held = [from, to, open];
+      }
+      if (!held) continue;
+      const [from, to, open] = held;
+      c.bonusChargeHeld = {
+        fromSeconds: from,
+        toSeconds: to,
+        ...(to < open ? { cutBySeconds: to, openToSeconds: open } : {}),
+      };
+      bonusWindows.push([from, to]);
+    }
+  for (const c of capFunded) {
+    spiralFree.add(c);
+    c.bonusChargeSpent = true;
   }
   let chargeEffects: IChargeEffects | undefined;
   if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
@@ -7209,6 +7554,31 @@ function buildCooldownEntry(
     }
   }
 
+  // A bonus-charge press keeps its anchor's deadline on the clock that
+  // classified it: under a recovery-rate window the wall-clock difference
+  // above is not the cooldown left (codex 85-tk-L6-T292-4 #4: a paid press
+  // at 17 s under ×20 for 17–18 s is back at 34 s, not 53 s)
+  // — every free press, Time Spiral's too (codex -5 #4: a free Sprint at
+  // 40 s after a paid one at 10 s under ×3 Deadly Pursuit for 12–22 s read
+  // back at 130 s in readyWindows and 110 s in the remaining time)
+  // — and a talent window's free recast (codex -6 #3: f694532a Leap of
+  // Faith paid 32.552 s, Save the Day recast 33.822 s, back at 83.552 in
+  // the remaining time and 83.7425 in readyWindows)
+  if (rateWindows) {
+    const { tau } = warpClock(rateWindows);
+    for (const c of casts) {
+      if (!c.freeRecast || c.freeRecastOf === undefined) continue;
+      const anchor = casts.find((k) => k.timeSeconds === c.freeRecastOf);
+      if (!anchor) continue;
+      c.cooldownSecondsOverride = Math.max(
+        0,
+        tau(anchor.timeSeconds) +
+          (anchor.cooldownSecondsOverride ?? cooldownSeconds) -
+          tau(c.timeSeconds),
+      );
+    }
+  }
+
   const readyAfter = (c: ICooldownCast): number => {
     const own = c.cooldownSecondsOverride ?? cooldownSeconds;
     if (!rateWindows) return c.timeSeconds + own;
@@ -7250,6 +7620,34 @@ function buildCooldownEntry(
           : matchDurationSeconds;
       pushWindow(cdReadyAt, nextCastAt);
     }
+  }
+
+  if (bonusWindows.length) {
+    for (const [from, to] of bonusWindows) pushWindow(from, to);
+    // a bonus span that touches a ready window is one stretch in hand: the
+    // grace filter reads the merged span (codex 85-tk-L6-T292-7 #1:
+    // b2db52b4 r3, ready to 25.472 s and the bonus to 28.046 — 2.574 s
+    // alone fell under the 3 s filter)
+    const merged: IAvailableWindow[] = [];
+    for (const w of [...readyWindows].sort(
+      (a, b) => a.fromSeconds - b.fromSeconds,
+    )) {
+      const prev = merged[merged.length - 1];
+      if (prev && w.fromSeconds <= prev.toSeconds + 1e-9) {
+        const to = Math.max(prev.toSeconds, w.toSeconds);
+        merged[merged.length - 1] = {
+          fromSeconds: prev.fromSeconds,
+          toSeconds: to,
+          durationSeconds: to - prev.fromSeconds,
+        };
+      } else merged.push({ ...w });
+    }
+    readyWindows.splice(0, readyWindows.length, ...merged);
+    availableWindows.splice(
+      0,
+      availableWindows.length,
+      ...merged.filter((w) => w.durationSeconds > GRACE_SECONDS),
+    );
   }
 
   // Detect observed charge count: if any two consecutive casts are closer than the CD,

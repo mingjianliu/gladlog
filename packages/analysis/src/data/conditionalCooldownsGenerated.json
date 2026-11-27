@@ -158,6 +158,11 @@
     "carrier": "329042",
     "kind": "rate",
     "mult": 5
+   },
+   {
+    "carrier": "319454",
+    "kind": "charges",
+    "n": 1
    }
   ],
   "33917": [
@@ -707,6 +712,11 @@
     "carrier": "431698",
     "kind": "rate",
     "mult": 1.005
+   },
+   {
+    "carrier": "1266165",
+    "kind": "charges",
+    "n": 1
    }
   ],
   "357214": [
@@ -1583,6 +1593,11 @@
     "carrier": "431698",
     "kind": "rate",
     "mult": 1.005
+   },
+   {
+    "carrier": "1266165",
+    "kind": "charges",
+    "n": 1
    }
   ],
   "435222": [

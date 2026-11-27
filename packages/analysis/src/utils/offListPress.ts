@@ -360,9 +360,11 @@ function upToPress(entry: IMajorCooldownInfo, t: number): IMajorCooldownInfo {
     // cooldown it spent is back; the free press, when made, has its own line.
     casts: entry.casts
       .filter(keep)
+      // a buff's bonus charge in hand (T292) is no return of the spent
+      // cooldown either
       .map((c) =>
-        c.freeRecastUntil !== undefined
-          ? { ...c, freeRecastUntil: undefined }
+        c.freeRecastUntil !== undefined || c.bonusChargeHeld !== undefined
+          ? { ...c, freeRecastUntil: undefined, bonusChargeHeld: undefined }
           : c,
       ),
     ...(entry.sharedCasts

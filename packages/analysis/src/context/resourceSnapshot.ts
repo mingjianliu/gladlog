@@ -339,7 +339,10 @@ export function buildPlayerLoadout(
       ...cd,
       casts: (cd.casts ?? [])
         .filter((c) => !c.freeRecast)
-        .map(({ freeRecastUntil: _window, ...c }) => c),
+        // …nor a bonus charge in hand (T292), which reads the same way
+        .map(
+          ({ freeRecastUntil: _window, bonusChargeHeld: _bonus, ...c }) => c,
+        ),
       ...(cd.sharedCasts
         ? { sharedCasts: cd.sharedCasts.filter((c) => !c.freeRecast) }
         : {}),
