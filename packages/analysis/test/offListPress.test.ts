@@ -1525,3 +1525,86 @@ describe("[PRESS] lasts — Prismatic Barrier shortens a harmful Magic effect on
     expect(d?.durationSeconds).toBe(60);
   });
 });
+
+describe("T284 (b) × M3 assembly review 80-PIPE-255", () => {
+  const T = 1_000_000;
+  const { SPELL_AURA_APPLIED: APPLIED, SPELL_AURA_REMOVED: REMOVED } = LogEvent;
+  it("#1: a roll's length stays on its enhancement — the next roll's marker, 5 ms after its REMOVED and 1 ms before that roll, is no successor (0cf7193d r2 0:56)", () => {
+    // the real rows: enhancement 1 ms ahead of the roll; Keep It Rolling
+    // 0.731 s on makes it 60 s; it is REMOVED at +59.765 s by the re-roll,
+    // whose marker is APPLIED 5 ms later and whose cast row 1 ms after that
+    const roll = makeSpellCastEvent("1214909", T, "rog", "Rog", "rog", "Rog");
+    const kir = makeSpellCastEvent(
+      "381989",
+      T + 731,
+      "rog",
+      "Rog",
+      "rog",
+      "Rog",
+    );
+    const reroll = makeSpellCastEvent(
+      "1214909",
+      T + 59_770,
+      "rog",
+      "Rog",
+      "rog",
+      "Rog",
+    );
+    const rog = makeUnit("rog", {
+      spellCastEvents: [roll, kir, reroll],
+      // the previous roll's marker REMOVED 1 ms before this roll's APPLIED:
+      // a re-broadcast pair, dropped — this roll's own marker row is not seen
+      auraEvents: [
+        makeAuraEvent(APPLIED, "1214909", T - 30_000, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "1214909", T - 1, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "1214935", T - 1, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "1214909", T, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "1214909", T + 59_764, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "1214935", T + 59_764, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "1214937", T + 59_764, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "1214909", T + 59_769, "rog", "rog", "BUFF"),
+      ],
+    });
+    const enhancement = rog.auraEvents[2];
+    expect(
+      pressEffectHandoffRow(
+        { id: "rog" },
+        rog,
+        "1214909",
+        enhancement as any,
+        60,
+        T + 59_770,
+        [rog],
+        T,
+      ),
+    ).toBeUndefined();
+  });
+  it("#2: a unit walking into Shadow Rift late and out when its 2 s are up ended on time (389530da r5 0:17)", () => {
+    const rift = makeSpellCastEvent("353294", T, "wl", "Wl", "", "");
+    const wl = makeUnit("wl", { spellCastEvents: [rift] });
+    const ally = makeUnit("p", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "353293", T + 965, "wl", "p", "BUFF"),
+        makeAuraEvent(REMOVED, "353293", T + 2_002, "wl", "p", "BUFF"),
+        makeAuraEvent(APPLIED, "353821", T + 2_035, "wl", "p", "BUFF"),
+      ],
+    });
+    const d = pressDuration(wl, rift as any, [wl, ally], wl.spellCastEvents);
+    expect(d?.row.spellId).toBe("353293");
+    expect(d?.durationSeconds).toBe(2);
+    // the same copy measured from its own row (no press instant) still
+    // reads as an early end — the press's instant is what decides
+    expect(
+      pressEffectHandoffRow(
+        { id: "wl" },
+        ally,
+        "353294",
+        ally.auraEvents[0] as any,
+        2,
+        Infinity,
+        [wl, ally],
+        T,
+      ),
+    ).toBeUndefined();
+  });
+});

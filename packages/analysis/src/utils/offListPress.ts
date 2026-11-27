@@ -798,6 +798,7 @@ export function pressEffectCutShort(
           len,
           untilMs,
           allUnits,
+          cast.logLine.timestamp,
         )?.row ?? c.row);
   };
   const holders = pressAuraCandidates(caster, cast, allUnits, nextPressMs);
@@ -853,8 +854,22 @@ export function pressEffectHandoffRow<
    * unit (1e #1, 6e3bcedf r2: both windows closed at +330 ms, the 221630 on
    * the rogue only) */
   others: readonly U[] = [],
+  /** the press's own instant: a window runs its length from the press, so
+   * a copy laid late (a unit walking into Shadow Rift 0.97 s in) and
+   * removed when the press's length is up ended on time, not early (M3
+   * assembly review 80-PIPE-255 #2, 389530da r5 0:17: 353293 in at +0.965
+   * s, out at +2.002 s with the rift — read as a 1.04 s life of 2 s, the
+   * line printed 353821's 1 s) */
+  pressMs?: number,
 ): { unit: U; row: ICombatUnit["auraEvents"][number] } | undefined {
   if (PRESS_EFFECT_CHAIN_AURAS[row.spellId ?? ""]) return undefined;
+  // a press whose length is read off a chosen outcome aura
+  // (`PRESS_OUTCOME_AURAS`, T273: a roll's enhancement) hands off to
+  // nothing — the next roll's marker, logged a millisecond before that
+  // roll's cast row, is no successor of this one (M3 assembly review
+  // 80-PIPE-255 #1, 0cf7193d r2 0:56: the enhancement's 59.8 s under Keep
+  // It Rolling printed as the marker's 30 s)
+  if (PRESS_OUTCOME_AURAS[castSpellId]) return undefined;
   // the auras that can take over: the press's own id and its effect
   // auras, less the window's — none for most presses, and then nothing is
   // read (codex 85-tk-L5-T284-1e #2: the copy search doubled
@@ -865,7 +880,14 @@ export function pressEffectHandoffRow<
   ]);
   successorIds.delete(row.spellId!);
   if (!successorIds.size) return undefined;
-  const window = pressWindowEarlyEnd(caster, unit, row, lengthS, untilMs);
+  const window = pressWindowEarlyEnd(
+    caster,
+    unit,
+    row,
+    lengthS,
+    untilMs,
+    pressMs,
+  );
   const own = window?.own ?? row;
   type End = { ms: number; removed: ICombatUnit["auraEvents"][number] };
   const copies: Array<{
@@ -883,7 +905,7 @@ export function pressEffectHandoffRow<
     if (o === unit) continue;
     const copy = pressWindowCopyRow(caster, o, own);
     if (!copy) continue;
-    const end = pressWindowEarlyEnd(caster, o, copy, lengthS, untilMs);
+    const end = pressWindowEarlyEnd(caster, o, copy, lengthS, untilMs, pressMs);
     copies.push({
       unit: o,
       own: end?.own ?? copy,
@@ -1125,6 +1147,9 @@ function pressWindowEarlyEnd(
   row: ICombatUnit["auraEvents"][number],
   lengthS: number,
   untilMs: number,
+  /** the press's instant: the length runs from it when the copy was laid
+   * after it (`pressEffectHandoffRow`'s `pressMs`) */
+  pressMs?: number,
 ):
   | {
       own: ICombatUnit["auraEvents"][number];
@@ -1158,7 +1183,8 @@ function pressWindowEarlyEnd(
   if (!removed) return undefined;
   const endMs = removed.logLine.timestamp;
   if (endMs >= untilMs) return undefined;
-  if ((endMs - startMs) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
+  const fromMs = Math.min(startMs, pressMs ?? startMs);
+  if ((endMs - fromMs) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
     return undefined;
   return { own: own ?? row, startMs, endMs, removed };
 }
@@ -1336,6 +1362,7 @@ export function pressDuration(
             base,
             Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1),
             allUnits,
+            at,
           )
         : undefined;
     if (handoff) {
