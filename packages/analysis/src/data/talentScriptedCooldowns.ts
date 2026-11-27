@@ -446,6 +446,15 @@ const DEVASTATION_4PC_CAUSALITY: ISetBonusEventCredit = {
   addSeconds: 0.05,
 };
 
+/** Brewmaster's "Brews" (pipeline T270): Celestial Brew, Celestial
+ * Infusion, Purifying Brew, Fortifying Brew, Black Ox Brew — the set Keg
+ * Smash / Tiger Palm / Blackout Combo reduce (no DB2 label of its own). */
+const BREWS = ["322507", "1241059", "119582", "115203", "115399"] as const;
+/** Blackout Combo 228563's REMOVED by the Keg Smash it empowers sits in the
+ * cast's own millisecond (0–1 ms, 125/125 in 41243fd2); wider would take a
+ * buff that ran out beside the cast (codex 85-tk-L6-T270-1 #5). */
+const BLACKOUT_COMBO_SPENT_MS = 5;
+
 export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   Record<string, IEventCooldownReduction>
 > = {
@@ -1576,6 +1585,99 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     },
     seconds: 0,
     note: "Restless Blades — Outlaw finishers: −1 s per combo point on Adrenaline Rush and the Outlaw kit",
+  },
+  // Brewmaster brews (pipeline T270). Tooltips at 12.1.5.70391:
+  //  - Keg Smash 121253 `$?a322120[… reduces the remaining cooldown on all
+  //    Brews by $s4 sec]`: SpellEffect index 3, a dummy, base 3, PvP 1 —
+  //    under Shuffle 322120 (a Brewmaster talent).
+  //  - Tiger Palm 100780 `$?a137023[… all Brews … by $s3 sec]`: index 2,
+  //    base 1, PvP 1 — the Brewmaster spec aura, so baseline for 268.
+  //  - Face Palm 389942: Tiger Palm's reduction `${$s3/1000}.1` more: index
+  //    2, base 500 → 0.5 s.
+  //  - Blackout Combo 196736 → buff 228563: a Keg Smash it empowers takes
+  //    `$s3` more off (228563 index 2, base 2); Meditative Focus 1271105
+  //    (Brewmaster branch) `${$s3/1000}.1` more again (index 2, base 1000 →
+  //    1.0 s). The buff's REMOVED sits in the empowered cast's millisecond
+  //    (0–1 ms, 125/125 in 41243fd2; 112 by Tiger Palm, 13 by Keg Smash).
+  //  - Black Ox Brew 115399: "refills your Energy and Purifying Brew charges
+  //    and gives one charge of Celestial Brew or Celestial Infusion".
+  // "Brews" is a server script's set, no DB2 label of its own (22 / 16 / 292
+  // are every monk spell's); the brews this reads: Celestial Brew 322507,
+  // Celestial Infusion 1241059, Purifying Brew 119582, Fortifying Brew
+  // 115203, Black Ox Brew 115399 — all pressed in the corpus.
+  // Corpus (12.1.5, the only Brewmaster in 605 + 1215: 41243fd2, six rounds,
+  // 31 Celestial Brew presses, holder of Light Brewing −20 % and Endless
+  // Draught +1 charge → 2 charges of 72 s): presses with no charge back
+  // under the model 18 with none of this; 1 with Keg Smash / Tiger Palm /
+  // Black Ox Brew alone (55.404 s, 5.3 s short); 0 with Face Palm,
+  // Blackout Combo and Meditative Focus too.
+  "322120": {
+    targets: BREWS,
+    triggerCastIds: ["121253"],
+    seconds: 3,
+    note: "Shuffle — Keg Smash: every Brew −3 s",
+  },
+  // Tiger Palm's two give it on a landed hit only (a parried or dodged one
+  // gives nothing — SimulationCraft's `tiger_palm_t::execute` returns on
+  // `result_is_miss` before both `brews.adjust`; codex 85-tk-L6-T270-1 #1:
+  // 41243fd2 r2 33.150 s, PARRY 1 ms later); a hit a shield soaked whole
+  // landed (`landedHitRows`). Keg Smash's give it per cast.
+  "137023": {
+    targets: BREWS,
+    triggerCastIds: [],
+    triggerHitIds: ["100780"],
+    maxHitsPerUse: 1,
+    ownedBySpecIds: ["268"],
+    seconds: 1,
+    note: "Brewmaster — Tiger Palm: every Brew −1 s",
+  },
+  "389942": {
+    targets: BREWS,
+    triggerCastIds: [],
+    triggerHitIds: ["100780"],
+    maxHitsPerUse: 1,
+    seconds: 0.5,
+    note: "Face Palm — Tiger Palm: every Brew −0.5 s more",
+  },
+  "196736": {
+    targets: BREWS,
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["228563"],
+      byCastIds: ["121253"],
+      withinMs: BLACKOUT_COMBO_SPENT_MS,
+    },
+    seconds: 2,
+    note: "Blackout Combo — an empowered Keg Smash: every Brew −2 s more",
+  },
+  "1271105": {
+    targets: BREWS,
+    triggerCastIds: [],
+    triggerAuraConsumed: {
+      auraIds: ["228563"],
+      byCastIds: ["121253"],
+      withinMs: BLACKOUT_COMBO_SPENT_MS,
+    },
+    requiresTalentId: "196736",
+    seconds: 1,
+    note: "Meditative Focus — a Blackout Combo Keg Smash: every Brew −1 s more",
+  },
+  "115399": {
+    targets: ["322507", "1241059"],
+    triggerCastIds: ["115399"],
+    // the press proves the choice node's pick (codex 85-tk-L6-T270-1 #3)
+    ownedBySpecIds: ["268"],
+    seconds: Number.POSITIVE_INFINITY,
+    oneCharge: true,
+    note: "Black Ox Brew — one charge of Celestial Brew / Celestial Infusion",
+  },
+  "115399:119582": {
+    talentSpellId: "115399",
+    targets: ["119582"],
+    triggerCastIds: ["115399"],
+    ownedBySpecIds: ["268"],
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Black Ox Brew — every Purifying Brew charge back",
   },
 };
 
