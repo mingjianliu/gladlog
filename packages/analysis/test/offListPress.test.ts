@@ -473,6 +473,37 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
     ).toBeUndefined();
   });
 
+  it("a DoT put up while the stun still ran is no successor of another copy's early break (codex 85-tk-L5-T284-1h, a1cc7584 r1: Wake of Ashes keeps lasts 5s)", () => {
+    const cast = makeSpellCastEvent("255937", T, "petb", "PetB", "pal", "Pal");
+    const pal = makeUnit("pal", { spellCastEvents: [cast] });
+    const petB = makeUnit("petb", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "255941", T, "pal", "petb", "DEBUFF"),
+        makeAuraEvent(APPLIED, "403695", T + 18, "pal", "petb", "DEBUFF"),
+        makeAuraEvent(REMOVED, "255941", T + 5_004, "pal", "petb", "DEBUFF"),
+      ],
+    });
+    const petA = makeUnit("peta", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "255941", T, "pal", "peta", "DEBUFF"),
+        makeAuraEvent(APPLIED, "403695", T + 18, "pal", "peta", "DEBUFF"),
+        makeAuraEvent(REMOVED, "255941", T + 147, "pal", "peta", "DEBUFF"),
+      ],
+    });
+    const row = petB.auraEvents[0];
+    expect(
+      pressEffectHandoffRow(
+        { id: "pal" },
+        petB,
+        "255937",
+        row as any,
+        5,
+        Infinity,
+        [pal, petB, petA],
+      ),
+    ).toBeUndefined();
+  });
+
   it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
     expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
   });

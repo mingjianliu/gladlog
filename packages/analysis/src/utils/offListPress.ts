@@ -945,7 +945,13 @@ function handoffOn(
       byCaster(a) &&
       afterOwn(a) &&
       a.logLine.timestamp < untilMs &&
-      Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS &&
+      // in the window's end millisecond or after it — an aura put up while
+      // the window still ran is the press's other effect, not what the
+      // window handed off to (codex 85-tk-L5-T284-1h, a1cc7584 r1 10.938 s:
+      // Wake of Ashes' 403695 on a pet 129 ms before the other pet's stun
+      // broke; the 6e3bcedf successor shares its window's millisecond)
+      a.logLine.timestamp >= endMs &&
+      a.logLine.timestamp - endMs <= PRESS_CHAIN_HANDOVER_MS &&
       // it runs on past the window: not REMOVED with it
       !events.some(
         (r) =>
