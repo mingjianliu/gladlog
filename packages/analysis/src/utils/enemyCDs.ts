@@ -36,7 +36,11 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { auraSurelyUpPastMs, auraSurelyUpUntilMs } from "./auraSurelyUp";
+import {
+  auraSurelyUpPastMs,
+  auraSurelyUpUntilMs,
+  nextAuraPressMs,
+} from "./auraSurelyUp";
 import { buffDurationOfApplication } from "./buffDuration";
 import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
 import {
@@ -808,7 +812,7 @@ function observedEffectEnd(
   // last REFRESH, and that REFRESH is itself the evidence (1215 d90bd21f r5:
   // Recklessness pressed 102.84, refreshed 139.975 by the next press, capped
   // 24 s after it — the press read the official 126.8).
-  const nextPressMs = combat.startTime + nextSameCastS * 1000;
+  const nextSameMs = combat.startTime + nextSameCastS * 1000;
   const surelyUpEndS = (b: {
     end: number;
     destId: string;
@@ -827,10 +831,23 @@ function observedEffectEnd(
         1000;
     const holder = combat.units?.[b.destId] as ICombatUnit | undefined;
     if (!holder) return undefined;
-    // …and never past its holder's death (codex 85-tk-L5-T308-1b #4)
+    // the next press: the next same cast, or the caster's next cast row of
+    // any button that puts this aura up (`nextAuraPressMs`; codex
+    // 85-tk-L5-T308-1c #1: Ascendance → Doom Winds)
+    const nextPressMs = Math.min(
+      nextSameMs,
+      nextAuraPressMs(
+        caster,
+        b.auraId,
+        castSpellId,
+        combat.startTime + castS * 1000,
+      ),
+    );
+    // …and never past its holder's death, from the life's start (1b #4,
+    // 1c #4)
     const untilMs = auraSurelyUpUntilMs(
       holder,
-      capMs,
+      combat.startTime + appliedS * 1000,
       Math.min(roundEndMs(combat), nextPressMs),
     );
     const otherAuraIds = new Set(ids);

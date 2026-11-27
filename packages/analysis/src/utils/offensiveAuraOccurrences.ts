@@ -1,10 +1,8 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
-  castsOfEffectAura,
   castsOfTalentEffectAura,
   effectAurasOfCast,
-  effectSpanIdsOfCast,
 } from "../data/castEffectAuras";
 import {
   effectiveCooldownSeconds,
@@ -12,7 +10,12 @@ import {
 } from "../data/spellEffectData";
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
-import { auraSurelyUpPastMs, auraSurelyUpUntilMs } from "./auraSurelyUp";
+import {
+  auraSurelyUpPastMs,
+  auraSurelyUpUntilMs,
+  nextAuraPressMs,
+  otherEffectAurasOf,
+} from "./auraSurelyUp";
 import {
   buffDurationOfApplication,
   buffFullDurationForCaster,
@@ -399,13 +402,18 @@ function castTimes(unit: ICombatUnit, ids: ReadonlySet<string>): number[] {
   return out.sort((a, b) => a - b);
 }
 
+/** a row written with no source (`0000000000000000` / empty) */
+function isSourceless(srcUnitId: string | undefined): boolean {
+  return !srcUnitId || srcUnitId === "0000000000000000";
+}
+const CLOSING_EVENTS: ReadonlySet<string> = new Set([
+  LogEvent.SPELL_AURA_REMOVED,
+  LogEvent.SPELL_AURA_BROKEN,
+  LogEvent.SPELL_AURA_BROKEN_SPELL,
+]);
+
 const cache = new WeakMap<object, Map<string, IAuraOccurrenceResult>>();
 const boundsCache = new WeakMap<object, Bounds | null>();
-
-/** T308: a cast row of the aura's press more than this after the aura went
- * up is the caster's NEXT press — the press that put it up logs its cast row
- * within `EFFECT_START_AFTER_S` (2 s, enemyCDs.ts) of its application */
-const EFFECT_PRESS_LEAD_MS = 2000;
 
 /**
  * The aura-evidenced offensive occurrences of one unit inside `bounds`.
@@ -426,8 +434,9 @@ export function auraOffensiveOccurrences(
       ? roundEndMs(bounds)
       : undefined;
   // …and the rows the evidence is read from: a unit whose damage / heal
-  // rows grew since is read again (codex 85-tk-L5-T308-1b #10)
-  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${unit.damageOut?.length ?? 0}:${unit.healOut?.length ?? 0}:${OFFENSIVE_AURA_FLAGS.demonic}`;
+  // rows, casts (its next press) or deaths grew since is read again (codex
+  // 85-tk-L5-T308-1b #10, 1c #8)
+  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${unit.damageOut?.length ?? 0}:${unit.healOut?.length ?? 0}:${unit.spellCastEvents?.length ?? 0}:${unit.deathRecords?.length ?? 0}:${OFFENSIVE_AURA_FLAGS.demonic}`;
   let byKey = cache.get(unit);
   if (!byKey) {
     byKey = new Map();
@@ -450,7 +459,14 @@ export function auraOffensiveOccurrences(
         // a generic one: the unit's own buff on itself
         (a.destUnitId === unit.id &&
           genericCdOfAura(a.spellId, unit.spec) !== undefined)) &&
-      a.srcUnitId === unit.id &&
+      // …and a REMOVED written with no source of an aura on the unit: the
+      // interval builder closes the oldest open life of the spell with it,
+      // as the timeline does (codex 85-tk-L5-T308-1c #2: dropped here, the
+      // life ran on to the round's end)
+      (a.srcUnitId === unit.id ||
+        (isSourceless(a.srcUnitId) &&
+          a.destUnitId === unit.id &&
+          CLOSING_EVENTS.has(a.logLine.event))) &&
       a.logLine.timestamp >= bounds.startTime &&
       a.logLine.timestamp <= bounds.endTime,
   );
@@ -532,39 +548,21 @@ export function auraOffensiveOccurrences(
       const nextFromS = intervals
         .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
         .reduce((m, o) => Math.min(m, o.fromS), Infinity);
-      const auraName = getEnglishSpellName(iv.spellId, iv.spellName);
       const pressId = genericCdOfAura(iv.spellId, unit.spec);
-      // every button that puts this aura up (Ascendance → Doom Winds, codex
-      // 85-tk-L5-T308-1b #3), its own press and its same-named casts
-      const granting = new Set([
-        iv.spellId,
-        ...(pressId !== undefined ? [pressId] : []),
-        ...castsOfEffectAura(iv.spellId),
-        ...castsOfTalentEffectAura(iv.spellId),
-      ]);
-      const nextCastMs = successes
-        .filter(
-          (c) =>
-            c.logLine.timestamp > startMs + EFFECT_PRESS_LEAD_MS &&
-            (granting.has(c.spellId!) ||
-              getEnglishSpellName(c.spellId!, c.spellName ?? "") === auraName),
-        )
-        .reduce((m, c) => Math.min(m, c.logLine.timestamp), Infinity);
+      // the next press: its next application, or the caster's next cast row
+      // of any button that puts this aura up (`nextAuraPressMs`)
       const nextPressMs = Math.min(
         bounds.startTime + nextFromS * 1000,
-        nextCastMs,
+        nextAuraPressMs(unit, iv.spellId, pressId, startMs),
       );
       const capMs = Math.min(endMs, auraOfficialEndMs ?? endMs);
-      // never past its holder's death (#4)
+      // never past its holder's death, from the life's start (#4, 1c #4)
       const untilMs = auraSurelyUpUntilMs(
         unit,
-        capMs,
+        startMs,
         Math.min(roundEnd, nextPressMs),
       );
-      const otherAuraIds = new Set(
-        pressId !== undefined ? effectSpanIdsOfCast(pressId) : [],
-      );
-      otherAuraIds.delete(iv.spellId);
+      const otherAuraIds = otherEffectAurasOf(pressId, iv.spellId);
       if (
         auraSurelyUpPastMs(
           unit,

@@ -1,6 +1,11 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { LogEvent } from "@gladlog/parser-compat";
 
+import {
+  castsOfEffectAura,
+  castsOfTalentEffectAura,
+  effectSpanIdsOfCast,
+} from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts } from "./auraRebroadcast";
 
@@ -13,6 +18,78 @@ export const AURA_SURELY_UP_PAST_MS = 1000;
  * the spell can be that press's own effect (its rows can lead its aura and
  * its cast row — `EFFECT_START_BEFORE_S`, enemyCDs.ts) */
 export const AURA_SURELY_UP_NEXT_PRESS_LEAD_MS = 500;
+
+/** T308: a cast row of a button that grants the aura more than this after
+ * a life's start is the caster's NEXT press (a press's own rows log within
+ * `EFFECT_START_AFTER_S`, 2 s, of it) */
+export const AURA_NEXT_PRESS_AFTER_MS = 2000;
+
+/** T308: every button that puts `auraId` up — the aura's own id, its press,
+ * the casts it is the effect of (Ascendance → Doom Winds, codex
+ * 85-tk-L5-T308-1b #3 / 1c #1) and the talent casts that grant it. One set
+ * for every reader of a life's next press. */
+export function auraGrantingCastIds(
+  auraId: string,
+  pressId?: string,
+): ReadonlySet<string> {
+  return new Set([
+    auraId,
+    ...(pressId !== undefined ? [pressId] : []),
+    ...castsOfEffectAura(auraId),
+    ...castsOfTalentEffectAura(auraId),
+  ]);
+}
+
+/** T308: the caster's next press of `auraId` after a life that started at
+ * `startMs` — its first SUCCESS of a granting button
+ * (`auraGrantingCastIds`), or of a spell with the aura's or the press's
+ * English name, more than `AURA_NEXT_PRESS_AFTER_MS` after the start;
+ * Infinity when none. The burst timeline, the burst ledger, the threat /
+ * friendly-CD readers and scan5/t308 read it here. */
+export function nextAuraPressMs(
+  caster: Pick<ICombatUnit, "spellCastEvents">,
+  auraId: string,
+  pressId: string | undefined,
+  startMs: number,
+): number {
+  const granting = auraGrantingCastIds(auraId, pressId);
+  const names = new Set(
+    [auraId, pressId]
+      .filter((x): x is string => x !== undefined)
+      .map((id) => getEnglishSpellName(id, ""))
+      .filter((n) => n !== ""),
+  );
+  let next = Infinity;
+  for (const c of caster.spellCastEvents ?? []) {
+    const t = c.logLine.timestamp;
+    if (
+      c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+      !c.spellId ||
+      t <= startMs + AURA_NEXT_PRESS_AFTER_MS ||
+      t >= next
+    )
+      continue;
+    if (
+      granting.has(c.spellId) ||
+      names.has(getEnglishSpellName(c.spellId, c.spellName ?? ""))
+    )
+      next = t;
+  }
+  return next;
+}
+
+/** T308: the press's effect auras other than `auraId` — a row of one of
+ * them is no evidence of this one (`auraSurelyUpPastMs`'s `otherAuraIds`) */
+export function otherEffectAurasOf(
+  pressId: string | undefined,
+  auraId: string,
+): ReadonlySet<string> {
+  const ids = new Set(
+    pressId !== undefined ? effectSpanIdsOfCast(pressId) : [],
+  );
+  ids.delete(auraId);
+  return ids;
+}
 
 /**
  * T308 (user 2026-11-27): does the log show `auraId` (the caster's, on
@@ -105,19 +182,21 @@ export function auraSurelyUpPastMs(
 
 /**
  * T308: where a life shown still up runs to — `untilMs` (the round's end or
- * the caster's next press), cut at its holder's first death after `afterMs`:
- * an aura does not outlive the unit it sits on (codex 85-tk-L5-T308-1b #4:
- * a Breath of Sindragosa ran on to the round's end past its caster's death).
+ * the caster's next press), cut at its holder's first death after the
+ * life's start `startMs`: an aura does not outlive the unit it sits on
+ * (codex 85-tk-L5-T308-1b #4: a Breath of Sindragosa ran on to the round's
+ * end past its caster's death). A death before the official end leaves
+ * nothing past it (1c #4).
  */
 export function auraSurelyUpUntilMs(
   holder: Partial<Pick<ICombatUnit, "deathRecords">>,
-  afterMs: number,
+  startMs: number,
   untilMs: number,
 ): number {
   let end = untilMs;
   for (const d of holder.deathRecords ?? []) {
     const t = d.timestamp;
-    if (t > afterMs && t < end) end = t;
+    if (t > startMs && t < end) end = t;
   }
   return end;
 }

@@ -14,14 +14,13 @@ import {
 } from "../data/auraActivation";
 import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.json";
 import {
-  castsOfEffectAura,
   castsOfTalentEffectAura,
   castsOwningEffectAura,
   effectAuraHitShare,
   effectAurasOfCast,
   effectAuraViaName,
-  effectSpanIdsOfCast,
   isCastOrEffect,
+  sourcePressedAuraNear,
 } from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import {
@@ -101,13 +100,19 @@ import {
   buildAuraIntervals,
   dropAuraRebroadcasts,
   type IAuraInterval,
+  officialDurationS,
   supersededAuraBreaks,
 } from "./auraIntervals";
 import {
   AURA_MASTERY_ID,
   auraMasteryPressWallStartMs,
 } from "./auraMasteryBranch";
-import { auraSurelyUpPastMs, auraSurelyUpUntilMs } from "./auraSurelyUp";
+import {
+  auraSurelyUpPastMs,
+  auraSurelyUpUntilMs,
+  nextAuraPressMs,
+  otherEffectAurasOf,
+} from "./auraSurelyUp";
 import { binarySearchClosest } from "./binarySearch";
 import {
   buffDurationOfApplication,
@@ -9054,11 +9059,6 @@ function offensiveAuraRowsOf(unit: ICombatUnit): IOffensiveAuraRow[] {
   return rows;
 }
 
-/** T308: a cast row of the aura's button more than this after an
- * application is the caster's NEXT press (the application's own press logs
- * within `EFFECT_START_AFTER_S`, 2 s, of it) */
-const THREAT_NEXT_PRESS_AFTER_MS = 2000;
-
 export function hasOffensiveSpellActive(
   unit: ICombatUnit,
   timestampMs: number,
@@ -9084,26 +9084,40 @@ export function hasOffensiveSpellActive(
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
   const refreshed = new Map<string, number[]>();
-  /** T308: a REMOVED written with no source closes the caster's run, as
-   * the interval builder pairs it (codex 85-tk-L5-T308-1b #7) */
-  const sourcelessRemoved = new Map<string, number[]>();
+  /** T308: rows are paired as the interval builder pairs them (codex
+   * 85-tk-L5-T308-1b #7, 1c #3 / #7): a re-broadcast REMOVED + APPLIED pair
+   * is one aura; a REMOVED written with no source closes the OLDEST open run
+   * of the spell, not every one; an APPLIED while the run is open, inside
+   * its official length and with no press of it near, is the aura re-sent
+   * (`sourcePressedAuraNear`), not a new run. */
   const cdOfRun = new Map<string, string>();
   const allRows = offensiveAuraRowsOf(unit);
-  // …and a re-broadcast REMOVED + APPLIED pair is one aura, as the builder
-  // and the timeline read it (#7)
   const continuous = new Set(dropAuraRebroadcasts(allRows.map((r) => r.aura)));
+  const unitsOfCombat = (
+    combat as { units?: Record<string, ICombatUnit> } | undefined
+  )?.units;
+  const casterOfRun = (srcId: string): ICombatUnit | undefined =>
+    srcId === unit.id ? unit : unitsOfCombat?.[srcId];
+  /** runKey → open since (ms), its last application / refresh (ms) */
+  const open = new Map<string, { lastSeenMs: number }>();
+  const isClose = (ev: string) =>
+    ev === LogEvent.SPELL_AURA_REMOVED ||
+    ev === LogEvent.SPELL_AURA_BROKEN ||
+    ev === LogEvent.SPELL_AURA_BROKEN_SPELL;
 
   for (const { aura, spellId, cdId, casterSpec } of allRows) {
     if (!continuous.has(aura)) continue;
-    const noSource = !aura.srcUnitId || aura.srcUnitId === "0000000000000000";
+    const ev = aura.logLine.event as string;
     if (
-      noSource &&
-      (aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
-        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
-        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL)
+      (!aura.srcUnitId || aura.srcUnitId === "0000000000000000") &&
+      isClose(ev)
     ) {
-      const b = sourcelessRemoved.get(spellId) ?? [];
-      sourcelessRemoved.set(spellId, [...b, aura.timestamp]);
+      for (const k of open.keys())
+        if (k.startsWith(`${spellId}|`)) {
+          open.delete(k);
+          removed.set(k, [...(removed.get(k) ?? []), aura.timestamp]);
+          break;
+        }
       continue;
     }
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
@@ -9128,28 +9142,42 @@ export function hasOffensiveSpellActive(
     // `[friendly offensive CD active]` — fact2Scan offensiveTag)
     const runKey = `${spellId}|${aura.srcUnitId ?? ""}`;
     cdOfRun.set(runKey, cdId);
-    if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const b = applied.get(runKey) ?? [];
-      applied.set(runKey, [...b, aura.timestamp]);
-    } else if (aura.logLine.event === LogEvent.SPELL_AURA_REFRESH) {
-      const b = refreshed.get(runKey) ?? [];
-      refreshed.set(runKey, [...b, aura.timestamp]);
-    } else if (
-      aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
-      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
-      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
-    ) {
-      const b = removed.get(runKey) ?? [];
-      removed.set(runKey, [...b, aura.timestamp]);
+    if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      const run = open.get(runKey);
+      const caster = casterOfRun(aura.srcUnitId ?? "");
+      const dOpen =
+        run && caster
+          ? officialDurationS(spellId, caster, run.lastSeenMs)
+          : null;
+      if (
+        run !== undefined &&
+        caster !== undefined &&
+        dOpen !== null &&
+        aura.timestamp <= run.lastSeenMs + dOpen * 1000 &&
+        !sourcePressedAuraNear(
+          caster.spellCastEvents ?? [],
+          spellId,
+          aura.timestamp,
+        )
+      )
+        continue;
+      // a new run keeps the key's place in the open order, as the
+      // builder's `Map.set` does
+      open.set(runKey, { lastSeenMs: aura.timestamp });
+      applied.set(runKey, [...(applied.get(runKey) ?? []), aura.timestamp]);
+    } else if (ev === LogEvent.SPELL_AURA_REFRESH) {
+      const run = open.get(runKey);
+      if (run) run.lastSeenMs = aura.timestamp;
+      refreshed.set(runKey, [...(refreshed.get(runKey) ?? []), aura.timestamp]);
+    } else if (isClose(ev)) {
+      open.delete(runKey);
+      removed.set(runKey, [...(removed.get(runKey) ?? []), aura.timestamp]);
     }
   }
 
   for (const [runKey, applications] of Array.from(applied)) {
     const [spellId, srcId] = runKey.split("|") as [string, string];
-    const removals = [
-      ...(removed.get(runKey) ?? []),
-      ...(sourcelessRemoved.get(spellId) ?? []),
-    ].sort((a, b) => a - b);
+    const removals = [...(removed.get(runKey) ?? [])].sort((a, b) => a - b);
     const refreshes = refreshed.get(runKey) ?? [];
     for (const applyTs of applications) {
       if (applyTs > timestampMs) continue;
@@ -9163,6 +9191,14 @@ export function hasOffensiveSpellActive(
         continue;
       }
       if (timestampMs >= nextApply) continue;
+      // a life with no REMOVED ends at its holder's death, as the timeline
+      // and the ledger end it (codex 85-tk-L5-T308-1c #5)
+      if (
+        (unit.deathRecords ?? []).some(
+          (d) => d.timestamp > applyTs && d.timestamp <= timestampMs,
+        )
+      )
+        continue;
       // a REMOVED the log never wrote: up for its official length (+1 s)
       // from its last (re)application, not for the rest of the round (codex
       // R6C-12 #2: a Colossus Smash applied at 2:26 with no REMOVED tagged a
@@ -9178,11 +9214,7 @@ export function hasOffensiveSpellActive(
       // the caster this reader can see: the unit itself, or the combat's
       // unit of that id — its talents price the aura (codex
       // 85-tk-L5-T308-1b #9: Circle of Life and Death's 4.8 s bleed read 6)
-      const caster =
-        srcId === unit.id
-          ? unit
-          : ((combat as { units?: Record<string, ICombatUnit> } | undefined)
-              ?.units?.[srcId] as ICombatUnit | undefined);
+      const caster = casterOfRun(srcId);
       const fullS = buffFullDurationForCaster(spellId, caster, applyTs);
       if (fullS === undefined || timestampMs <= anchor + (fullS + 1) * 1000)
         return true;
@@ -9199,38 +9231,36 @@ export function hasOffensiveSpellActive(
         combat !== undefined &&
         (combat as { units?: unknown }).units !== undefined
       ) {
-        // the caster's next press of it: its next application, or its next
-        // cast row of a button that puts the aura up, whichever the log
-        // shows first (codex 85-tk-L5-T308-1b #2)
+        // the press the life stands for at the instant: a later press of
+        // the spell inside the run (its aura REFRESHed) opens a life of its
+        // own, read from its own press as the timeline reads it (codex
+        // 85-tk-L5-T308-1c #6); the next press is the caster's next cast
+        // row of a button that puts the aura up, or the next application
+        // (1b #2, `nextAuraPressMs`)
         const cdId = cdOfRun.get(runKey) ?? spellId;
-        const granting = new Set([
-          spellId,
-          cdId,
-          ...castsOfEffectAura(spellId),
-          ...castsOfTalentEffectAura(spellId),
-        ]);
-        const name = getEnglishSpellName(cdId, "");
-        const nextCastMs = (caster.spellCastEvents ?? [])
-          .filter(
-            (c) =>
-              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-              c.logLine.timestamp > applyTs + THREAT_NEXT_PRESS_AFTER_MS &&
-              !!c.spellId &&
-              (granting.has(c.spellId) ||
-                (name !== "" &&
-                  getEnglishSpellName(c.spellId, c.spellName ?? "") === name)),
-          )
-          .reduce((m, c) => Math.min(m, c.logLine.timestamp), Infinity);
-        const nextPressMs = Math.min(nextApply, nextCastMs);
-        const capMs = applyTs + fullS * 1000;
+        let pressMs = applyTs;
+        for (
+          let q = nextAuraPressMs(caster, spellId, cdId, pressMs);
+          q <= timestampMs && q < nextApply;
+          q = nextAuraPressMs(caster, spellId, cdId, pressMs)
+        )
+          pressMs = q;
+        const pressFullS =
+          pressMs === applyTs
+            ? fullS
+            : (buffFullDurationForCaster(spellId, caster, pressMs) ?? fullS);
+        const nextPressMs = Math.min(
+          nextApply,
+          nextAuraPressMs(caster, spellId, cdId, pressMs),
+        );
+        const capMs = pressMs + pressFullS * 1000;
         // never past the holder's death (#4)
         const untilMs = auraSurelyUpUntilMs(
           unit,
-          capMs,
+          applyTs,
           Math.min(roundEndMs(combat as never), nextPressMs),
         );
-        const otherAuraIds = new Set(effectSpanIdsOfCast(cdId));
-        otherAuraIds.delete(spellId);
+        const otherAuraIds = otherEffectAurasOf(cdId, spellId);
         if (
           timestampMs <= untilMs &&
           auraSurelyUpPastMs(caster, unit, spellId, cdId, capMs, untilMs, {

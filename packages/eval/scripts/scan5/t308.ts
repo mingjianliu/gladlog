@@ -30,6 +30,9 @@ import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcas
 import {
   AURA_SURELY_UP_PAST_MS,
   auraSurelyUpPastMs,
+  auraSurelyUpUntilMs,
+  nextAuraPressMs,
+  otherEffectAurasOf,
 } from "@gladlog/analysis/src/utils/auraSurelyUp";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -61,7 +64,6 @@ export function run(ctx: IRoundCtx): void {
     return;
   }
   const endMs = roundEndMs(ctx.legacy);
-  const endS = (endMs - ctx.start) / 1000;
   // re-broadcast pairs dropped, as the interval builder and the predicate
   // read them (codex 85-tk-L5-T308-1 #7: a REMOVED / APPLIED pair mid-life
   // read as a closed life)
@@ -84,11 +86,20 @@ export function run(ctx: IRoundCtx): void {
     const key = `${ctx.roundKey}|${owner.id}|${s.spellId}|${s.castTimeSeconds}`;
     const first = !seen.has(key);
     seen.add(key);
-    const renewed = all
-      .filter(
-        (o) => o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
-      )
-      .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity);
+    // the spell's next press: a later ledger entry of it, or the owner's
+    // next cast row of any button that puts the aura up — the producers'
+    // own reading (`nextAuraPressMs`; codex 85-tk-L5-T308-1c #10:
+    // Ascendance's Doom Winds closed the first press's life)
+    const renewed = Math.min(
+      all
+        .filter(
+          (o) =>
+            o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
+        )
+        .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity),
+      (nextAuraPressMs(owner, app.spellId, s.spellId, castMs) - ctx.start) /
+        1000,
+    );
     // the REMOVED that closes THIS life: before the spell's next press — a
     // later life's REMOVED leaves this one unclosed (codex 85-tk-L5-T308-1b
     // #11)
@@ -109,11 +120,16 @@ export function run(ctx: IRoundCtx): void {
       }
       continue;
     }
-    const upTo = Math.min(renewed, endS);
+    // …and never past the owner's death (the producers' `auraSurelyUpUntilMs`)
+    const untilMs = auraSurelyUpUntilMs(
+      owner,
+      tsOf(app),
+      Math.min(endMs, ctx.start + renewed * 1000),
+    );
+    const upTo = (untilMs - ctx.start) / 1000;
     if (s.spanToSeconds >= upTo - 1) continue;
     ctx.bump("burstAuraPastSpan");
     const capMs = ctx.start + s.spanToSeconds * 1000;
-    const untilMs = Math.min(endMs, ctx.start + renewed * 1000);
     const reapplied = own.some(
       (r) =>
         r.spellId === app.spellId &&
@@ -130,7 +146,11 @@ export function run(ctx: IRoundCtx): void {
             s.spellId,
             capMs,
             untilMs,
-            { nextPressMs: ctx.start + renewed * 1000 },
+            {
+              nextPressMs: ctx.start + renewed * 1000,
+              // a row of the press's other effect aura is no evidence (1c #9)
+              otherAuraIds: otherEffectAurasOf(s.spellId, app.spellId),
+            },
           )
         ? "surely up"
         : "can't tell";
