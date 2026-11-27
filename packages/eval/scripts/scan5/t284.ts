@@ -17,9 +17,8 @@
  *    (`extractOffListPresses` → `durationSeconds` / `durationAura`) read
  *    from an aura the producer's own hand-off reading
  *    (`pressEffectHandoffRow`) hands off from — the line priced the window,
- *    not the effect that ran. Checked = lines with a
- *    `lasts` whose aura was REMOVED more than 1 s before it. Kind = the
- *    spell.
+ *    not the effect that ran. Checked = lines with a `lasts` read off a
+ *    row of the caster's. Kind = the spell.
  *  - `burstSpanEndsWhileUp` (audit 01 D2): the owner's burst ledger
  *    (`analyzeBurstLedger`) gives a cooldown's span an end more than 1 s
  *    before the round's while the caster's own aura of that press
@@ -36,7 +35,6 @@ import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { nextPressEndingChannelMs } from "@gladlog/analysis/src/utils/castCommitSpans";
 import {
   extractOffListPresses,
-  pressAuraCandidates,
   pressEffectHandoffRow,
 } from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -139,17 +137,12 @@ function presses(ctx: IRoundCtx): void {
     const rows = ((holder.auraEvents ?? []) as any[]).filter(
       (r) => r.srcUnitId === caster.id,
     );
-    const removed = rows.find(
-      (r) => r.spellId === da.spellId && ev(r) === REMOVED && tsOf(r) > da.atMs,
-    );
-    if (!removed) continue;
-    // a hand-off at the printed length is the next aura of a chain (Holy
-    // Armaments); only one gone before it priced a window
-    if (tsOf(removed) - da.atMs > (p.durationSeconds - 1) * 1000) continue;
-    ctx.bump("pressLastsTriggerWindow");
-    // the producer's own hand-off reading (`pressEffectHandoffRow`) asked
-    // of the line's row: a row it hands off from is a window, not the
-    // effect (codex 85-tk-L5-T284-1b #6: a recurring shield is none)
+    // every line with a lasts read off a row of the caster's; the
+    // producer's own hand-off reading (`pressEffectHandoffRow`, the window's
+    // copies on every unit) asked of that row: a row it hands off from is a
+    // window, not the effect (codex 85-tk-L5-T284-1b #6: a recurring shield
+    // is none; 1d #4: the window's early end may be on another copy, the
+    // printed holder's running its 30 s)
     const row = rows.find(
       (r) =>
         r.spellId === da.spellId &&
@@ -157,22 +150,10 @@ function presses(ctx: IRoundCtx): void {
         (ev(r) === APPLIED || ev(r) === REFRESH),
     );
     if (!row) continue;
+    ctx.bump("pressLastsTriggerWindow");
     const nextPress = successesOf(caster).find(
       (c: any) => String(c.spellId) === p.spellId && tsOf(c) > tsOf(row),
     );
-    const cast = successesOf(caster).find(
-      (c: any) =>
-        String(c.spellId) === p.spellId &&
-        Math.abs(tsOf(c) - (ctx.start + p.timeSeconds * 1000)) < 0.5,
-    );
-    const copies = cast
-      ? pressAuraCandidates(
-          caster,
-          cast,
-          units,
-          nextPress ? tsOf(nextPress) : Infinity,
-        )
-      : [];
     const handoff = pressEffectHandoffRow(
       caster,
       holder,
@@ -183,7 +164,7 @@ function presses(ctx: IRoundCtx): void {
         nextPress ? tsOf(nextPress) : Infinity,
         roundEndMs(ctx.legacy) + 1,
       ),
-      copies,
+      units,
     );
     if (!handoff) continue;
     const name = getEnglishSpellName(p.spellId, "");
@@ -192,7 +173,7 @@ function presses(ctx: IRoundCtx): void {
       name,
       ctx.start + p.timeSeconds * 1000,
       `${ctx.roundKey}|${caster.id}|${p.spellId}|${p.timeSeconds}`,
-      `${name} at ${p.timeSeconds.toFixed(2)}s prints lasts ${p.durationSeconds}s from ${da.spellId}, gone after ${((tsOf(removed) - da.atMs) / 1000).toFixed(2)}s into ${handoff.spellId}`,
+      `${name} at ${p.timeSeconds.toFixed(2)}s prints lasts ${p.durationSeconds}s from ${da.spellId}, handed off at +${((tsOf(handoff) - da.atMs) / 1000).toFixed(2)}s to ${handoff.spellId}`,
     );
   }
 }

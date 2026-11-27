@@ -376,6 +376,61 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
     expect(d?.durationSeconds).toBe(10);
   });
 
+  it("the rogue's copy applied 6 ms ahead of the cast row still closes the window (codex 85-tk-L5-T284-1d #1, e9306c04 r3)", () => {
+    const rogApplied = makeAuraEvent(
+      APPLIED,
+      "57934",
+      T - 6,
+      "rog",
+      "rog",
+      "BUFF",
+    );
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        rogApplied,
+        makeAuraEvent(REMOVED, "57934", T + 5, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 19, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T + 10_019, "rog", "rog", "BUFF"),
+      ],
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 19, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T + 10_019, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 30_000, "rog", "hun", "BUFF"),
+      ],
+    });
+    const d = pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+    expect(d?.row.spellId).toBe("221630");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
+  it("a successor logged in the window's own millisecond, after it, is the hand-off (codex 85-tk-L5-T284-1d #2, f156e7ac r0)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 1, "rog", "rog", "BUFF"),
+      ],
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T + 1, "rog", "hun", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 1, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T + 10_041, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 30_001, "rog", "hun", "BUFF"),
+      ],
+    });
+    const d = pressDuration(rog, cast as any, [rog, hun], rog.spellCastEvents);
+    expect(d?.unit.id).toBe("hun");
+    expect(d?.row.spellId).toBe("221630");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
   it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
     expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
   });

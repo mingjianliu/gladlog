@@ -776,16 +776,10 @@ export function pressEffectCutShort(
   // (codex 85-tk-L5-T284-1 #6: two Tricks windows, each handing off to a
   // 221630 on its unit)
   const untilMs = Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1);
-  const effectRowOf = (
-    c: {
-      unit: ICombatUnit;
-      row: ICombatUnit["auraEvents"][number];
-    },
-    copies: ReadonlyArray<{
-      unit: ICombatUnit;
-      row: ICombatUnit["auraEvents"][number];
-    }>,
-  ) => {
+  const effectRowOf = (c: {
+    unit: ICombatUnit;
+    row: ICombatUnit["auraEvents"][number];
+  }) => {
     if (c.row.spellId === from.spellId || cast.spellId === undefined)
       return c.row;
     const len = buffFullDurationForCaster(
@@ -803,7 +797,7 @@ export function pressEffectCutShort(
           c.row,
           len,
           untilMs,
-          copies,
+          allUnits,
         ) ?? c.row);
   };
   const holders = pressAuraCandidates(caster, cast, allUnits, nextPressMs);
@@ -812,7 +806,7 @@ export function pressEffectCutShort(
       (c) =>
         c.unit.id !== dur.unit.id &&
         isEffectHolderUnit(c.unit) &&
-        effectRowOf(c, holders).spellId === from.spellId,
+        effectRowOf(c).spellId === from.spellId,
     )
   )
     return undefined;
@@ -847,32 +841,39 @@ export function pressEffectHandoffRow(
   row: ICombatUnit["auraEvents"][number],
   lengthS: number,
   untilMs = Infinity,
-  /** the press's other copies of `row`'s aura (`pressAuraCandidates` on
-   * other units): the window closes when any of them is consumed (codex
-   * 85-tk-L5-T284-1c #2, a38e62d8 r0: the rogue's own 57934 gone 2 ms after
-   * the press, the target's 221630 from that instant, its 57934 running its
-   * 30 s) */
-  copies: ReadonlyArray<{
-    unit: Pick<ICombatUnit, "auraEvents">;
-    row: ICombatUnit["auraEvents"][number];
-  }> = [],
+  /** the round's other units: the press's other copies of `row`'s aura on
+   * them (`pressWindowCopyRow`) close the window too when one is consumed
+   * early (codex 85-tk-L5-T284-1c #2, a38e62d8 r0: the rogue's own 57934
+   * gone 2 ms after the press, the target's 221630 from that instant, its
+   * 57934 running its 30 s; 1d #1, e9306c04 r3: the rogue's copy applied
+   * 6 ms ahead of the cast row) */
+  others: ReadonlyArray<Pick<ICombatUnit, "auraEvents">> = [],
 ): ICombatUnit["auraEvents"][number] | undefined {
   if (PRESS_EFFECT_CHAIN_AURAS[row.spellId ?? ""]) return undefined;
   const window = pressWindowEarlyEnd(caster, unit, row, lengthS, untilMs);
+  const own = window?.own ?? row;
   const ends = [
     window?.endMs,
-    ...copies
-      .filter((c) => c.row.spellId === row.spellId && c.unit !== unit)
-      .map(
-        (c) =>
-          pressWindowEarlyEnd(caster, c.unit, c.row, lengthS, untilMs)?.endMs,
-      ),
+    ...others
+      .filter((o) => o !== unit)
+      .map((o) => {
+        const copy = pressWindowCopyRow(caster, o, own);
+        return copy
+          ? pressWindowEarlyEnd(caster, o, copy, lengthS, untilMs)?.endMs
+          : undefined;
+      }),
   ]
     .filter((t): t is number => t !== undefined)
     .sort((x, y) => x - y);
   if (!ends.length) return undefined;
   const events = dropAuraRebroadcasts(unit.auraEvents ?? []);
-  const start = window?.startMs ?? row.logLine.timestamp;
+  // after the window's own application in log order: a successor logged in
+  // its millisecond counts (codex 85-tk-L5-T284-1d #2, f156e7ac r0: the
+  // target's 57934 and its 221630 both at +1 ms)
+  const afterOwn = (a: ICombatUnit["auraEvents"][number]) =>
+    a.logLine.timestamp > own.logLine.timestamp ||
+    (a.logLine.timestamp === own.logLine.timestamp &&
+      (a.logLine.lineIndex ?? -Infinity) > (own.logLine.lineIndex ?? Infinity));
   for (const endMs of ends) {
     const ids = new Set([castSpellId, ...effectAurasOfCast(castSpellId)]);
     ids.delete(row.spellId!);
@@ -885,7 +886,7 @@ export function pressEffectHandoffRow(
         byCaster(a) &&
         (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
           a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        a.logLine.timestamp > start &&
+        afterOwn(a) &&
         a.logLine.timestamp < endMs - PRESS_CHAIN_HANDOVER_MS
       )
         ids.delete(a.spellId!);
@@ -893,13 +894,39 @@ export function pressEffectHandoffRow(
       (a) =>
         a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
         byCaster(a) &&
-        a.logLine.timestamp > start &&
+        afterOwn(a) &&
         a.logLine.timestamp < untilMs &&
         Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS,
     );
     if (next) return next;
   }
   return undefined;
+}
+
+/** The press's copy of a window aura on another unit: the caster's
+ * APPLIED / REFRESH of `own`'s id there nearest `own`, within
+ * `PRESS_CHAIN_HANDOVER_MS` of it — the same press laying the same aura
+ * on two units in one instant (Tricks of the Trade's 57934 on the rogue
+ * and on its target). Re-broadcasts dropped. */
+function pressWindowCopyRow(
+  caster: Pick<ICombatUnit, "id">,
+  unit: Pick<ICombatUnit, "auraEvents">,
+  own: ICombatUnit["auraEvents"][number],
+): ICombatUnit["auraEvents"][number] | undefined {
+  const at = own.logLine.timestamp;
+  return dropAuraRebroadcasts(unit.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === own.spellId &&
+        a.srcUnitId === caster.id &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+        Math.abs(a.logLine.timestamp - at) <= PRESS_CHAIN_HANDOVER_MS,
+    )
+    .sort(
+      (x, y) =>
+        Math.abs(x.logLine.timestamp - at) - Math.abs(y.logLine.timestamp - at),
+    )[0];
 }
 
 /** Where a press's window aura `row` on `unit` ended before its length
@@ -914,7 +941,13 @@ function pressWindowEarlyEnd(
   row: ICombatUnit["auraEvents"][number],
   lengthS: number,
   untilMs: number,
-): { startMs: number; endMs: number } | undefined {
+):
+  | {
+      own: ICombatUnit["auraEvents"][number];
+      startMs: number;
+      endMs: number;
+    }
+  | undefined {
   const events = dropAuraRebroadcasts(unit.auraEvents ?? []);
   const own = events.includes(row)
     ? row
@@ -942,7 +975,7 @@ function pressWindowEarlyEnd(
   if (endMs >= untilMs) return undefined;
   if ((endMs - startMs) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
     return undefined;
-  return { startMs, endMs };
+  return { own: own ?? row, startMs, endMs };
 }
 
 /** The duration a press's line prints, and the APPLIED row it is read
@@ -1111,7 +1144,7 @@ export function pressDuration(
             row,
             base,
             Math.min(nextPressMs ?? Infinity, roundEndAtMs + 1),
-            candidates,
+            allUnits,
           )
         : undefined;
     if (handoff) {
