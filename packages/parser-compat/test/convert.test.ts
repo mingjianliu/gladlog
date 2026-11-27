@@ -981,11 +981,18 @@ describe("logRegion — the region every player's name ends with", () => {
       CI("Player-1-A", 1, 257, 2400),
       "ARENA_MATCH_END,0,155,1729,1730",
     ].forEach((x, i) =>
-      p.push(`10/14/2026 23:59:${String(50 + i * 2)}.000-4  ${x}`),
+      p.push(`10/14/2026 23:59:${String(40 + i * 2)}.000-4  ${x}`),
     );
     p.end();
-    const lobby = Date.UTC(2026, 9, 15, 3, 59, 50);
-    for (const round of shuffles[0]!.rounds) {
+    const lobby = Date.UTC(2026, 9, 15, 3, 59, 40);
+    // both rounds survive, each with its own opening (codex 85-tk-L6-T268-2
+    // #1: an invalid :60 dropped the second)
+    const rounds = shuffles[0]!.rounds;
+    expect(rounds.map((r) => r.statedStartTime)).toEqual([
+      lobby,
+      lobby + 6_000,
+    ]);
+    for (const round of rounds) {
       expect(round.lobbyStatedStartTime).toBe(lobby);
       const legacy = toLegacyMatch(round as unknown as GladMatch);
       expect(legacy.logLobbyStatedMs).toBe(lobby);
