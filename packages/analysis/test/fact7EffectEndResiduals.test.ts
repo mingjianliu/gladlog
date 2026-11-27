@@ -184,6 +184,30 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
       5.05,
     );
   });
+  it("a shield used up before the bolts ends no channel: the last bolt does (T284: 605 cover ec1fd439 r6, 421453 REMOVED 0.72 s in, bolts 0.82–5.82 s)", () => {
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0)],
+      damageOut: [bolt(0.82), bolt(3.1), bolt(5.82)],
+      healOut: [],
+    };
+    expect(channelEndSeconds(unit, UP, 0, 0.72, T0, "Ultimate Penitence")).toBe(
+      5.82,
+    );
+  });
+
+  it("the bolts are read to the next press of it, not past", () => {
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0), press(UP, 4)],
+      damageOut: [bolt(0.82), bolt(3.1), bolt(4.5)],
+      healOut: [],
+    };
+    expect(channelEndSeconds(unit, UP, 0, 0.72, T0, "Ultimate Penitence")).toBe(
+      3.1,
+    );
+  });
+
   it("a bolt that missed or that a shield ate is a bolt (7a404f6a 1:01: into a Grounding Totem from 3.0 s)", () => {
     const missed = {
       spellId: "421543",

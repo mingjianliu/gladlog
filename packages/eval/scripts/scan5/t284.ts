@@ -3,16 +3,15 @@
  * scan5/t284.ts — ticket T284 (12.1.5 targeted audit): printed spans read
  * from the wrong source.
  *
- *  - `channelEndedBeforeItsBolts` (audit 02 D1): a channelled cooldown
- *    (`CHANNELED_CD_SPELL_IDS`) whose end the producer puts at the caster's
- *    next press (`nextPressEndingChannelMs`) while the log shows the channel
- *    had produced nothing yet at that press and went on producing well
- *    after it — a channel its bolts measure (DB2 does not call the press a
- *    channel), its own effect rows (damage / heal / miss under the
- *    channel's English name, by the caster, from its own millisecond,
- *    before its next press of the same spell and within 15 s) all after
- *    the press. Checked = presses with an ending press before
- *    their last effect row. Kind = the spell.
+ *  - `channelEndedBeforeItsBolts` (audit 02 D1): the owner's printed
+ *    channel (`[YOU] [CD] … (channeled Xs, ended m:ss` or `interrupted at
+ *    Xs`) of a channelled cooldown its bolts measure
+ *    (`CHANNELED_CD_SPELL_IDS`, not a DB2 channel) whose own effect rows
+ *    (damage / heal / miss under the channel's English name, by the
+ *    caster, from its own millisecond, before its next press of the same
+ *    spell and within 15 s) all come after the printed end — the line
+ *    ended the channel at a press before it had produced anything.
+ *    Checked = such printed lines with effect rows. Kind = the spell.
  *  - `pressLastsTriggerWindow` (audit 04 D2): a printed `[PRESS]` line's
  *    `lasts N` (`matchPressLines`, the line and its press row) equal to the
  *    talented length of a window the press laid (the caster's APPLIED of
@@ -36,7 +35,6 @@ import { PRESS_CHAIN_HANDOVER_MS } from "@gladlog/analysis/src/data/pressEffectC
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
-import { nextPressEndingChannelMs } from "@gladlog/analysis/src/utils/castCommitSpans";
 import { pressEffectHandoffRow } from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -46,6 +44,7 @@ import {
   type IRoundCtx,
   REFRESH,
   REMOVED,
+  secOf,
   successesOf,
   tsOf,
 } from "./ctx";
@@ -58,6 +57,8 @@ export const CHECKS = [
 ] as const;
 
 const CHANNEL_READ_MS = 15_000;
+/** the printed channel length is rounded to a tenth */
+const CHANNEL_TENTH_MS = 50;
 /** a printed `lasts` this close to a length is that length (the line
  * rounds to whole or tenth seconds) */
 const LASTS_MATCH_S = 0.5;
@@ -68,56 +69,72 @@ function effectName(r: any): string {
     : getEnglishSpellName(String(r.spellId), r.spellName ?? "");
 }
 
+/** `m:ss  [YOU] [CD]   <name> (channeled|interrupted at Xs, ended m:ss` —
+ * the owner's printed channel (`ownerCd`'s `channelSuffix`) */
+const CHANNEL_LINE =
+  /^\s*(\d+:\d\d)\s+\[YOU\] \[CD\]\s+(.+?) \((?:channeled|interrupted at) ([\d.]+)s, ended \d+:\d\d/;
+
 function channels(ctx: IRoundCtx): void {
-  for (const u of ctx.players) {
-    const casts = successesOf(u);
-    for (const [i, c] of casts.entries()) {
-      const id = String(c.spellId);
-      // a channel its bolts measure (`nextPressEndingChannelMs`): DB2 does
-      // not call the press a channel
-      if (!CHANNELED_CD_SPELL_IDS.has(id) || CHANNELED_SPELL_IDS.has(id))
-        continue;
-      const at = tsOf(c);
-      const nextSame = casts.slice(i + 1).find((n) => String(n.spellId) === id);
-      const until = Math.min(
-        nextSame ? tsOf(nextSame) : Infinity,
-        at + CHANNEL_READ_MS,
-      );
-      const p = nextPressEndingChannelMs(u, id, at);
-      if (!(p < until)) continue;
-      const name = getEnglishSpellName(id, c.spellName ?? "");
-      const fx = [
-        ...(u.damageOut ?? []),
-        ...(u.healOut ?? []),
-        ...(u.missesOut ?? []),
-      ]
-        .filter(
-          (r: any) =>
-            r.srcUnitId === u.id &&
-            tsOf(r) >= at &&
-            tsOf(r) < until &&
-            effectName(r) === name,
-        )
-        .map((r: any) => tsOf(r) as number);
-      if (!fx.length) continue;
-      const first = Math.min(...fx);
-      const last = Math.max(...fx);
-      if (last <= p) continue;
-      ctx.bump("channelEndedBeforeItsBolts");
-      // nothing of it at the press, rows of it after it: the channel ran on
-      if (first <= p) continue;
-      const by = [
-        ...(u.spellCastEvents ?? []),
-        ...(u.castStartEvents ?? []),
-      ].find((e: any) => tsOf(e) === p && String(e.spellId) !== id);
-      ctx.violate(
-        "channelEndedBeforeItsBolts",
-        name,
-        p,
-        `${ctx.roundKey}|${u.id}|${id}|${at}`,
-        `${name} at ${((at - ctx.start) / 1000).toFixed(3)}s: ended by ${by ? `${getEnglishSpellName(String(by.spellId), by.spellName ?? "")} (${by.spellId}, ${ev(by)})` : "a press"} +${p - at}ms, its effect rows +${first - at}…+${last - at}ms`,
-      );
-    }
+  // the printed lines (codex 85-tk-L5-T284-1k: a scan that re-asks the
+  // producer checks the present reading, not the line a capture printed)
+  const u = ctx.owner;
+  if (!u) return;
+  const casts = successesOf(u);
+  const seen = new Map<string, number>();
+  for (const line of ctx.lines) {
+    const m = CHANNEL_LINE.exec(line);
+    if (!m) continue;
+    const second = secOf(m[1]!);
+    const name = m[2]!;
+    const key = `${name}|${second}`;
+    const k = seen.get(key) ?? 0;
+    seen.set(key, k + 1);
+    // a channel its bolts measure: DB2 does not call the press a channel
+    const c = casts.filter(
+      (r: any) =>
+        CHANNELED_CD_SPELL_IDS.has(String(r.spellId)) &&
+        !CHANNELED_SPELL_IDS.has(String(r.spellId)) &&
+        getEnglishSpellName(String(r.spellId), r.spellName ?? "") === name &&
+        Math.floor((tsOf(r) - ctx.start) / 1000) === second,
+    )[k];
+    if (!c) continue;
+    const id = String(c.spellId);
+    const at = tsOf(c);
+    const i = casts.indexOf(c);
+    const nextSame = casts.slice(i + 1).find((n) => String(n.spellId) === id);
+    const until = Math.min(
+      nextSame ? tsOf(nextSame) : Infinity,
+      at + CHANNEL_READ_MS,
+    );
+    const fx = [
+      ...(u.damageOut ?? []),
+      ...(u.healOut ?? []),
+      ...(u.missesOut ?? []),
+    ]
+      .filter(
+        (r: any) =>
+          r.srcUnitId === u.id &&
+          tsOf(r) >= at &&
+          tsOf(r) < until &&
+          effectName(r) === name,
+      )
+      .map((r: any) => tsOf(r) as number);
+    if (!fx.length) continue;
+    ctx.bump("channelEndedBeforeItsBolts");
+    // the printed length, to its tenth
+    const end = at + Number(m[3]) * 1000;
+    const first = Math.min(...fx);
+    const last = Math.max(...fx);
+    // nothing of it by the printed end, rows of it after it: the channel ran on
+    if (first <= end + CHANNEL_TENTH_MS || last <= end) continue;
+    ctx.violate(
+      "channelEndedBeforeItsBolts",
+      name,
+      at,
+      `${ctx.roundKey}|${u.id}|${id}|${at}`,
+      `${name} at ${((at - ctx.start) / 1000).toFixed(3)}s printed ${m[3]}s; its effect rows +${first - at}…+${last - at}ms`,
+      line,
+    );
   }
 }
 
@@ -270,7 +287,7 @@ function bursts(ctx: IRoundCtx): void {
 
 export function run(ctx: IRoundCtx): void {
   bursts(ctx);
-  if (!ctx.firstOwnerOfRound) return;
   channels(ctx);
+  if (!ctx.firstOwnerOfRound) return;
   presses(ctx);
 }

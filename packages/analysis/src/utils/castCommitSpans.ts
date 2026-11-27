@@ -239,7 +239,9 @@ export function channelRunsThroughPress(
     nextSame ?? Infinity,
     afterMs + CHANNEL_EFFECT_READ_MS,
   );
-  return lastChannelEffectMs(effects, name, pressMs, untilMs, true) !== undefined;
+  return (
+    lastChannelEffectMs(effects, name, pressMs, untilMs, true) !== undefined
+  );
 }
 
 /** How far past its press a channel's own effect rows are read for
@@ -352,7 +354,7 @@ function channelEffectTimes(
  * measure one. Ultimate Penitence's 421453 is the 6.5 s shield (DB2 duration
  * index 589, a damage absorb that ignores haste); the channel is 421434, 6 s before haste, and
  * leaves no aura. It writes its bolts, 25 when it runs out, so there the end
- * is also the last bolt (fact7 `channelOutlived`, 45-1-267: bolts to 5.05 s,
+ * is the last bolt — also when the shield is used up before them (fact7 `channelOutlived`, 45-1-267: bolts to 5.05 s,
  * Fade at 5.25 s, printed 6.5 s). A bolt can land after the press that
  * stopped the channel, still in the air: the press wins then.
  */
@@ -367,20 +369,31 @@ export function channelEndSeconds(
 ): number {
   const castMs = matchStartMs + castSeconds * 1000;
   const toSeconds = (ms: number) => (ms - matchStartMs) / 1000;
-  const end = Math.min(
-    auraEndSeconds,
-    toSeconds(nextPressEndingChannelMs(unit, spellId, castMs)),
-  );
+  const pressEndS = toSeconds(nextPressEndingChannelMs(unit, spellId, castMs));
+  const end = Math.min(auraEndSeconds, pressEndS);
   if (CHANNELED_SPELL_IDS.has(spellId)) return end;
+  // the bolts measure it, not the aura: a shield an absorb used up ends
+  // before them (605 cover ec1fd439 r4 95.993 s / r6 10.736 s: 421453
+  // REMOVED at +0.72 s, bolts to +5.8 s with no press — printed `channeled
+  // 0.7s`). Read to the next press of it, within `CHANNEL_EFFECT_READ_MS`.
+  const nextSameMs =
+    (unit.spellCastEvents ?? []).find(
+      (c) =>
+        c.spellId === spellId &&
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.logLine.timestamp > castMs,
+    )?.logLine.timestamp ?? Infinity;
+  const readUntil = Math.min(nextSameMs, castMs + CHANNEL_EFFECT_READ_MS);
   const lastEffectMs = lastChannelEffectMs(
     unit,
     getEnglishSpellName(spellId, spellName),
     castMs,
-    matchStartMs + auraEndSeconds * 1000,
+    readUntil,
+    readUntil === nextSameMs,
   );
   return lastEffectMs === undefined
     ? end
-    : Math.min(end, toSeconds(lastEffectMs));
+    : Math.min(pressEndS, toSeconds(lastEffectMs));
 }
 
 /**
