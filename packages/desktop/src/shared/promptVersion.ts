@@ -1998,5 +1998,15 @@
  *  the burst's first second and states a wall's school only when the ledger
  *  holds it; Spiritwalker's Aegis / Grace last their talented length. See
  *  docs/prompt-version-history.md.
+ *
+ * v677 (2026-11-27; pipeline batch B258, Mac bundle M2: T237 T248 T260 T239
+ *  T266 T285 T269): burst readers stop at the round's end and count a
+ *  channel's trailing or absorbed last tick; [RES] enemy gives no 8 s window
+ *  to a press whose triggered effect aura never logged; Demonic Circle:
+ *  Teleport's cooldown takes Impish Instincts' time off from a melee or
+ *  ranged hit (DB2 damage class) or a Physical one; a Spell Reflection return
+ *  goes to the reflect its own millisecond names when that reflect is inside
+ *  the direct-return window; a cut empower hold's cast row is matched
+ *  exactly, in log order. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 676;
+export const PROMPT_VERSION = 677;

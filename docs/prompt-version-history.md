@@ -8897,3 +8897,48 @@ tickets' own checks. scan5 in-total violations 30,212 -> 30,093 | 34,594 ->
 offListPressLine lastsBeyond 47 -> 23 | 159 -> 132); the only rise is the
 pressChainLasts nominated inventory 1,731 -> 1,734 (1215, not in the total);
 gates identical.
+
+v677 (pipeline batch B258, Mac bundle M2: T237 T248 T260 T239 T266 T285 T269;
+user ruling 2026-11-26: bundled; T237 T248 T260 were first assembled as B203 /
+B209 / B212). Per ticket (605 | 1215):
+T248 — the burst ledger counts a channel's own trailing or absorbed last tick.
+T237 (rulings R111, R117) — the burst readers stop at the round's end,
+roundEndMs, and the round-ending death's own second counts as pressure.
+T260 — [RES] enemy gives no 8 s window to a press whose triggered effect aura
+never logged. Together (the bundle check below):
+[HEALER EXPOSURE] -167 / +158 | -124 / +118, [BURST ANSWERED] -36 / +36 |
+-24 / +21, [OFFENSIVE WINDOW] -18 / +15 | -18 / +18, [RES] -215 / +212 |
+-182 / +182 — these four equal B212's own check; legend / other -47 / +35 | -61 / +55 and menu rows in 11 | 7 files
+(B212's legend also carried T259's [PROC] lines; of the two 1215 menu files
+more here, s1/106-1-811 reads diedInWindow=yes and s1/129-1-1226's Mindgames
+row windowEndT 165 -> 163); scan5 resEnemyEffectAfterDeath
+3 -> 0 | 3 -> 0, channelLastTickDropped 1 -> 0 on 605, slowResponseRowDiffers
+4 -> 0 on 605.
+T239 — desktop only: the report's cast lane no longer names the cast row's
+target for a self-only defensive whose row names a unit it cannot have landed
+on (Survival of the Fittest; Obsidian Scales when that unit is on the other
+side): 1,119 | 1,013 such rows; no prompt line.
+T266 (user ruling 2026-11-26) — Demonic Circle: Teleport under Impish
+Instincts (409835) takes time off from a hit whose DB2 damage class is melee
+or ranged, or whose school is Physical (e.g. a direct Flurry Strikes hit,
+damage class 1; the class rule alone would leave 3 on 1215), and not from an
+attack that suppresses target procs: Teleport presses the model called
+impossible 5 | 6 -> 1 | 2 (the three left stay FLAGged in the 409835 entry);
+[PRESS] -401 / +401 and [YOU] [PRESS] -88 / +88 | [PRESS] -450 / +450 and
+[YOU] [PRESS] -84 / +84, all Teleport 'back m:ss'.
+T285 — [REFLECTED]: a Spell Reflection return goes to the reflect its own
+millisecond names when that reflect is inside the direct-return window
+(REFLECT_DIRECT_RETURN_MS), else to the nearest reflect row as before:
+[REFLECTED] 0 | -15 / +18 lines (e.g. 41243fd2 r5 on 1215: the Pyroblast line
+at 3:18, 356,642 -> 178,533, and a new Fireball line at 3:17, 178,109).
+T269 — a cut empower hold's cast row is the SUCCESS inside it, matched exactly
+and in log order: Preservation Dream Breath / Fire Breath 'back' readings on
+12.1.5 — [PRESS] -136 / +74 beyond T266's; no 605 line changes (its 153 cut
+holds were already read right, cutHoldSpent 0 -> 0); scan5
+backBeforeNextSplit Dream Breath 17 -> 0 and Fire Breath 6 -> 0,
+offListPressLine noPress 62 -> 0 on 1215.
+Bundle check (Mac, dev 3ba270c26 -> the bundle's code, both sides on one
+machine; 605 | 1215, contexts 3,519 | 2,955): changed contexts 555 | 595; scan5
+in-total violations on 605 28,377 -> 28,363; one kind rose on each corpus,
+resEnemySameSecondPressMissing / noAura (inventory) 205 -> 221 | 176 -> 194,
+T260's own exemption as in B212; gates identical on both.
