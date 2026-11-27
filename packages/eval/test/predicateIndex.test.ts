@@ -255,6 +255,7 @@ import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as dashboard from "../../desktop/src/renderer/src/components/dashboard";
 import * as analysisInput from "../../desktop/src/renderer/src/report/derive/analysisInput";
 import * as reportCasts from "../../desktop/src/renderer/src/report/derive/casts";
+import * as deathReasons from "../../desktop/src/renderer/src/report/derive/deathReasons";
 import * as dispelSummary from "../../desktop/src/renderer/src/report/derive/dispelSummary";
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
 import * as kickText from "../../desktop/src/renderer/src/report/derive/kickText";
@@ -1578,6 +1579,11 @@ const INDEX: PredicateRow[] = [
     file: "packages/desktop/src/renderer/src/report/derive/kickText.ts",
     symbol: "missedKickLabel",
     mod: kickText,
+  },
+  {
+    file: "packages/desktop/src/renderer/src/report/derive/deathReasons.ts",
+    symbol: "deathReasons",
+    mod: deathReasons,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,
