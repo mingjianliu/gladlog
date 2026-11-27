@@ -360,7 +360,7 @@ function channelEffectTimes(
  */
 export function channelEndSeconds(
   unit: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut" | "healOut"> &
-    Partial<Pick<ICombatUnit, "missesOut">>,
+    Partial<Pick<ICombatUnit, "missesOut" | "auraEvents">>,
   spellId: string,
   castSeconds: number,
   auraEndSeconds: number,
@@ -375,7 +375,19 @@ export function channelEndSeconds(
   // the bolts measure it, not the aura: a shield an absorb used up ends
   // before them (605 cover ec1fd439 r4 95.993 s / r6 10.736 s: 421453
   // REMOVED at +0.72 s, bolts to +5.8 s with no press — printed `channeled
-  // 0.7s`). Read to the next press of it, within `CHANNEL_EFFECT_READ_MS`.
+  // 0.7s`). Past an end the log shows as the aura's own REMOVED they are
+  // read to the next press of it, within `CHANNEL_EFFECT_READ_MS`; an end
+  // that is a bound (the round's, an unlogged aura's cap) still bounds them
+  // (605 cover 23-1-56 0:30: `still channeling when the round ended, 0.9s
+  // in` read 2.2 s off bolts past the round's end)
+  const auraEndMs = matchStartMs + auraEndSeconds * 1000;
+  const removedThen = (unit.auraEvents ?? []).some(
+    (a) =>
+      a.spellId === spellId &&
+      a.srcUnitId === unit.id &&
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      Math.abs(a.logLine.timestamp - auraEndMs) <= 1,
+  );
   const nextSameMs =
     (unit.spellCastEvents ?? []).find(
       (c) =>
@@ -383,7 +395,9 @@ export function channelEndSeconds(
         c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         c.logLine.timestamp > castMs,
     )?.logLine.timestamp ?? Infinity;
-  const readUntil = Math.min(nextSameMs, castMs + CHANNEL_EFFECT_READ_MS);
+  const readUntil = removedThen
+    ? Math.min(nextSameMs, castMs + CHANNEL_EFFECT_READ_MS)
+    : Math.min(auraEndMs, nextSameMs);
   const lastEffectMs = lastChannelEffectMs(
     unit,
     getEnglishSpellName(spellId, spellName),

@@ -58,6 +58,12 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
   const UP = "421453";
   const PAIN_SUPPRESSION = "33206";
   const SHIMMER = "212653";
+  const shieldGone = (s: number) =>
+    ({
+      spellId: UP,
+      srcUnitId: "h",
+      logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: ms(s) },
+    }) as never;
   const bolt = (s: number) =>
     ({
       spellId: "421543",
@@ -188,6 +194,7 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
     const unit = {
       id: "h",
       spellCastEvents: [press(UP, 0)],
+      auraEvents: [shieldGone(0.72)],
       damageOut: [bolt(0.82), bolt(3.1), bolt(5.82)],
       healOut: [],
     };
@@ -196,10 +203,23 @@ describe("fact7 channelOutlived — what an off-GCD press does to a channel", ()
     );
   });
 
+  it("an end the log does not show as the shield's REMOVED (the round's) still bounds the bolts (605 cover 23-1-56 0:30)", () => {
+    const unit = {
+      id: "h",
+      spellCastEvents: [press(UP, 0)],
+      damageOut: [bolt(0.5), bolt(0.85), bolt(2.2)],
+      healOut: [],
+    };
+    expect(channelEndSeconds(unit, UP, 0, 0.9, T0, "Ultimate Penitence")).toBe(
+      0.85,
+    );
+  });
+
   it("the bolts are read to the next press of it, not past", () => {
     const unit = {
       id: "h",
       spellCastEvents: [press(UP, 0), press(UP, 4)],
+      auraEvents: [shieldGone(0.72)],
       damageOut: [bolt(0.82), bolt(3.1), bolt(4.5)],
       healOut: [],
     };
