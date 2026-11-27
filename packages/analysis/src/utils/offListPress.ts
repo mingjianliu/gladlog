@@ -866,52 +866,60 @@ export function pressEffectHandoffRow<
   if (!successorIds.size) return undefined;
   const window = pressWindowEarlyEnd(caster, unit, row, lengthS, untilMs);
   const own = window?.own ?? row;
+  type End = { ms: number; line?: number };
   const copies: Array<{
     unit: U;
     own: ICombatUnit["auraEvents"][number];
-    endMs?: number;
-  }> = [{ unit, own, endMs: window?.endMs }];
+    end?: End;
+  }> = [
+    {
+      unit,
+      own,
+      end: window && { ms: window.endMs, line: window.endLine },
+    },
+  ];
   for (const o of others) {
     if (o === unit) continue;
     const copy = pressWindowCopyRow(caster, o, own);
     if (!copy) continue;
     const end = pressWindowEarlyEnd(caster, o, copy, lengthS, untilMs);
-    copies.push({ unit: o, own: end?.own ?? copy, endMs: end?.endMs });
+    copies.push({
+      unit: o,
+      own: end?.own ?? copy,
+      end: end && { ms: end.endMs, line: end.endLine },
+    });
   }
   const ends = copies
-    .map((c) => c.endMs)
-    .filter((t): t is number => t !== undefined)
-    .sort((x, y) => x - y);
-  for (const endMs of ends)
+    .map((c) => c.end)
+    .filter((t): t is End => t !== undefined)
+    .sort((x, y) => x.ms - y.ms);
+  for (const end of ends)
     // the successor on the row's unit first, then on a copy's
     for (const c of copies) {
-      const next = handoffOn(
-        caster,
-        c.unit,
-        c.own,
-        successorIds,
-        endMs,
-        untilMs,
-      );
+      const next = handoffOn(caster, c.unit, c.own, successorIds, end, untilMs);
       if (next) return { unit: c.unit, row: next };
     }
   return undefined;
 }
 
 /** `pressEffectHandoffRow`'s successor on one unit: the caster's APPLIED of
- * one of `successorIds` there within `PRESS_CHAIN_HANDOVER_MS` of `endMs`,
- * after the window's copy `own` in log order (codex 85-tk-L5-T284-1d #2,
- * f156e7ac r0: the target's 57934 and its 221630 both at +1 ms) and before
- * `untilMs` — never an id the caster already laid there while the window
- * ran (a recurring aura of the press, not its successor). */
+ * one of `successorIds` there logged after the window's end (its REMOVED,
+ * `end`, in log order — codex 85-tk-L5-T284-1d #2, f156e7ac r0: a 57934
+ * and its 221630 at +1 ms) and within `PRESS_CHAIN_HANDOVER_MS` of it, and
+ * before `untilMs` — never an aura put up beside the window (605 cover
+ * 39-17-343 4:08: Berserker Shout's 384102 applied with its 384100 in one
+ * instant, the window removed 70 ms later — `lasts 6s` lost), nor an id the
+ * caster already laid there while the window ran (a recurring aura of the
+ * press, not its successor). */
 function handoffOn(
   caster: Pick<ICombatUnit, "id">,
   unit: Pick<ICombatUnit, "auraEvents">,
   own: ICombatUnit["auraEvents"][number],
   successorIds: ReadonlySet<string>,
-  endMs: number,
+  end: { ms: number; line?: number },
   untilMs: number,
 ): ICombatUnit["auraEvents"][number] | undefined {
+  const endMs = end.ms;
   const ids = new Set(successorIds);
   const events = rebroadcastFree(unit);
   const afterOwn = (a: ICombatUnit["auraEvents"][number]) =>
@@ -934,8 +942,11 @@ function handoffOn(
       a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
       byCaster(a) &&
       afterOwn(a) &&
+      (a.logLine.timestamp > endMs ||
+        (a.logLine.timestamp === endMs &&
+          (a.logLine.lineIndex ?? -Infinity) > (end.line ?? Infinity))) &&
       a.logLine.timestamp < untilMs &&
-      Math.abs(a.logLine.timestamp - endMs) <= PRESS_CHAIN_HANDOVER_MS,
+      a.logLine.timestamp - endMs <= PRESS_CHAIN_HANDOVER_MS,
   );
 }
 
@@ -1002,6 +1013,7 @@ function pressWindowEarlyEnd(
       own: ICombatUnit["auraEvents"][number];
       startMs: number;
       endMs: number;
+      endLine?: number;
     }
   | undefined {
   const events = rebroadcastFree(unit);
@@ -1031,7 +1043,12 @@ function pressWindowEarlyEnd(
   if (endMs >= untilMs) return undefined;
   if ((endMs - startMs) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
     return undefined;
-  return { own: own ?? row, startMs, endMs };
+  return {
+    own: own ?? row,
+    startMs,
+    endMs,
+    endLine: removed.logLine.lineIndex,
+  };
 }
 
 /** The duration a press's line prints, and the APPLIED row it is read

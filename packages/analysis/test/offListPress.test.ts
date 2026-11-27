@@ -454,6 +454,23 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
     expect(d?.durationSeconds).toBe(10);
   });
 
+  it("an aura put up beside the window is no successor (605 cover 39-17-343: Berserker Shout keeps lasts 6s)", () => {
+    const cast = makeSpellCastEvent("384100", T, "war", "War", "war", "War");
+    const war = makeUnit("war", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        makeAuraEvent(APPLIED, "384100", T, "war", "war", "BUFF"),
+        makeAuraEvent(APPLIED, "384102", T, "war", "war", "BUFF"),
+        makeAuraEvent(REMOVED, "384100", T + 70, "war", "war", "BUFF"),
+        makeAuraEvent(REMOVED, "384102", T + 70, "war", "war", "BUFF"),
+      ],
+    });
+    const row = war.auraEvents[0];
+    expect(
+      pressEffectHandoffRow({ id: "war" }, war, "384100", row as any, 6),
+    ).toBeUndefined();
+  });
+
   it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
     expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
   });
