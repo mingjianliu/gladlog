@@ -633,6 +633,59 @@ describe("[PRESS] lasts — a window the press's effect took over from (T284)", 
     ).toBeUndefined();
   });
 
+  it("neither window's REMOVED logged: the successor the rogue laid is the hand-off (codex 85-tk-L5-T284-1l #1, 9e8824f1 r0)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", {
+      spellCastEvents: [cast],
+      auraEvents: [
+        // an earlier press's effect, the round before this window
+        makeAuraEvent(APPLIED, "221630", T - 43_000, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T - 33_000, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "57934", T, "rog", "rog", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 620, "rog", "rog", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T + 6_591, "rog", "rog", "BUFF"),
+      ],
+    });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T, "rog", "hun", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 827, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "221630", T + 6_623, "rog", "hun", "BUFF"),
+      ],
+    });
+    const d = pressDuration(
+      rog,
+      cast as any,
+      [rog, hun],
+      rog.spellCastEvents,
+      T + 31_505,
+    );
+    expect(d?.row.spellId).toBe("221630");
+    expect(d?.durationSeconds).toBe(10);
+  });
+
+  it("no REMOVED logged and an aura laid with the press: no hand-off (Wake of Ashes' DoT)", () => {
+    const cast = makeSpellCastEvent("255937", T, "pet", "Pet", "pal", "Pal");
+    const pal = makeUnit("pal", { spellCastEvents: [cast] });
+    const pet = makeUnit("pet", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "255941", T, "pal", "pet", "DEBUFF"),
+        makeAuraEvent(APPLIED, "403695", T + 18, "pal", "pet", "DEBUFF"),
+      ],
+    });
+    expect(
+      pressEffectHandoffRow(
+        { id: "pal" },
+        pet,
+        "255937",
+        pet.auraEvents[0] as any,
+        5,
+        Infinity,
+        [pal, pet],
+      ),
+    ).toBeUndefined();
+  });
+
   it("no hand-off past the round's end (codex 85-tk-L5-T284-1 #2)", () => {
     expect(tricksWith([], T + 300)?.durationSeconds).toBe(30);
   });

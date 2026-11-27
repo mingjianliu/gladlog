@@ -930,6 +930,68 @@ export function pressEffectHandoffRow<
     );
     if (next) return { unit: c.unit, row: next };
   }
+  // no copy's end is logged at all (codex 85-tk-L5-T284-1l #1, 9e8824f1
+  // r0 153.751 s: neither 57934 REMOVED before the round's end 31.5 s on,
+  // the rogue's 221630 at +620 ms and the target's at +827 ms): the
+  // successor itself is the evidence, applied by the caster on a copy's
+  // unit within the window's length — past `PRESS_CHAIN_HANDOVER_MS` of
+  // the window's own row, so an aura the press lays with it (Wake of
+  // Ashes' DoT, a1cc7584) is none. Only a window of the press's own id
+  // handing to an effect aura of it: a Dream Breath HoT (355941) with no
+  // REMOVED before the next breath is no window of the 355936 that follows
+  // (8-log replay: `lasts 22s` read as 2.5s)
+  const effects = new Set(effectAurasOfCast(castSpellId));
+  effects.delete(row.spellId!);
+  if (row.spellId !== castSpellId || !effects.size) return undefined;
+  const silent = copies.every(
+    (c) =>
+      !rebroadcastFree(c.unit).some(
+        (r) =>
+          r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          r.spellId === c.own.spellId &&
+          r.srcUnitId === caster.id &&
+          r.logLine.timestamp >= c.own.logLine.timestamp &&
+          r.logLine.timestamp < untilMs,
+      ),
+  );
+  if (!silent) return undefined;
+  for (const c of copies) {
+    const from = c.own.logLine.timestamp + PRESS_CHAIN_HANDOVER_MS;
+    const to = Math.min(untilMs, c.own.logLine.timestamp + lengthS * 1000);
+    const events = rebroadcastFree(c.unit);
+    const byCaster = (a: ICombatUnit["auraEvents"][number]) =>
+      a.srcUnitId === caster.id && !!a.spellId && effects.has(a.spellId);
+    const laidWith = new Set(
+      events
+        .filter(
+          (a) =>
+            byCaster(a) &&
+            (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+              a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+            a.logLine.timestamp >= c.own.logLine.timestamp &&
+            a.logLine.timestamp < from,
+        )
+        .map((a) => a.spellId!),
+    );
+    const next = events.find(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        byCaster(a) &&
+        !laidWith.has(a.spellId!) &&
+        a.logLine.timestamp >= from &&
+        a.logLine.timestamp < to &&
+        !events.some(
+          (r) =>
+            r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+            r.spellId === a.spellId &&
+            r.srcUnitId === caster.id &&
+            r.logLine.timestamp >= a.logLine.timestamp &&
+            r.logLine.timestamp <=
+              a.logLine.timestamp + PRESS_CHAIN_HANDOVER_MS,
+        ),
+    );
+    if (next) return { unit: c.unit, row: next };
+  }
   return undefined;
 }
 
