@@ -1,4 +1,4 @@
-import type { RadarSpec } from "../../../shared/specRadar";
+import { spec } from "./radarFixtures";
 import {
   classEntries,
   EMPTY_RADAR_FILTER,
@@ -14,62 +14,6 @@ import {
   topPick,
   windowActivity,
 } from "./radarView";
-
-function spec(
-  spec_name: string,
-  class_name: string,
-  role: RadarSpec["role"],
-  over: Partial<RadarSpec> = {},
-  matchesByHour: (h: number) => number = () => 10,
-): RadarSpec {
-  return {
-    spec_name,
-    class_name,
-    role,
-    color: "#fff",
-    no_data: false,
-    timing_score: 50,
-    timing_tier_key: "t2",
-    timing_tier: "",
-    window_matches: 10,
-    window_low_sample: true,
-    window_win_rate: 50,
-    window_avg_diff: 0,
-    window_big_loss_rate: 20,
-    dev_win_rate: 0,
-    dev_avg_diff: 0,
-    dev_big_loss_rate: 0,
-    next_timing_score: 50,
-    next_trend: "stable",
-    best_hours: [],
-    worst_hours: [],
-    strength_score: 50,
-    strength_tier_key: "t2",
-    strength_tier: "",
-    baseline_role: role,
-    strength_matches: 100,
-    strength_low_sample: false,
-    allday_win_rate: 50,
-    allday_avg_diff: 0,
-    allday_big_loss_rate: 20,
-    excess_win_rate: 0,
-    excess_avg_diff: 0,
-    excess_big_loss_rate: 0,
-    hourly_curve: Array.from({ length: 24 }, (_, hour) => ({
-      hour,
-      score: 50,
-      tier_key: "t2" as const,
-      tier: "",
-      matches: matchesByHour(hour),
-      low_sample: false,
-      win_rate: 50,
-      avg_diff: 0,
-      dev_avg_diff: 0,
-      dev_win_rate: 0,
-    })),
-    ...over,
-  };
-}
 
 const DISC = spec("Discipline Priest", "Priest", "healer", {
   timing_score: 81,

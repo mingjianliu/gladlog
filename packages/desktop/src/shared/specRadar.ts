@@ -149,6 +149,45 @@ export function specTimingUrl(baseUrl: string, q: SpecTimingQuery): string {
   return u.toString();
 }
 
+function isPool(p: unknown): boolean {
+  if (!p || typeof p !== "object") return false;
+  const o = p as Record<string, unknown>;
+  return ["matches", "win_rate", "avg_diff", "big_loss_rate"].every(
+    (k) => typeof o[k] === "number",
+  );
+}
+
+/** Every number the page calls toFixed / arithmetic on. */
+const NUMERIC_SPEC_FIELDS = [
+  "timing_score",
+  "strength_score",
+  "next_timing_score",
+  "window_matches",
+  "window_win_rate",
+  "window_avg_diff",
+  "window_big_loss_rate",
+  "dev_win_rate",
+  "dev_avg_diff",
+  "dev_big_loss_rate",
+  "strength_matches",
+  "allday_win_rate",
+  "allday_avg_diff",
+  "allday_big_loss_rate",
+  "excess_win_rate",
+  "excess_avg_diff",
+  "excess_big_loss_rate",
+] as const;
+
+const NUMERIC_HOUR_FIELDS = [
+  "hour",
+  "score",
+  "matches",
+  "win_rate",
+  "avg_diff",
+  "dev_win_rate",
+  "dev_avg_diff",
+] as const;
+
 /** Structural check of the fields the page dereferences; returns the first
  * problem, or null. Not a full schema — enough that a wrong server or an
  * older contract shows an error instead of a blank page. */
@@ -157,15 +196,31 @@ export function specTimingShapeError(x: unknown): string | null {
   const d = x as Record<string, unknown>;
   if (!Array.isArray(d.specs)) return "missing specs[]";
   if (typeof d.current_hour !== "number") return "missing current_hour";
+  if (!isPool(d.pool_allday)) return "missing pool_allday";
+  if (!d.pools_by_role || typeof d.pools_by_role !== "object")
+    return "missing pools_by_role";
+  for (const [role, p] of Object.entries(d.pools_by_role))
+    if (!isPool(p)) return `pools_by_role.${role} is not a pool`;
+  const m = d.method as Record<string, unknown> | undefined;
+  if (
+    !m ||
+    !["strength_scales", "timing_scales", "weights"].every((k) =>
+      Array.isArray(m[k]),
+    )
+  )
+    return "missing method";
   for (const s of d.specs as Record<string, unknown>[]) {
     if (typeof s?.spec_name !== "string") return "spec without spec_name";
     if (!Array.isArray(s.hourly_curve) || s.hourly_curve.length !== 24)
       return `${s.spec_name}: hourly_curve is not 24 points`;
-    if (
-      typeof s.timing_score !== "number" ||
-      typeof s.strength_score !== "number"
-    )
-      return `${s.spec_name}: missing scores`;
+    for (const h of s.hourly_curve as Record<string, unknown>[])
+      for (const k of NUMERIC_HOUR_FIELDS)
+        if (typeof h?.[k] !== "number")
+          return `${s.spec_name}: hourly_curve point without ${k}`;
+    for (const k of NUMERIC_SPEC_FIELDS)
+      if (typeof s[k] !== "number") return `${s.spec_name}: missing ${k}`;
+    if (!Array.isArray(s.best_hours) || !Array.isArray(s.worst_hours))
+      return `${s.spec_name}: missing best/worst hours`;
   }
   return null;
 }

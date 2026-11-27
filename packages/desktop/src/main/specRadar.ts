@@ -4,9 +4,8 @@
 // environment).
 //
 // Hidden until it ships: the top tab shows only under `electron-vite dev`
-// (ELECTRON_RENDERER_URL is set there and nowhere else — packaged builds and
-// E2E load the built renderer) or with GLADLOG_SPEC_RADAR=1;
-// GLADLOG_SPEC_RADAR=0 hides it in dev too.
+// (unpackaged + ELECTRON_RENDERER_URL + not E2E) or with
+// GLADLOG_SPEC_RADAR=1; GLADLOG_SPEC_RADAR=0 hides it in dev too.
 
 import {
   DEFAULT_RADAR_BASE_URL,
@@ -22,13 +21,29 @@ const FETCH_TIMEOUT_MS = 20_000;
 
 export function specRadarConfig(
   env: NodeJS.ProcessEnv = process.env,
+  isPackaged: boolean = appIsPackaged(),
 ): SpecRadarConfig {
   const flag = env["GLADLOG_SPEC_RADAR"];
-  const enabled =
-    flag === "1" || (flag !== "0" && !!env["ELECTRON_RENDERER_URL"]);
+  // The dev default needs all three: an unpackaged app, the dev server URL,
+  // and not an E2E run — E2E inherits the parent shell's environment, so a
+  // leaked ELECTRON_RENDERER_URL alone must not turn the tab on.
+  const devDefault =
+    !isPackaged && !!env["ELECTRON_RENDERER_URL"] && env["GLADLOG_E2E"] !== "1";
+  const enabled = flag === "1" || (flag !== "0" && devDefault);
   const baseUrl =
     env["GLADLOG_SPEC_RADAR_URL"]?.trim() || DEFAULT_RADAR_BASE_URL;
   return { enabled, baseUrl };
+}
+
+/** app.isPackaged, read lazily so unit tests need no electron runtime;
+ * unknown counts as packaged (fail closed). */
+function appIsPackaged(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require("electron") as typeof import("electron")).app.isPackaged;
+  } catch {
+    return true;
+  }
 }
 
 export async function fetchSpecTiming(

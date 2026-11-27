@@ -39,6 +39,7 @@ export const enRadar = {
   "radar.pool.tank": "Tank pool",
   "radar.pool.all": "All-spec pool",
   "radar.vsPool": "vs {pool}",
+  "radar.baselineFallback": "vs {pool}",
 
   "radar.specs.none": "All specs (open to pick specs to compare)",
   "radar.specs.more": "and {n} total",
@@ -68,7 +69,7 @@ export const enRadar = {
     "Snapshot records of the filtered specs in this 2-hour window vs the mean over all 24 windows; a proxy from snapshot counts, not real queue data",
   "radar.banner.span": "Data span {d} days",
   "radar.banner.note":
-    "Neither index changes with the filters. ② Timing index = this spec in this window vs its own all-day level (50 = normal; spec strength is removed). ① Spec strength = this spec all day vs its role pool in this bracket (does not change by hour). Brackets use pre-match rating. Backtest (7 days → next 7 days): spec strength reproduces where samples are large; the timing index has weak out-of-sample correlation, and cells under 30 records are shrunk toward 50 and dimmed.",
+    "Neither index changes with the filters. ② Timing index = this spec in this window vs its own all-day level (50 = normal; spec strength is removed). ① Spec strength = this spec all day vs its role pool in this bracket (the all-spec pool when the tank pool has under 30 records; does not change by hour). Brackets use pre-match rating. Backtest (7 days → next 7 days): spec strength reproduces where samples are large; the timing index has weak out-of-sample correlation, and cells under 30 records are shrunk toward 50 and dimmed.",
 
   "radar.top.byTiming": "In view · best window vs its own normal",
   "radar.top.byStrength": "In view · strongest spec",
@@ -110,7 +111,7 @@ export const enRadar = {
     "Timing index of the 24 two-hour windows; outlined = current",
   "radar.col.strength": "① Strength",
   "radar.col.strengthTip":
-    "All day vs the role pool in this bracket; unaffected by hour or filters",
+    "All day vs the role pool in this bracket (vs the all-spec pool when the tank pool has under 30 records; marked on the row); unaffected by hour or filters",
   "radar.col.allday": "All day (vs role pool)",
   "radar.col.alldayTip": "In brackets: difference from the role pool",
   "radar.compare.add": "+compare",
@@ -128,7 +129,7 @@ export const enRadar = {
   "radar.hourTip":
     "{spec} · 2 h from {hour}:00\nTiming index {score} ({tier})\nWin {wr}% (vs normal {dwr})\nAvg {diff} (vs normal {ddiff})\n{n} records{low}",
   "radar.method":
-    "Method: deltas = differences in (win rate, avg rating change, big-loss rate). ① Strength = spec all day − role pool all day, shrunk toward 0 with {k} pseudo-records; ② Timing = spec in this window − spec all day, shrunk with {kh} pseudo-records. Each delta is divided by its typical spread (strength {ss}, timing {ts}) and weighted {w} into z; score = 100 / (1 + e^−z), so z = ±1 gives 73 / 27.",
+    "Method: deltas = differences in (win rate, avg rating change, big-loss rate). ① Strength = spec all day − role pool all day (all-spec pool when the tank pool has under 30 records), shrunk toward 0 with {k} pseudo-records; ② Timing = spec in this window − spec all day, shrunk with {kh} pseudo-records. Each delta is divided by its typical spread (strength {ss}, timing {ts}) and weighted {w} into z; score = 100 / (1 + e^−z), so z = ±1 gives 73 / 27.",
 
   "radar.timingTier.t0": "Much better than usual",
   "radar.timingTier.t1": "Better than usual",

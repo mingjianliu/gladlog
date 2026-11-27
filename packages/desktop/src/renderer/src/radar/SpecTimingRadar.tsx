@@ -103,6 +103,8 @@ const SORT_KEY: Record<RadarSortKey, MessageKey> = {
   matches: "radar.sort.matches",
 };
 
+type Tagged<T> = T & { key: string };
+
 function safeStorage(): Storage | undefined {
   try {
     return window.localStorage;
@@ -118,12 +120,14 @@ export function SpecTimingRadar() {
   const [hour, setHour] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<RadarSortKey>("timing");
   const [filter, setFilter] = useState<RadarFilter>(EMPTY_RADAR_FILTER);
-  const [result, setResult] = useState<SpecTimingResult | null>(null);
-  // The last good response stays on screen while a refetch is in flight or
-  // after a failed one (the error shows above it).
-  const [good, setGood] = useState<(SpecTimingResult & { ok: true }) | null>(
-    null,
-  );
+  // Every response is tagged with the selection it was fetched for and only
+  // shown under that selection: a refresh of the same selection keeps the
+  // last good table (error above it), but switching bracket / region / hour
+  // / source never leaves the old selection's scores on screen.
+  const [result, setResult] = useState<Tagged<SpecTimingResult> | null>(null);
+  const [good, setGood] = useState<Tagged<
+    SpecTimingResult & { ok: true }
+  > | null>(null);
   const [loading, setLoading] = useState(false);
   const [defaultBase, setDefaultBase] = useState<string>("");
   const [baseUrl, setBaseUrl] = useState<string>(
@@ -150,8 +154,11 @@ export function SpecTimingRadar() {
     }
   }, []);
 
+  const queryKey = `${region}|${ratingTier}|${hour ?? "live"}|${baseUrl}`;
+
   useEffect(() => {
     const seq = ++reqSeq.current;
+    const key = `${region}|${ratingTier}|${hour ?? "live"}|${baseUrl}`;
     setLoading(true);
     let p: Promise<SpecTimingResult>;
     try {
@@ -172,8 +179,8 @@ export function SpecTimingRadar() {
       }))
       .then((r) => {
         if (seq !== reqSeq.current) return;
-        setResult(r);
-        if (r.ok) setGood(r);
+        setResult({ ...r, key });
+        if (r.ok) setGood({ ...r, key });
         setLoading(false);
       });
   }, [region, ratingTier, hour, baseUrl, refreshTick]);
@@ -196,7 +203,8 @@ export function SpecTimingRadar() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [menuOpen]);
 
-  const data = good?.data ?? null;
+  const shownGood = good?.key === queryKey ? good : null;
+  const data = shownGood?.data ?? null;
   const allSpecs = useMemo(() => data?.specs ?? [], [data]);
 
   const { visible, hiddenEmptyCount } = useMemo(
@@ -364,7 +372,7 @@ export function SpecTimingRadar() {
     [classes, menuQuery],
   );
 
-  const error = result && !result.ok ? result : null;
+  const error = result && !result.ok && result.key === queryKey ? result : null;
   const activeFilter = hasActiveFilter(filter);
   const rosterLoaded = roster.length > 0 && sameSet(roster, filter.specs);
 
@@ -522,7 +530,11 @@ export function SpecTimingRadar() {
                       <div className="radar-empty">{t("radar.noMatch")}</div>
                     )}
                     {menuGroups.map((c) => {
-                      const names = c.specs.map((s) => s.spec_name);
+                      // the whole class, not only the specs the search shows
+                      const names = (
+                        classes.find((k) => k.className === c.className)
+                          ?.specs ?? c.specs
+                      ).map((s) => s.spec_name);
                       const allSel = names.every((n) =>
                         filter.specs.includes(n),
                       );
@@ -1091,6 +1103,13 @@ export function SpecTimingRadar() {
                               strengthTier(s.strength_tier_key),
                               s.no_data,
                             )}
+                            {!s.no_data && s.baseline_role !== s.role && (
+                              <div className="radar-cell-sub radar-warn">
+                                {t("radar.baselineFallback", {
+                                  pool: poolLabel(s.baseline_role),
+                                })}
+                              </div>
+                            )}
                           </td>
                           <td className="radar-detail">
                             {s.no_data ? (
@@ -1210,8 +1229,8 @@ export function SpecTimingRadar() {
           )}
           <p className="radar-note radar-dim">
             {t("radar.fetchedFrom", {
-              url: good?.url ?? "",
-              at: new Date(good?.fetchedAt ?? 0).toLocaleTimeString(),
+              url: shownGood?.url ?? "",
+              at: new Date(shownGood?.fetchedAt ?? 0).toLocaleTimeString(),
             })}
           </p>
         </>

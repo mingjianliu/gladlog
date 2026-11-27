@@ -1,3 +1,4 @@
+import { response, spec } from "../renderer/src/radar/radarFixtures";
 import {
   DEFAULT_RADAR_BASE_URL,
   specTimingShapeError,
@@ -5,18 +6,7 @@ import {
 } from "../shared/specRadar";
 import { fetchSpecTiming, specRadarConfig } from "./specRadar";
 
-const curve = Array.from({ length: 24 }, (_, hour) => ({ hour, score: 50 }));
-const OK_BODY = {
-  current_hour: 22,
-  specs: [
-    {
-      spec_name: "Discipline Priest",
-      timing_score: 81.1,
-      strength_score: 31.7,
-      hourly_curve: curve,
-    },
-  ],
-};
+const OK_BODY = response([spec("Discipline Priest", "Priest", "healer")]);
 
 function fakeFetch(
   status: number,
@@ -38,21 +28,34 @@ const config = { enabled: true, baseUrl: "http://radar.test:8080" };
 
 describe("specRadarConfig(隐藏开关)", () => {
   it("打包版 / E2E(无 ELECTRON_RENDERER_URL)默认不显示", () => {
-    expect(specRadarConfig({}).enabled).toBe(false);
+    expect(specRadarConfig({}, false).enabled).toBe(false);
   });
   it("electron-vite dev 下显示;GLADLOG_SPEC_RADAR=0 可关", () => {
     expect(
-      specRadarConfig({ ELECTRON_RENDERER_URL: "http://localhost:5173" })
+      specRadarConfig({ ELECTRON_RENDERER_URL: "http://localhost:5173" }, false)
         .enabled,
     ).toBe(true);
     expect(
-      specRadarConfig({
-        ELECTRON_RENDERER_URL: "http://localhost:5173",
-        GLADLOG_SPEC_RADAR: "0",
-      }).enabled,
+      specRadarConfig(
+        {
+          ELECTRON_RENDERER_URL: "http://localhost:5173",
+          GLADLOG_SPEC_RADAR: "0",
+        },
+        false,
+      ).enabled,
     ).toBe(false);
   });
+  it("漏进来的 ELECTRON_RENDERER_URL 在打包版或 E2E 里不打开", () => {
+    const env = { ELECTRON_RENDERER_URL: "http://localhost:5173" };
+    expect(specRadarConfig(env, true).enabled).toBe(false);
+    expect(specRadarConfig({ ...env, GLADLOG_E2E: "1" }, false).enabled).toBe(
+      false,
+    );
+  });
   it("GLADLOG_SPEC_RADAR=1 在任何构建里都显示", () => {
+    expect(specRadarConfig({ GLADLOG_SPEC_RADAR: "1" }, true).enabled).toBe(
+      true,
+    );
     expect(specRadarConfig({ GLADLOG_SPEC_RADAR: "1" }).enabled).toBe(true);
   });
   it("服务地址:环境变量优先,否则默认本机采集端", () => {
@@ -152,15 +155,47 @@ describe("fetchSpecTiming", () => {
 });
 
 describe("specTimingShapeError", () => {
-  it("接受合法形状,指出第一处问题", () => {
+  it("接受合法形状", () => {
     expect(specTimingShapeError(OK_BODY)).toBeNull();
+  });
+  it("指出第一处问题(含审查复现的 specs 为空、缺大盘的 200)", () => {
     expect(specTimingShapeError(null)).toMatch(/object/);
     expect(specTimingShapeError({ specs: [] })).toMatch(/current_hour/);
+    expect(specTimingShapeError({ specs: [], current_hour: 13 })).toMatch(
+      /pool_allday/,
+    );
+    const { method: _m, ...noMethod } = OK_BODY;
+    expect(specTimingShapeError(noMethod)).toMatch(/method/);
+    const badPool = {
+      ...OK_BODY,
+      pools_by_role: { dps: { matches: 1 } },
+    };
+    expect(specTimingShapeError(badPool)).toMatch(/pools_by_role\.dps/);
+    const s0 = OK_BODY.specs[0]!;
     expect(
       specTimingShapeError({
-        current_hour: 1,
-        specs: [{ ...OK_BODY.specs[0], hourly_curve: curve.slice(1) }],
+        ...OK_BODY,
+        specs: [{ ...s0, hourly_curve: s0.hourly_curve.slice(1) }],
       }),
     ).toMatch(/24 points/);
+    expect(
+      specTimingShapeError({
+        ...OK_BODY,
+        specs: [{ ...s0, window_win_rate: null }],
+      }),
+    ).toMatch(/window_win_rate/);
+    expect(
+      specTimingShapeError({
+        ...OK_BODY,
+        specs: [
+          {
+            ...s0,
+            hourly_curve: s0.hourly_curve.map((h, i) =>
+              i === 7 ? { ...h, score: undefined } : h,
+            ),
+          },
+        ],
+      }),
+    ).toMatch(/without score/);
   });
 });
