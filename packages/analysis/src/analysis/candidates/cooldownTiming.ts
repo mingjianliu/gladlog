@@ -83,6 +83,7 @@ import {
   getUnitPositionAtTime,
 } from "../../utils/losAnalysis";
 import { outgoingCcChainsWithDrHistory } from "../../utils/outgoingCcChains";
+import { logInstantOf } from "../../utils/logEra";
 import { offensiveCooldownIdAt } from "../../utils/overrideVariantEra";
 import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
@@ -660,11 +661,11 @@ export function syncWindowCdFor<T extends object>(
       // T65: an Avenging Wrath that ended at 29.4 s read 41.4 s and
       // "entered" a healer lock from 36.6 s).
       const cdId = String((cd as any).spellId);
+      // dated by the match's stated instant (its region with it, T268 codex
+      // 85-tk-L6-T268-1 #2), as the timeline itself dates them
+      const at = logInstantOf(combat, matchStartMs);
       const keyOf = (id: string) =>
-        canonicalSpellId(
-          offensiveCooldownIdAt(id, matchStartMs, owner?.spec) ?? id,
-          matchStartMs,
-        );
+        canonicalSpellId(offensiveCooldownIdAt(id, at, owner?.spec) ?? id, at);
       const presses = (
         reconstructEnemyCDTimeline([owner], combat).players[0]?.offensiveCDs ??
         []

@@ -63,6 +63,8 @@ export interface ILogClock {
   logClockOffsetMs?: number | null;
   /** parser-compat `logRegion`: the region the match was played in */
   logRegion?: string;
+  /** parser-compat `logLobbyStatedMs`: the instant its lobby opened */
+  logLobbyStatedMs?: number;
 }
 
 /** A log timestamp carried with the instant its own line states
@@ -76,6 +78,11 @@ export interface IStatedLogInstant {
    * its players' names state one — a patch that went live region by region
    * reads it (`REGIONAL_GOLIVE_BANDS`). */
   readonly region?: string;
+  /** The instant its lobby opened (parser-compat `logLobbyStatedMs`), with
+   * `region`: a later region's band is decided once per lobby, so a Solo
+   * Shuffle that crosses the band's end reads one side in every round
+   * (codex 85-tk-L6-T268-1 #1: b7304f67, round 3 at 10-14 23:59:10 UTC). */
+  readonly lobbyMs?: number;
 }
 /** What a dated rule is asked with: the instant the log states
  * (`logInstantOf` of a match that carries its clock offset) — or a bare
@@ -100,9 +107,11 @@ export function logInstantOf(
   if (typeof offset !== "number" || !Number.isFinite(parsedEpochMs))
     return parsedEpochMs;
   const region = clock?.logRegion;
-  return typeof region === "string"
-    ? { statedMs: parsedEpochMs + offset, region }
-    : { statedMs: parsedEpochMs + offset };
+  if (typeof region !== "string") return { statedMs: parsedEpochMs + offset };
+  const lobbyMs = clock?.logLobbyStatedMs;
+  return typeof lobbyMs === "number"
+    ? { statedMs: parsedEpochMs + offset, region, lobbyMs }
+    : { statedMs: parsedEpochMs + offset, region };
 }
 
 /** A value the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
@@ -180,12 +189,16 @@ export function logDatedAt<T>(dated: ILogDated<T>, at: LogInstant): T {
     if (!Number.isFinite(at.statedMs)) return uncertain;
     const fromCutover = at.statedMs - dated.cutoverEpochMs;
     if (fromCutover < 0) return dated.before;
-    // a region the change reached later (`REGIONAL_GOLIVE_BANDS`)
+    // a region the change reached later (`REGIONAL_GOLIVE_BANDS`), decided
+    // by the instant the lobby opened
     const regionBandUntil =
       at.region === undefined
         ? undefined
         : REGIONAL_GOLIVE_BANDS.get(dated.cutoverEpochMs)?.[at.region];
-    if (regionBandUntil !== undefined && at.statedMs < regionBandUntil)
+    if (
+      regionBandUntil !== undefined &&
+      (at.lobbyMs ?? at.statedMs) < regionBandUntil
+    )
       return band();
     if (fromCutover >= STATED_ZONE_UNCERTAINTY_MS) return dated.since;
     return band();

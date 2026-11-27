@@ -226,6 +226,11 @@ export interface GladMatch extends GladMatchBase {
 export interface GladShuffleRound extends GladMatchBase {
   kind: "shuffleRound";
   sequenceNumber: number;
+  /** The first round's `statedStartTime`: the instant the lobby opened, the
+   * same on every round of it (a dated rule decided once per lobby, analysis
+   * `utils/logEra.ts` — pipeline T268). Absent on documents stored before
+   * it. */
+  lobbyStatedStartTime?: number | null;
 }
 
 export interface GladShuffle {

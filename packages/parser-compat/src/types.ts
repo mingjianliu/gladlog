@@ -178,6 +178,8 @@ export interface ICombatUnit {
   logClockOffsetMs?: number | null;
   /** The match's `logRegion`, on each of its units. */
   logRegion?: string;
+  /** The match's `logLobbyStatedMs`, on each of its units. */
+  logLobbyStatedMs?: number;
   /** Converted units are always well-formed (the parser already filtered out
    * malformed ones) */
   isWellFormed: boolean;
@@ -305,6 +307,11 @@ export interface IArenaCombatBase {
    * field. A patch goes live region by region (12.1.5: NA 10-13, EU 10-14),
    * so a dated rule reads it (analysis `utils/logEra.ts`, `logInstantOf`). */
   logRegion?: string;
+  /** The instant the lobby opened, as its lines state it: a match's own
+   * opening, a Solo Shuffle round's first round's (parser
+   * `lobbyStatedStartTime`) — so a dated rule a region reached later is
+   * decided once per lobby. Absent when unknown. */
+  logLobbyStatedMs?: number;
   rawLines: string[];
   durationInSeconds: number;
   hasAdvancedLogging: boolean;

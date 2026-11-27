@@ -59,6 +59,28 @@ describe("12.1.5 分地区上线:欧服 10-14 整天走不确定带", () => {
     );
   });
 
+  it("按整局开局时刻判断:跨过带终点的单排六轮都读 before(codex 85-tk-L6-T268-1 #1)", () => {
+    const lobby = EU_BAND_END - 50_000;
+    const late = logInstantOf(
+      { logClockOffsetMs: 0, logRegion: "EU", logLobbyStatedMs: lobby },
+      EU_BAND_END + 120_000,
+    );
+    expect(late).toEqual({
+      statedMs: EU_BAND_END + 120_000,
+      region: "EU",
+      lobbyMs: lobby,
+    });
+    expect(logDatedAt(rule, late)).toBe("12.1.0");
+    // a lobby opened after the band's end reads since
+    expect(
+      logDatedAt(rule, {
+        statedMs: EU_BAND_END + 120_000,
+        region: "EU",
+        lobbyMs: EU_BAND_END,
+      }),
+    ).toBe("12.1.5");
+  });
+
   it("没有偏移的裸时间戳不带地区,规则照旧", () => {
     expect(logInstantOf({ logRegion: "EU" }, ACC115F2_START)).toBe(
       ACC115F2_START,

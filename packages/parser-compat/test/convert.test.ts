@@ -965,6 +965,40 @@ describe("logRegion — the region every player's name ends with", () => {
     for (const u of Object.values(legacy.units)) expect(u.logRegion).toBe("EU");
   });
 
+  it("a two-part name states no realm, so no region (codex 85-tk-L6-T268-1 #4)", () => {
+    expect("logRegion" in legacyOf("Atk-EU", "Def-Example")).toBe(false);
+  });
+
+  it("every round of a Solo Shuffle carries the instant its lobby opened; a match its own", () => {
+    const shuffles: GladShuffle[] = [];
+    const p = new GladLogParser({ timezone: "UTC" });
+    p.on("shuffle", (x: GladShuffle) => shuffles.push(x));
+    [
+      "ARENA_MATCH_START,1504,40,Rated Solo Shuffle,0",
+      CI("Player-1-A", 0, 257, 2400),
+      `UNIT_DIED,0000000000000000,nil,0x80000000,0x80000000,Player-1-A,"Alice-Kazzak-EU",0x511,0x80000000,0`,
+      "ARENA_MATCH_START,1504,40,Rated Solo Shuffle,0",
+      CI("Player-1-A", 1, 257, 2400),
+      "ARENA_MATCH_END,0,155,1729,1730",
+    ].forEach((x, i) =>
+      p.push(`10/14/2026 23:59:${String(50 + i * 2)}.000-4  ${x}`),
+    );
+    p.end();
+    const lobby = Date.UTC(2026, 9, 15, 3, 59, 50);
+    for (const round of shuffles[0]!.rounds) {
+      expect(round.lobbyStatedStartTime).toBe(lobby);
+      const legacy = toLegacyMatch(round as unknown as GladMatch);
+      expect(legacy.logLobbyStatedMs).toBe(lobby);
+      for (const u of Object.values(legacy.units))
+        expect(u.logLobbyStatedMs).toBe(lobby);
+    }
+    for (const round of toLegacyShuffle(shuffles[0]!).rounds)
+      expect(round.logLobbyStatedMs).toBe(lobby);
+    // a match's lobby is its own opening; a line with no offset states none
+    const m = legacyOf("Atk-Kazzak-EU", "Def-Draenor-EU");
+    expect("logLobbyStatedMs" in m).toBe(false);
+  });
+
   it("two regions, or a name with no region suffix: nothing", () => {
     expect("logRegion" in legacyOf("Atk-Kazzak-EU", "Def-Illidan-US")).toBe(
       false,

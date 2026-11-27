@@ -942,6 +942,20 @@ function logClockOffsetOf(
   return { logClockOffsetMs };
 }
 
+/** `logLobbyStatedMs` of a parsed document (types.ts): the instant its
+ * lobby opened, as its lines state it — a shuffle round's
+ * `lobbyStatedStartTime`, a match's own `statedStartTime` — written onto
+ * each of its converted units as well; nothing when unknown. */
+function logLobbyOf(
+  m: { statedStartTime?: number | null; lobbyStatedStartTime?: number | null },
+  units: Record<string, ICombatUnit>,
+): { logLobbyStatedMs?: number } {
+  const lobby = m.lobbyStatedStartTime ?? m.statedStartTime;
+  if (typeof lobby !== "number") return {};
+  for (const unit of Object.values(units)) unit.logLobbyStatedMs = lobby;
+  return { logLobbyStatedMs: lobby };
+}
+
 /** The game regions a player's logged name ends with (`Name-Realm-EU`). */
 const LOG_REGIONS = new Set(["US", "EU", "KR", "TW", "CN"]);
 
@@ -954,8 +968,12 @@ function logRegionOf(units: Record<string, ICombatUnit>): {
   const seen = new Set<string>();
   for (const [id, unit] of Object.entries(units)) {
     if (!id.startsWith("Player-")) continue;
-    const tail = unit.name.slice(unit.name.lastIndexOf("-") + 1);
-    if (unit.name.includes("-") && LOG_REGIONS.has(tail)) seen.add(tail);
+    // `Name-Realm-Region`: a name of two parts states no realm, so its tail
+    // is no region (codex 85-tk-L6-T268-1 #4: `Name-EU`)
+    const parts = unit.name.split("-");
+    const tail = parts[parts.length - 1]!;
+    if (parts.length >= 3 && parts.every(Boolean) && LOG_REGIONS.has(tail))
+      seen.add(tail);
   }
   if (seen.size !== 1) return {};
   const [logRegion] = seen as unknown as [string];
@@ -974,7 +992,11 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     units[id] = convertUnit(unit, m.units, absorbsByVictim);
   }
   mergePetEvents(units);
-  const clock = { ...logClockOffsetOf(m, units), ...logRegionOf(units) };
+  const clock = {
+    ...logClockOffsetOf(m, units),
+    ...logRegionOf(units),
+    ...logLobbyOf(m, units),
+  };
 
   const startInfo: IStartInfo = {
     bracket: m.bracket,
@@ -1017,6 +1039,7 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
     const clock = {
       ...logClockOffsetOf(round, units),
       ...logRegionOf(units),
+      ...logLobbyOf(round, units),
     };
 
     const startInfo: IStartInfo = {

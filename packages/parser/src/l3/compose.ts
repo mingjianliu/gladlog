@@ -249,9 +249,16 @@ export function buildShuffle(close: ShuffleClose): GladShuffle {
   // every round carries the shuffle's closing line's lobby MMR (the rounds
   // themselves have no ARENA_MATCH_END)
   const teamMmr = teamMmrOf(close.end);
-  const rounds = close.rounds.map((roundSeg, idx) => ({
-    ...buildShuffleRound(roundSeg, idx, ownerId),
+  const built = close.rounds.map((roundSeg, idx) =>
+    buildShuffleRound(roundSeg, idx, ownerId),
+  );
+  // and the instant the lobby opened (its first round's), for a dated rule
+  // decided once per lobby (pipeline T268)
+  const lobbyStatedStartTime = built[0]?.statedStartTime ?? null;
+  const rounds = built.map((round) => ({
+    ...round,
     teamMmr,
+    lobbyStatedStartTime,
   }));
 
   const startTime = rounds[0] ? rounds[0].startTime : 0;
