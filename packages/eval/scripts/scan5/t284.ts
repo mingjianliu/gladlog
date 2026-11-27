@@ -13,12 +13,14 @@
  *    before its next press of the same spell and within 15 s) all after
  *    the press. Checked = presses with an ending press before
  *    their last effect row. Kind = the spell.
- *  - `pressLastsTriggerWindow` (audit 04 D2): a `[PRESS]` line's `lasts`
- *    (`extractOffListPresses` → `durationSeconds` / `durationAura`) read
- *    from an aura the producer's own hand-off reading
- *    (`pressEffectHandoffRow`) hands off from — the line priced the window,
- *    not the effect that ran. Checked = lines with a `lasts` read off a
- *    row of the caster's. Kind = the spell.
+ *  - `pressLastsTriggerWindow` (audit 04 D2): a printed `[PRESS]` line's
+ *    `lasts N` (`matchPressLines`, the line and its press row) equal to the
+ *    talented length of a window the press laid (the caster's APPLIED of
+ *    its id or an effect aura within `PRESS_CHAIN_HANDOVER_MS`) that the
+ *    hand-off reading (`pressEffectHandoffRow`, on the raw rows) says
+ *    handed off — and not the successor's length: the line priced the
+ *    window, not the effect that ran. Checked = printed `lasts` lines of
+ *    presses with a handed-off window. Kind = the spell.
  *  - `burstSpanEndsWhileUp` (audit 01 D2): the owner's burst ledger
  *    (`analyzeBurstLedger`) gives a cooldown's span an end more than 1 s
  *    before the round's while the caster's own aura of that press
@@ -30,13 +32,12 @@
 import { CHANNELED_CD_SPELL_IDS } from "@gladlog/analysis/src/context/timelineHelpers";
 import { effectAurasOfCast } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
+import { PRESS_CHAIN_HANDOVER_MS } from "@gladlog/analysis/src/data/pressEffectChains";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { nextPressEndingChannelMs } from "@gladlog/analysis/src/utils/castCommitSpans";
-import {
-  extractOffListPresses,
-  pressEffectHandoffRow,
-} from "@gladlog/analysis/src/utils/offListPress";
+import { pressEffectHandoffRow } from "@gladlog/analysis/src/utils/offListPress";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import {
@@ -48,6 +49,7 @@ import {
   successesOf,
   tsOf,
 } from "./ctx";
+import { matchPressLines } from "./offListPress";
 
 export const CHECKS = [
   "channelEndedBeforeItsBolts",
@@ -56,6 +58,9 @@ export const CHECKS = [
 ] as const;
 
 const CHANNEL_READ_MS = 15_000;
+/** a printed `lasts` this close to a length is that length (the line
+ * rounds to whole or tenth seconds) */
+const LASTS_MATCH_S = 0.5;
 
 function effectName(r: any): string {
   return r.attackSpellId
@@ -117,63 +122,87 @@ function channels(ctx: IRoundCtx): void {
 }
 
 function presses(ctx: IRoundCtx): void {
-  let list: any[];
+  // the printed lines, not the producer's present reading (codex
+  // 85-tk-L5-T284-1k: regenerating the presses checked the corrected 10 s
+  // and passed a capture's `lasts 30s` off d1553082 r0's window)
+  let matched: ReturnType<typeof matchPressLines>["matched"];
   try {
-    list = extractOffListPresses(
-      ctx.players,
-      ctx.legacy,
-      roundEndMs(ctx.legacy),
-    );
+    matched = matchPressLines(ctx).matched;
   } catch {
     return;
   }
   const units = Object.values(ctx.legacy.units ?? {}) as any[];
-  for (const p of list) {
-    const da = p.durationAura;
-    if (p.durationSeconds === undefined || !da) continue;
-    const caster = p.unit;
-    const holder = units.find((d) => d.id === da.unitId);
-    if (!holder) continue;
-    const rows = ((holder.auraEvents ?? []) as any[]).filter(
-      (r) => r.srcUnitId === caster.id,
-    );
-    // every line with a lasts read off a row of the caster's; the
-    // producer's own hand-off reading (`pressEffectHandoffRow`, the window's
-    // copies on every unit) asked of that row: a row it hands off from is a
-    // window, not the effect (codex 85-tk-L5-T284-1b #6: a recurring shield
-    // is none; 1d #4: the window's early end may be on another copy, the
-    // printed holder's running its 30 s)
-    const row = rows.find(
-      (r) =>
-        r.spellId === da.spellId &&
-        tsOf(r) === da.atMs &&
-        (ev(r) === APPLIED || ev(r) === REFRESH),
-    );
-    if (!row) continue;
-    ctx.bump("pressLastsTriggerWindow");
+  const endMs = roundEndMs(ctx.legacy);
+  for (const { m, unit: caster, press } of matched) {
+    if (!caster || !press) continue;
+    const printed = /lasts ([\d.]+)s(\+)?/.exec(m[5] ?? "");
+    // a floor (`lasts 10s+`) prices no length
+    if (!printed || printed[2]) continue;
+    const lasts = Number(printed[1]);
+    const castId = String(press.spellId);
+    const at = tsOf(press);
     const nextPress = successesOf(caster).find(
-      (c: any) => String(c.spellId) === p.spellId && tsOf(c) > tsOf(row),
+      (c: any) => String(c.spellId) === castId && tsOf(c) > at,
     );
-    const handoff = pressEffectHandoffRow(
-      caster,
-      holder,
-      p.spellId,
-      row,
-      p.durationSeconds,
-      Math.min(
-        nextPress ? tsOf(nextPress) : Infinity,
-        roundEndMs(ctx.legacy) + 1,
-      ),
-      units,
-    );
-    if (!handoff) continue;
-    const name = getEnglishSpellName(p.spellId, "");
+    const untilMs = Math.min(nextPress ? tsOf(nextPress) : Infinity, endMs + 1);
+    // the press's windows: the caster's APPLIED of the press's id or an
+    // effect aura of it, on any unit, in the press's instant
+    const ids = new Set([castId, ...effectAurasOfCast(castId)]);
+    let found:
+      { window: any; windowS: number; next: any; nextS: number } | undefined;
+    for (const u of units) {
+      for (const r of (u.auraEvents ?? []) as any[]) {
+        if (
+          r.srcUnitId !== caster.id ||
+          ev(r) !== APPLIED ||
+          !ids.has(r.spellId) ||
+          Math.abs(tsOf(r) - at) > PRESS_CHAIN_HANDOVER_MS
+        )
+          continue;
+        const windowS = buffFullDurationForCaster(r.spellId, caster, tsOf(r), {
+          pressed: true,
+          onUnitId: u.id,
+        });
+        if (windowS === undefined) continue;
+        const handoff = pressEffectHandoffRow(
+          caster,
+          u,
+          castId,
+          r,
+          windowS,
+          untilMs,
+          units,
+        );
+        if (!handoff) continue;
+        const nextS = buffFullDurationForCaster(
+          handoff.row.spellId!,
+          caster,
+          tsOf(handoff.row),
+          { pressed: true, onUnitId: handoff.unit.id },
+        );
+        if (nextS === undefined) continue;
+        found = { window: r, windowS, next: handoff.row, nextS };
+        break;
+      }
+      if (found) break;
+    }
+    if (!found) continue;
+    ctx.bump("pressLastsTriggerWindow");
+    // the line priced the window, not the effect that took over
+    if (
+      Math.abs(lasts - found.windowS) > LASTS_MATCH_S ||
+      Math.abs(lasts - found.nextS) <= LASTS_MATCH_S
+    )
+      continue;
+    const name = getEnglishSpellName(castId, "");
+    const second = (at - ctx.start) / 1000;
     ctx.violate(
       "pressLastsTriggerWindow",
       name,
-      ctx.start + p.timeSeconds * 1000,
-      `${ctx.roundKey}|${caster.id}|${p.spellId}|${p.timeSeconds}`,
-      `${name} at ${p.timeSeconds.toFixed(2)}s prints lasts ${p.durationSeconds}s from ${da.spellId}, handed off at +${((tsOf(handoff.row) - da.atMs) / 1000).toFixed(2)}s to ${handoff.row.spellId} on ${handoff.unit.id === caster.id ? "the caster" : "another unit"}`,
+      at,
+      `${ctx.roundKey}|${caster.id}|${castId}|${at}`,
+      `${name} at ${second.toFixed(2)}s prints lasts ${lasts}s, the length of ${found.window.spellId}; it handed off at +${((tsOf(found.next) - tsOf(found.window)) / 1000).toFixed(2)}s to ${found.next.spellId} (${found.nextS}s)`,
+      m[0],
     );
   }
 }

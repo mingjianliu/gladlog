@@ -192,7 +192,7 @@ function auraOnlyPressRows(unit: any, name: string, ctx: IRoundCtx): any[] {
     );
 }
 
-interface IMatchedPress {
+export interface IMatchedPress {
   line: string;
   m: RegExpExecArray;
   second: number;
@@ -203,7 +203,7 @@ interface IMatchedPress {
 
 /** each `[PRESS]` line with its press row, and the presses whose own line
  * states `free press` */
-function matchPressLines(ctx: IRoundCtx): {
+export function matchPressLines(ctx: IRoundCtx): {
   matched: IMatchedPress[];
   freeRows: Set<any>;
 } {
