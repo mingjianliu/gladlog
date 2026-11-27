@@ -36,7 +36,7 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { auraSurelyUpPastMs } from "./auraSurelyUp";
+import { auraSurelyUpPastMs, auraSurelyUpUntilMs } from "./auraSurelyUp";
 import { buffDurationOfApplication } from "./buffDuration";
 import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
 import {
@@ -825,10 +825,17 @@ function observedEffectEnd(
       combat.startTime +
       Math.min(b.end, ownFull === undefined ? b.end : appliedS + ownFull) *
         1000;
-    const untilMs = Math.min(roundEndMs(combat), nextPressMs);
     const holder = combat.units?.[b.destId] as ICombatUnit | undefined;
-    return holder &&
-      untilMs > capMs &&
+    if (!holder) return undefined;
+    // …and never past its holder's death (codex 85-tk-L5-T308-1b #4)
+    const untilMs = auraSurelyUpUntilMs(
+      holder,
+      capMs,
+      Math.min(roundEndMs(combat), nextPressMs),
+    );
+    const otherAuraIds = new Set(ids);
+    otherAuraIds.delete(b.auraId);
+    return untilMs > capMs &&
       auraSurelyUpPastMs(
         caster,
         holder,
@@ -836,7 +843,7 @@ function observedEffectEnd(
         castSpellId,
         capMs,
         untilMs,
-        nextPressMs,
+        { nextPressMs, otherAuraIds },
       )
       ? (untilMs - combat.startTime) / 1000
       : undefined;
@@ -937,7 +944,13 @@ function observedEffectEnd(
       chainEnd = surelyUp;
       observed = true;
     }
-    if (best === null || chainEnd > best.end)
+    // on a tie the copy the log shows still up wins, whatever the units'
+    // order (codex 85-tk-L5-T308-1b #8)
+    if (
+      best === null ||
+      chainEnd > best.end ||
+      (chainEnd === best.end && surelyUp !== undefined && !best.surelyUp)
+    )
       best = {
         end: chainEnd,
         observed,

@@ -39,8 +39,17 @@ export function auraSurelyUpPastMs(
   castSpellId: string,
   capMs: number,
   untilMs: number,
-  nextPressMs: number = Infinity,
+  opts: {
+    /** the caster's next press of the spell (Infinity when none) */
+    nextPressMs?: number;
+    /** the press's OTHER effect auras — each has a life of its own, and a
+     * row of one of them says nothing of this one, whatever its name
+     * (codex 85-tk-L5-T308-1b #1: Feral Frenzy's bleed 274838 ticking
+     * past the caster's own 1 s 274837, both named "Feral Frenzy") */
+    otherAuraIds?: ReadonlySet<string>;
+  } = {},
 ): boolean {
+  const nextPressMs = opts.nextPressMs ?? Infinity;
   const fromMs = capMs + AURA_SURELY_UP_PAST_MS;
   if (!(untilMs > fromMs)) return false;
   // a re-broadcast REMOVED + APPLIED pair is one aura, not a lost end
@@ -84,10 +93,31 @@ export function auraSurelyUpPastMs(
       attackSpellName?: string;
     };
     if (attackSpellId)
-      return names.has(
-        getEnglishSpellName(attackSpellId, attackSpellName ?? ""),
+      return (
+        !opts.otherAuraIds?.has(attackSpellId) &&
+        names.has(getEnglishSpellName(attackSpellId, attackSpellName ?? ""))
       );
     if (r.logLine.event === LogEvent.SPELL_ABSORBED) return false;
+    if (r.spellId && opts.otherAuraIds?.has(r.spellId)) return false;
     return names.has(getEnglishSpellName(r.spellId, r.spellName ?? ""));
   });
+}
+
+/**
+ * T308: where a life shown still up runs to — `untilMs` (the round's end or
+ * the caster's next press), cut at its holder's first death after `afterMs`:
+ * an aura does not outlive the unit it sits on (codex 85-tk-L5-T308-1b #4:
+ * a Breath of Sindragosa ran on to the round's end past its caster's death).
+ */
+export function auraSurelyUpUntilMs(
+  holder: Partial<Pick<ICombatUnit, "deathRecords">>,
+  afterMs: number,
+  untilMs: number,
+): number {
+  let end = untilMs;
+  for (const d of holder.deathRecords ?? []) {
+    const t = d.timestamp;
+    if (t > afterMs && t < end) end = t;
+  }
+  return end;
 }

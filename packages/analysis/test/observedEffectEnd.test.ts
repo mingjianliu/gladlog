@@ -6,6 +6,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import {
   AURA_SURELY_UP_NEXT_PRESS_LEAD_MS,
   auraSurelyUpPastMs,
+  auraSurelyUpUntilMs,
 } from "../src/utils/auraSurelyUp";
 import {
   EFFECT_CHAIN_GAP_S,
@@ -607,7 +608,7 @@ describe("T308: what is and is not evidence (codex 85-tk-L5-T308-1)", () => {
         AVATAR,
         CAP,
         next,
-        next,
+        { nextPressMs: next },
       ),
     ).toBe(false);
     expect(
@@ -618,7 +619,7 @@ describe("T308: what is and is not evidence (codex 85-tk-L5-T308-1)", () => {
         AVATAR,
         CAP,
         next,
-        next,
+        { nextPressMs: next },
       ),
     ).toBe(true);
   });
@@ -695,5 +696,42 @@ describe("T308: a copy shown still up outranks a closed one (codex 85-tk-L5-T308
     expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
       60,
     );
+  });
+});
+
+describe("T308 round 2: the predicate's own limits (codex 85-tk-L5-T308-1b)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  it("#1: a row of the press's OTHER effect aura says nothing of this one", () => {
+    const c = {
+      id: "c1",
+      damageOut: [
+        {
+          srcUnitId: "c1",
+          destUnitId: "e1",
+          spellId: "274838",
+          spellName: "Feral Frenzy",
+          logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + 14_000 },
+        },
+      ],
+      healOut: [],
+      auraEvents: [],
+    } as never;
+    const read = (other?: ReadonlySet<string>) =>
+      auraSurelyUpPastMs(c, c, "274837", "274837", T0 + 11_000, T0 + 60_000, {
+        otherAuraIds: other,
+      });
+    expect(read()).toBe(true);
+    expect(read(new Set(["274838"]))).toBe(false);
+  });
+  it("#4: the run-on stops at the holder's first death after the cap", () => {
+    const holder = {
+      deathRecords: [{ timestamp: T0 + 5_000 }, { timestamp: T0 + 40_000 }],
+    } as never;
+    expect(auraSurelyUpUntilMs(holder, T0 + 30_000, T0 + 60_000)).toBe(
+      T0 + 40_000,
+    );
+    expect(auraSurelyUpUntilMs({}, T0 + 30_000, T0 + 60_000)).toBe(T0 + 60_000);
   });
 });

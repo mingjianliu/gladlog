@@ -89,12 +89,15 @@ export function run(ctx: IRoundCtx): void {
         (o) => o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
       )
       .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity);
+    // the REMOVED that closes THIS life: before the spell's next press — a
+    // later life's REMOVED leaves this one unclosed (codex 85-tk-L5-T308-1b
+    // #11)
     const gone = own.find(
       (r) =>
         r.spellId === app.spellId &&
         ev(r) === REMOVED &&
         tsOf(r) > tsOf(app) &&
-        tsOf(r) <= endMs,
+        tsOf(r) <= Math.min(endMs, ctx.start + renewed * 1000),
     );
     auraName.set(app.spellId, s.spellName);
     // a life the log closes, with no later press of the spell inside it
@@ -127,7 +130,7 @@ export function run(ctx: IRoundCtx): void {
             s.spellId,
             capMs,
             untilMs,
-            ctx.start + renewed * 1000,
+            { nextPressMs: ctx.start + renewed * 1000 },
           )
         ? "surely up"
         : "can't tell";

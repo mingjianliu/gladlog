@@ -14,11 +14,13 @@ import {
 } from "../data/auraActivation";
 import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.json";
 import {
+  castsOfEffectAura,
   castsOfTalentEffectAura,
   castsOwningEffectAura,
   effectAuraHitShare,
   effectAurasOfCast,
   effectAuraViaName,
+  effectSpanIdsOfCast,
   isCastOrEffect,
 } from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
@@ -105,7 +107,7 @@ import {
   AURA_MASTERY_ID,
   auraMasteryPressWallStartMs,
 } from "./auraMasteryBranch";
-import { auraSurelyUpPastMs } from "./auraSurelyUp";
+import { auraSurelyUpPastMs, auraSurelyUpUntilMs } from "./auraSurelyUp";
 import { binarySearchClosest } from "./binarySearch";
 import {
   buffDurationOfApplication,
@@ -9052,6 +9054,11 @@ function offensiveAuraRowsOf(unit: ICombatUnit): IOffensiveAuraRow[] {
   return rows;
 }
 
+/** T308: a cast row of the aura's button more than this after an
+ * application is the caster's NEXT press (the application's own press logs
+ * within `EFFECT_START_AFTER_S`, 2 s, of it) */
+const THREAT_NEXT_PRESS_AFTER_MS = 2000;
+
 export function hasOffensiveSpellActive(
   unit: ICombatUnit,
   timestampMs: number,
@@ -9077,8 +9084,28 @@ export function hasOffensiveSpellActive(
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
   const refreshed = new Map<string, number[]>();
+  /** T308: a REMOVED written with no source closes the caster's run, as
+   * the interval builder pairs it (codex 85-tk-L5-T308-1b #7) */
+  const sourcelessRemoved = new Map<string, number[]>();
+  const cdOfRun = new Map<string, string>();
+  const allRows = offensiveAuraRowsOf(unit);
+  // …and a re-broadcast REMOVED + APPLIED pair is one aura, as the builder
+  // and the timeline read it (#7)
+  const continuous = new Set(dropAuraRebroadcasts(allRows.map((r) => r.aura)));
 
-  for (const { aura, spellId, cdId, casterSpec } of offensiveAuraRowsOf(unit)) {
+  for (const { aura, spellId, cdId, casterSpec } of allRows) {
+    if (!continuous.has(aura)) continue;
+    const noSource = !aura.srcUnitId || aura.srcUnitId === "0000000000000000";
+    if (
+      noSource &&
+      (aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL)
+    ) {
+      const b = sourcelessRemoved.get(spellId) ?? [];
+      sourcelessRemoved.set(spellId, [...b, aura.timestamp]);
+      continue;
+    }
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
     // fact2 (2026-10-20): asked of ANY source, the unit's own offensive
@@ -9100,6 +9127,7 @@ export function hasOffensiveSpellActive(
     // Thermia's, up to 3:01.0, and Touch of Karma's press lost its
     // `[friendly offensive CD active]` — fact2Scan offensiveTag)
     const runKey = `${spellId}|${aura.srcUnitId ?? ""}`;
+    cdOfRun.set(runKey, cdId);
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = applied.get(runKey) ?? [];
       applied.set(runKey, [...b, aura.timestamp]);
@@ -9117,8 +9145,11 @@ export function hasOffensiveSpellActive(
   }
 
   for (const [runKey, applications] of Array.from(applied)) {
-    const removals = removed.get(runKey) ?? [];
     const [spellId, srcId] = runKey.split("|") as [string, string];
+    const removals = [
+      ...(removed.get(runKey) ?? []),
+      ...(sourcelessRemoved.get(spellId) ?? []),
+    ].sort((a, b) => a - b);
     const refreshes = refreshed.get(runKey) ?? [];
     for (const applyTs of applications) {
       if (applyTs > timestampMs) continue;
@@ -9144,11 +9175,15 @@ export function hasOffensiveSpellActive(
         applyTs,
         ...refreshes.filter((r) => r >= applyTs && r <= timestampMs),
       );
-      const fullS = buffFullDurationForCaster(
-        spellId,
-        srcId === unit.id ? unit : undefined,
-        applyTs,
-      );
+      // the caster this reader can see: the unit itself, or the combat's
+      // unit of that id — its talents price the aura (codex
+      // 85-tk-L5-T308-1b #9: Circle of Life and Death's 4.8 s bleed read 6)
+      const caster =
+        srcId === unit.id
+          ? unit
+          : ((combat as { units?: Record<string, ICombatUnit> } | undefined)
+              ?.units?.[srcId] as ICombatUnit | undefined);
+      const fullS = buffFullDurationForCaster(spellId, caster, applyTs);
       if (fullS === undefined || timestampMs <= anchor + (fullS + 1) * 1000)
         return true;
       // T308 (user 2026-11-27): …unless the log shows it still up past that
@@ -9158,32 +9193,50 @@ export function hasOffensiveSpellActive(
       // ticking 4 s past its 8 s, no REMOVED, read off by the threat gate
       // while the timeline ran it on). The round's end only on the combat
       // itself (its units); a caster this reader does not hold, no reading.
-      const caster =
-        srcId === unit.id
-          ? unit
-          : ((combat as { units?: Record<string, ICombatUnit> } | undefined)
-              ?.units?.[srcId] as ICombatUnit | undefined);
       if (
         fullS !== undefined &&
         caster !== undefined &&
         combat !== undefined &&
         (combat as { units?: unknown }).units !== undefined
       ) {
-        const untilMs = Math.min(roundEndMs(combat as never), nextApply);
+        // the caster's next press of it: its next application, or its next
+        // cast row of a button that puts the aura up, whichever the log
+        // shows first (codex 85-tk-L5-T308-1b #2)
+        const cdId = cdOfRun.get(runKey) ?? spellId;
+        const granting = new Set([
+          spellId,
+          cdId,
+          ...castsOfEffectAura(spellId),
+          ...castsOfTalentEffectAura(spellId),
+        ]);
+        const name = getEnglishSpellName(cdId, "");
+        const nextCastMs = (caster.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              c.logLine.timestamp > applyTs + THREAT_NEXT_PRESS_AFTER_MS &&
+              !!c.spellId &&
+              (granting.has(c.spellId) ||
+                (name !== "" &&
+                  getEnglishSpellName(c.spellId, c.spellName ?? "") === name)),
+          )
+          .reduce((m, c) => Math.min(m, c.logLine.timestamp), Infinity);
+        const nextPressMs = Math.min(nextApply, nextCastMs);
+        const capMs = applyTs + fullS * 1000;
+        // never past the holder's death (#4)
+        const untilMs = auraSurelyUpUntilMs(
+          unit,
+          capMs,
+          Math.min(roundEndMs(combat as never), nextPressMs),
+        );
+        const otherAuraIds = new Set(effectSpanIdsOfCast(cdId));
+        otherAuraIds.delete(spellId);
         if (
           timestampMs <= untilMs &&
-          auraSurelyUpPastMs(
-            caster,
-            unit,
-            spellId,
-            offensiveCdOfAura(
-              spellId,
-              srcId === unit.id ? unit.spec : undefined,
-            ) ?? spellId,
-            applyTs + fullS * 1000,
-            untilMs,
-            nextApply,
-          )
+          auraSurelyUpPastMs(caster, unit, spellId, cdId, capMs, untilMs, {
+            nextPressMs,
+            otherAuraIds,
+          })
         )
           return true;
       }
@@ -9303,14 +9356,18 @@ export function detectPanicDefensives(
 ): IPanicDefensive[] {
   // …with its units when the caller has them: the occurrence reader runs
   // an aura shown still up to the ROUND's end (a Solo Shuffle round's ending
-  // death) only on the combat itself (T308; codex 85-tk-L5-T308-1 #3 / #6)
+  // death, which `roundEndMs` reads off its units and bracket) only on the
+  // combat itself (T308; codex 85-tk-L5-T308-1 #3 / #6, 1b #5)
   const round =
     typeof combat.endTime === "number"
       ? {
           startTime: combat.startTime,
           endTime: combat.endTime,
           ...((combat as { units?: unknown }).units !== undefined
-            ? { units: (combat as { units?: unknown }).units }
+            ? {
+                units: (combat as { units?: unknown }).units,
+                startInfo: (combat as { startInfo?: unknown }).startInfo,
+              }
             : {}),
         }
       : undefined;

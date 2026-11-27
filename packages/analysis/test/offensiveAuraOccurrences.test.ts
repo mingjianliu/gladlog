@@ -652,3 +652,62 @@ describe("T308: the threat reader runs on what the timeline runs on (codex 85-tk
     ).toBe(false);
   });
 });
+
+describe("T308 round 2 (codex 85-tk-L5-T308-1b)", () => {
+  const doom = (casts: any[] = [], extraAuras: any[] = []) =>
+    enh(casts, [
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh"),
+      aura(LogEvent.SPELL_AURA_REFRESH, "466772", 25, "sh"),
+      ...extraAuras,
+    ]);
+  const endOf = (u: any) =>
+    (auraOffensiveOccurrences(u, {
+      startTime: START,
+      endTime: s(60),
+      units: { sh: u },
+    } as any).occurrences.find((o) => o.spellId === "384352")?.endMs ?? 0) -
+    START;
+  it("#3: another button that grants the aura (Ascendance) is its next press", () => {
+    expect(endOf(doom([cast("114051", 40, "sh")]))).toBe(40_000);
+  });
+  it("#4: never past its holder's death", () => {
+    const u = doom();
+    (u as any).deathRecords = [{ timestamp: s(45) }];
+    expect(endOf(u)).toBe(45_000);
+  });
+  it("#10: rows added since are read again", () => {
+    const u = enh([], [aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh")]);
+    expect(endOf(u)).toBe(18_000);
+    (u as any).damageOut = [
+      {
+        srcUnitId: "sh",
+        destUnitId: "e1",
+        spellId: "466772",
+        spellName: "Doom Winds",
+        logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(22) },
+      },
+    ];
+    expect(endOf(u)).toBe(60_000);
+  });
+  it("#2: a hit just before the next press is that press's, for the threat reader too", () => {
+    const u = makeUnit("dk", {
+      name: "Frost",
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [cast("152279", 10, "dk"), cast("152279", 50, "dk")],
+      auraEvents: [aura(LogEvent.SPELL_AURA_APPLIED, "1249658", 10, "dk")],
+      damageOut: [
+        {
+          srcUnitId: "dk",
+          destUnitId: "e1",
+          spellId: "1249658",
+          spellName: "Breath of Sindragosa",
+          logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(49.8) },
+        },
+      ],
+    } as any);
+    const combat = { startTime: START, endTime: s(60), units: { dk: u } };
+    expect(hasOffensiveSpellActive(u, s(40), null, undefined, combat)).toBe(
+      false,
+    );
+  });
+});

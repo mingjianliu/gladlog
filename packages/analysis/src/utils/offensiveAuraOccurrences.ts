@@ -1,8 +1,10 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
+  castsOfEffectAura,
   castsOfTalentEffectAura,
   effectAurasOfCast,
+  effectSpanIdsOfCast,
 } from "../data/castEffectAuras";
 import {
   effectiveCooldownSeconds,
@@ -10,7 +12,7 @@ import {
 } from "../data/spellEffectData";
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
-import { auraSurelyUpPastMs } from "./auraSurelyUp";
+import { auraSurelyUpPastMs, auraSurelyUpUntilMs } from "./auraSurelyUp";
 import {
   buffDurationOfApplication,
   buffFullDurationForCaster,
@@ -423,7 +425,9 @@ export function auraOffensiveOccurrences(
     (bounds as { units?: unknown }).units !== undefined
       ? roundEndMs(bounds)
       : undefined;
-  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${OFFENSIVE_AURA_FLAGS.demonic}`;
+  // …and the rows the evidence is read from: a unit whose damage / heal
+  // rows grew since is read again (codex 85-tk-L5-T308-1b #10)
+  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${unit.damageOut?.length ?? 0}:${unit.healOut?.length ?? 0}:${OFFENSIVE_AURA_FLAGS.demonic}`;
   let byKey = cache.get(unit);
   if (!byKey) {
     byKey = new Map();
@@ -530,12 +534,19 @@ export function auraOffensiveOccurrences(
         .reduce((m, o) => Math.min(m, o.fromS), Infinity);
       const auraName = getEnglishSpellName(iv.spellId, iv.spellName);
       const pressId = genericCdOfAura(iv.spellId, unit.spec);
+      // every button that puts this aura up (Ascendance → Doom Winds, codex
+      // 85-tk-L5-T308-1b #3), its own press and its same-named casts
+      const granting = new Set([
+        iv.spellId,
+        ...(pressId !== undefined ? [pressId] : []),
+        ...castsOfEffectAura(iv.spellId),
+        ...castsOfTalentEffectAura(iv.spellId),
+      ]);
       const nextCastMs = successes
         .filter(
           (c) =>
             c.logLine.timestamp > startMs + EFFECT_PRESS_LEAD_MS &&
-            (c.spellId === iv.spellId ||
-              c.spellId === pressId ||
+            (granting.has(c.spellId!) ||
               getEnglishSpellName(c.spellId!, c.spellName ?? "") === auraName),
         )
         .reduce((m, c) => Math.min(m, c.logLine.timestamp), Infinity);
@@ -543,8 +554,17 @@ export function auraOffensiveOccurrences(
         bounds.startTime + nextFromS * 1000,
         nextCastMs,
       );
-      const untilMs = Math.min(roundEnd, nextPressMs);
       const capMs = Math.min(endMs, auraOfficialEndMs ?? endMs);
+      // never past its holder's death (#4)
+      const untilMs = auraSurelyUpUntilMs(
+        unit,
+        capMs,
+        Math.min(roundEnd, nextPressMs),
+      );
+      const otherAuraIds = new Set(
+        pressId !== undefined ? effectSpanIdsOfCast(pressId) : [],
+      );
+      otherAuraIds.delete(iv.spellId);
       if (
         auraSurelyUpPastMs(
           unit,
@@ -553,7 +573,7 @@ export function auraOffensiveOccurrences(
           pressId ?? iv.spellId,
           capMs,
           untilMs,
-          nextPressMs,
+          { nextPressMs, otherAuraIds },
         )
       )
         endMs = untilMs;

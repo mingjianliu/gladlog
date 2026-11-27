@@ -1713,7 +1713,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   );
   // GH #119: the round the aura-evidenced bursts are read over (the same
   // bounds reconstructEnemyCDTimeline uses)
-  const roundBounds = { startTime: matchStartMs, endTime: matchEndMs };
+  // …with the round's players and bracket: an aura the log shows still up
+  // runs to the round's end only on bounds that know it (T308; codex
+  // 85-tk-L5-T308-1b #6: the `[friendly offensive CD active]` tag read the
+  // cap the timeline had run past)
+  const roundBounds = {
+    startTime: matchStartMs,
+    endTime: matchEndMs,
+    units: Object.fromEntries(allPlayers.map((u) => [u.id, u])),
+    startInfo: { bracket },
+  };
 
   let nextPlaceholderId = 0;
   function requestSnapshotPlaceholder(
