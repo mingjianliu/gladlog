@@ -9015,3 +9015,42 @@ Blades). scan5 in-total violations 28,366 ->
 -> 63; only inventory rows rose (pressLastsCutShort, offListPressLine
 lastsOvershoot: lines that now print `lasts` are checked); gates identical.
 Re-picked onto v679 (20f1f2c16) with every changed line identical.
+
+v682 (pipeline batch B264, Mac bundle M3: T284 (b, c) T287 T270 T292, on dev
+87e3bc72c). Per ticket (605 | 1215; changed lines, both signs; all full-check
+figures below were measured at 3bf27b642, before T284's two review fixes):
+T284 (b) — a [PRESS] whose window an effect took over reads its length from the
+effect that took over (pressEffectHandoffRow; the successor aura's duration):
+Tricks of the Trade 'lasts 30s' -> 'lasts 10s'; Tricks
+lines 932 | 1,548; scan5 pressLastsTriggerWindow 159 -> 0 | 258 -> 0,
+offListPressLine lastsOvershoot 6,411 -> 5,972 | 8,166 -> 7,470. (c) — a
+channel its bolts measure (Ultimate Penitence) ends at its bolts when the
+caster's own REMOVED of the aura is logged early: channel lines 8 | 32;
+channelEndedBeforeItsBolts 4 -> 0 | 11 -> 0. Its (a), a burst aura with no
+logged REMOVED, is split off as T308 / T309.
+T287 — our side's aura-only activations (Spirit of Redemption, Barkskin, ...)
+stop at the round's end: [PROC] / [TEAM] [PROC] / [YOU] [PROC] -48 | -39;
+ownNoPressLineAfterRoundEnd (every such row after the round's end) 30 -> 0 |
+36 -> 0.
+T270 — Brewmaster Celestial Brew / Purifying Brew / Black Ox Brew read the Keg
+Smash, Tiger Palm, Face Palm, Blackout Combo and Meditative Focus reductions
+and Black Ox Brew's refill (DB2 tooltips): 0 | 198 press lines plus 6 roster
+lines (Fortifying Brew 360s -> 277–360s; 605 holds no Brewmaster); backBeforeNextSplit Celestial Brew 54 -> 0, Black Ox Brew 3 -> 0,
+offListPressLine backBeforeNextPress 150 -> 93 on 1215 (so backBeforeNextSplit
+checks 150 -> 93 rows there).
+T292 — Call of the Elder Druid's +1 charge (aura 411) keeps a second Frenzied
+Regeneration press inside 2 s as its own press: Frenzied Regeneration lines
+289 | 185, with their [STATE] / [RES] / [CD PRIOR] context.
+Full check (Mac, dev 87e3bc72c -> 3bf27b642; 605 | 1215, contexts 3,519 |
+2,955): changed contexts 289 | 430; scan5 in-total violations on 605
+28,569 -> 28,376; rose 1 | 0, pressChainLasts / nominated (inventory) 2,601 ->
+2,604 on 605, one more Tricks of the Trade press nominated by T284's hand-off
+(three views of it; distinct facts 999 -> 1,000); gates identical
+on both. T284's review fixes then restored two presses that 3bf27b642 had
+regressed: Shadow Rift 1 s -> 2 s (the only change in three 1215 contexts, so
+the old 1215 diff reconciles to 427 changed contexts; not a new measurement)
+and Roll the Bones 30 s -> 60 s (three views the old lastsOvershoot count had
+read against a 1.4 s marker). Final bundle on the cover set (wsl2, 87e3bc72c ->
+ce9d4c928, 1,140 contexts): in-total 11,533 -> 11,402, rose 0, gates identical;
+its last T284 commit was cover-checked in the lane (87e3bc72c -> ef784ed16:
+11,516 -> 11,402, rose 0).

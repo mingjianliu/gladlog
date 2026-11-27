@@ -2033,5 +2033,13 @@
  *  outside them can lose a [CD PRIOR] line, and the shipped reference table
  *  keeps the pooled cohort until it is regenerated). See
  *  docs/prompt-version-history.md.
+ *
+ * v682 (2026-11-27; pipeline batch B264, Mac bundle M3: T284 (b, c) T287
+ *  T270 T292): a trigger window's press reads its length from the effect
+ *  that took it over (Tricks of the Trade); a bolt-measured channel ends at its bolts
+ *  (Ultimate Penitence); our side's aura-only lines stop at the round's end;
+ *  Brewmaster brews read their Keg Smash / Tiger Palm / Black Ox Brew
+ *  reductions; a charge-cap buff keeps a second Frenzied Regeneration
+ *  press. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 680;
+export const PROMPT_VERSION = 682;
