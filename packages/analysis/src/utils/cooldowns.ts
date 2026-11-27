@@ -6998,7 +6998,16 @@ function buildCooldownEntry(
     rankOf,
     roundEndAtMs,
   )
-    .filter((g) => g.seconds === Number.POSITIVE_INFINITY && !g.oneCharge)
+    // one charge back on a one-charge pool is the whole pool back: a reset
+    // (pipeline T270b, codex 85-tk-L6-T270-1 #2: Celestial Brew 10.0 s,
+    // Black Ox Brew 10.8 s, Celestial Brew 11.5 s without Endless Draught —
+    // the second press was folded into the first). On a pool of more, the
+    // window's own charge count admits the press.
+    .filter(
+      (g) =>
+        g.seconds === Number.POSITIVE_INFINITY &&
+        (!g.oneCharge || baselineCharges <= 1),
+    )
     .map((g) => (g.atMs - matchStartMs) / 1000);
   const resetBetween = (from: number, to: number) =>
     resetAtSeconds.some((r) => r >= from && r <= to);
