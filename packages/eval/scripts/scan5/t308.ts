@@ -40,13 +40,13 @@ export const CHECKS = ["burstAuraPastSpan"] as const;
 const KINDS = ["surely up", "lost: re-applied", "can't tell"] as const;
 
 /** aura id → closed lives (s); spell name → official span (s) seen */
-const lives = new Map<string, number[]>();
-const auraName = new Map<string, string>();
+let lives = new Map<string, number[]>();
+let auraName = new Map<string, string>();
 /** the `can't tell` facts: aura id, the round's end after the APPLIED (s) */
-const undecided: Array<{ aura: string; spell: string; toEndS: number }> = [];
-const seen = new Set<string>();
+let undecided: Array<{ aura: string; spell: string; toEndS: number }> = [];
+let seen = new Set<string>();
 /** spell → evidence → distinct facts */
-const perSpell = new Map<string, Map<string, number>>();
+let perSpell = new Map<string, Map<string, number>>();
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -170,3 +170,8 @@ export function report(): string[] {
   }
   return out;
 }
+
+export const state = () => ({ lives, auraName, undecided, seen, perSpell });
+export const load = (st: ReturnType<typeof state>): void => {
+  ({ lives, auraName, undecided, seen, perSpell } = st);
+};

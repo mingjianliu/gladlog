@@ -1017,6 +1017,13 @@ function observedEffectEnd(
   // to the caster's next press of the spell (41243fd2-shaped: Breath of
   // Sindragosa's damage rows 2 s past its 8 s with no REMOVED). Without that
   // evidence the official end stands: ~4.5 % of REMOVED rows are lost.
+  // To the round's end, not to the last evidence row (coordinator (A),
+  // 2026-11-27): the four surely-up presses of 605 + 1215 ran from their
+  // last row to the printed end 0 / 0.7 / 0.9 / 0 s (Doom Winds 33.21 → the
+  // kill 33.2, Breath of Sindragosa 223.29 → 224.0 and 39.36 → 40.3,
+  // Recklessness 139.975 → its next press). Reopen when a corpus shows the
+  // evidence stopping well before the end — a later REMOVED lost there
+  // would print past what the log proves.
   if (best !== null && !best.observed) {
     // …past THIS press's official end: the builder's cap runs from the
     // chain's last REFRESH, and that REFRESH is itself the evidence (1215
