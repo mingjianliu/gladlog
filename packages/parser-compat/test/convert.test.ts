@@ -942,3 +942,36 @@ describe("logClockOffsetMs — stated instant minus parsed timestamp", () => {
       expect("logClockOffsetMs" in u).toBe(false);
   });
 });
+
+// T268: 12.1.5 went live region by region; the conversion hands the match's
+// region (its players' name suffix) to the match and each unit.
+describe("logRegion — the region every player's name ends with", () => {
+  const A = "Player-1-0000000A";
+  const B = "Player-1-0000000B";
+  const legacyOf = (an: string, bn: string) =>
+    toLegacyMatch(
+      parseLines([
+        `ARENA_MATCH_START,1505,41,3v3,0`,
+        CI(A, 0, 71, 2100),
+        CI(B, 1, 62, 2050),
+        DMG(A, an, B, bn),
+        `ARENA_MATCH_END,0,90,2110,2040`,
+      ]).matches[0]!,
+    );
+
+  it("every player names EU: the match and its units carry EU", () => {
+    const legacy = legacyOf("Atk-Kazzak-EU", "Def-Draenor-EU");
+    expect(legacy.logRegion).toBe("EU");
+    for (const u of Object.values(legacy.units)) expect(u.logRegion).toBe("EU");
+  });
+
+  it("two regions, or a name with no region suffix: nothing", () => {
+    expect("logRegion" in legacyOf("Atk-Kazzak-EU", "Def-Illidan-US")).toBe(
+      false,
+    );
+    const bare = legacyOf("Atk-X", "Def-Y");
+    expect("logRegion" in bare).toBe(false);
+    for (const u of Object.values(bare.units))
+      expect("logRegion" in u).toBe(false);
+  });
+});

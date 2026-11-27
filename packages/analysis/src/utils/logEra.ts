@@ -61,6 +61,8 @@ export function logIsFrom(at: LogInstant, cutoverEpochMs: number): boolean {
  * units (parser-compat `logClockOffsetMs`). */
 export interface ILogClock {
   logClockOffsetMs?: number | null;
+  /** parser-compat `logRegion`: the region the match was played in */
+  logRegion?: string;
 }
 
 /** A log timestamp carried with the instant its own line states
@@ -70,6 +72,10 @@ export interface ILogClock {
  * (`STATED_ZONE_UNCERTAINTY_MS`). */
 export interface IStatedLogInstant {
   readonly statedMs: number;
+  /** The region the match was played in (parser-compat `logRegion`), when
+   * its players' names state one — a patch that went live region by region
+   * reads it (`REGIONAL_GOLIVE_BANDS`). */
+  readonly region?: string;
 }
 /** What a dated rule is asked with: the instant the log states
  * (`logInstantOf` of a match that carries its clock offset) — or a bare
@@ -89,10 +95,14 @@ export function logInstantOf(
   holder: ILogClock | object | null | undefined,
   parsedEpochMs: number,
 ): LogInstant {
-  const offset = (holder as ILogClock | null | undefined)?.logClockOffsetMs;
-  return typeof offset === "number" && Number.isFinite(parsedEpochMs)
-    ? { statedMs: parsedEpochMs + offset }
-    : parsedEpochMs;
+  const clock = holder as ILogClock | null | undefined;
+  const offset = clock?.logClockOffsetMs;
+  if (typeof offset !== "number" || !Number.isFinite(parsedEpochMs))
+    return parsedEpochMs;
+  const region = clock?.logRegion;
+  return typeof region === "string"
+    ? { statedMs: parsedEpochMs + offset, region }
+    : { statedMs: parsedEpochMs + offset };
 }
 
 /** A value the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
@@ -139,7 +149,9 @@ export type ILogDatedNumber = ILogDated<number>;
  * 85-tk-I-T90-1: an Adelaide line 15 min before the cutover stated 15 min
  * after it, and Doom Winds' aura stopped standing for a press). A stated
  * instant before the cutover is before it; the 14 h band below does not
- * apply.
+ * apply. A stated instant of a region the change reached later reads the
+ * band side too, up to that region's own instant (`REGIONAL_GOLIVE_BANDS`;
+ * 12.1.5 on EU realms, pipeline T268).
  *
  * A bare timestamp that is not a number is not a date and takes
  * `uncertainTakes` (by default the CURRENT value, `since`: the dated value
@@ -168,6 +180,13 @@ export function logDatedAt<T>(dated: ILogDated<T>, at: LogInstant): T {
     if (!Number.isFinite(at.statedMs)) return uncertain;
     const fromCutover = at.statedMs - dated.cutoverEpochMs;
     if (fromCutover < 0) return dated.before;
+    // a region the change reached later (`REGIONAL_GOLIVE_BANDS`)
+    const regionBandUntil =
+      at.region === undefined
+        ? undefined
+        : REGIONAL_GOLIVE_BANDS.get(dated.cutoverEpochMs)?.[at.region];
+    if (regionBandUntil !== undefined && at.statedMs < regionBandUntil)
+      return band();
     if (fromCutover >= STATED_ZONE_UNCERTAINTY_MS) return dated.since;
     return band();
   }
@@ -226,3 +245,38 @@ export const STATED_ZONE_UNCERTAINTY_MS = 45 * 60 * 1000;
  * that cannot decide). Every default-`since` reader of this cutover names
  * it, so two halves of the patch cannot disagree about one log. */
 export const PATCH_1215_ZONE_BAND_TAKES = "before" as const;
+
+/**
+ * 12.1.5 go-live: NA maintenance 2026-10-13 (≈ 15:00–23:00 UTC), EU 10-14
+ * (cooldown mastery round, eval-private research/builds.md: no file before
+ * 10-13 23:17 UTC carries a 12.1.5-only spell id; 20 after). The instant is
+ * NA's; EU's is `PATCH_1215_REGION_BANDS`.
+ */
+export const PATCH_1215_GOLIVE_EPOCH_MS = Date.UTC(2026, 9, 13, 15, 0, 0);
+
+/**
+ * Where 12.1.5 went live later than `PATCH_1215_GOLIVE_EPOCH_MS`: region →
+ * the instant up to which a log of that region, stated after the NA
+ * go-live, reads the go-live's band side (`zoneBandTakes`, else
+ * `uncertainTakes` — `PATCH_1215_ZONE_BAND_TAKES`, before, for every reader
+ * of this cutover). EU realms went live on 10-14 (Blizzard); the corpus
+ * pins it no closer than after 10-13 23:30 UTC (pipeline T268: an EU Solo
+ * Shuffle file of that instant, acc115f2, still reads 12.1.0 — its Holy
+ * Priest, whom the 12.1.5 talent map calls an Ultimate Serenity holder,
+ * presses Holy Word: Sanctify 11 times, which that talent replaces;
+ * research/holyword.md §1) and before 10-14 23:54 (the next EU file). User
+ * ruling 2026-11-27: the whole of EU's 10-14 is the band, to 10-15 00:00
+ * UTC — no instant inside it is pinned.
+ */
+export const PATCH_1215_REGION_BANDS: Readonly<Record<string, number>> = {
+  EU: Date.UTC(2026, 9, 15, 0, 0, 0),
+};
+
+/** Dated changes that went live region by region: cutover → its
+ * `PATCH_1215_REGION_BANDS`-shaped table. Keyed by the cutover instant so
+ * every rule of one change reads the same band — no reader can leave it
+ * out. A bare parsed epoch carries no region and does not read it. */
+const REGIONAL_GOLIVE_BANDS: ReadonlyMap<
+  number,
+  Readonly<Record<string, number>>
+> = new Map([[PATCH_1215_GOLIVE_EPOCH_MS, PATCH_1215_REGION_BANDS]]);

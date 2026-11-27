@@ -176,6 +176,8 @@ export interface ICombatUnit {
   /** The match's `logClockOffsetMs`, on each of its units — a reader that
    * dates a rule from a unit's rows alone has no match in hand. */
   logClockOffsetMs?: number | null;
+  /** The match's `logRegion`, on each of its units. */
+  logRegion?: string;
   /** Converted units are always well-formed (the parser already filtered out
    * malformed ones) */
   isWellFormed: boolean;
@@ -297,6 +299,12 @@ export interface IArenaCombatBase {
    * it. null = the log states no offset; absent = a document stored before
    * the parser kept it. Read through analysis `utils/logEra.ts` only. */
   logClockOffsetMs?: number | null;
+  /** The game region the match was played in — the suffix every player's
+   * logged name carries (`Name-Realm-EU`); absent when no player names one
+   * (or two name different ones), and on a document stored before the
+   * field. A patch goes live region by region (12.1.5: NA 10-13, EU 10-14),
+   * so a dated rule reads it (analysis `utils/logEra.ts`, `logInstantOf`). */
+  logRegion?: string;
   rawLines: string[];
   durationInSeconds: number;
   hasAdvancedLogging: boolean;

@@ -942,6 +942,27 @@ function logClockOffsetOf(
   return { logClockOffsetMs };
 }
 
+/** The game regions a player's logged name ends with (`Name-Realm-EU`). */
+const LOG_REGIONS = new Set(["US", "EU", "KR", "TW", "CN"]);
+
+/** `logRegion` of a converted match (types.ts): the region every player's
+ * name ends with, written onto each of its units as well; nothing when no
+ * player names one or two players name different ones. */
+function logRegionOf(units: Record<string, ICombatUnit>): {
+  logRegion?: string;
+} {
+  const seen = new Set<string>();
+  for (const [id, unit] of Object.entries(units)) {
+    if (!id.startsWith("Player-")) continue;
+    const tail = unit.name.slice(unit.name.lastIndexOf("-") + 1);
+    if (unit.name.includes("-") && LOG_REGIONS.has(tail)) seen.add(tail);
+  }
+  if (seen.size !== 1) return {};
+  const [logRegion] = seen as unknown as [string];
+  for (const unit of Object.values(units)) unit.logRegion = logRegion;
+  return { logRegion };
+}
+
 export function toLegacyMatch(m: GladMatch): IArenaMatch {
   const units: Record<string, ICombatUnit> = {};
   const absorbsByVictim = buildAbsorbsByVictim(m.units);
@@ -953,7 +974,7 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     units[id] = convertUnit(unit, m.units, absorbsByVictim);
   }
   mergePetEvents(units);
-  const clock = logClockOffsetOf(m, units);
+  const clock = { ...logClockOffsetOf(m, units), ...logRegionOf(units) };
 
   const startInfo: IStartInfo = {
     bracket: m.bracket,
@@ -993,7 +1014,10 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       units[id] = convertUnit(unit, round.units, absorbsByVictim);
     }
     mergePetEvents(units);
-    const clock = logClockOffsetOf(round, units);
+    const clock = {
+      ...logClockOffsetOf(round, units),
+      ...logRegionOf(units),
+    };
 
     const startInfo: IStartInfo = {
       bracket: round.bracket,

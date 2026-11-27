@@ -305,6 +305,7 @@
     "test/t106FeignDeathInHand.test.ts",
     "test/t114WallPressRow.test.ts",
     "test/t12WindowBoundaries.test.ts",
+    "test/t268RegionalGolive.test.ts",
     "test/t98WallCopyPress.test.ts",
     "test/t99PressedDuringSubSpell.test.ts",
     "test/talentGrantedButtons.test.ts",

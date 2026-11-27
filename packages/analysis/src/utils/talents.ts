@@ -3,16 +3,14 @@ import {
   logDatedNumberAt,
   type LogInstant,
   logInstantOf,
+  PATCH_1215_GOLIVE_EPOCH_MS,
   PATCH_1215_ZONE_BAND_TAKES,
 } from "./logEra";
 import { memoizeWhenReady } from "./memoize";
 
-/**
- * 12.1.5 go-live: NA maintenance 2026-10-13 (≈ 15:00–23:00 UTC), EU 10-14
- * (cooldown mastery round, eval-private research/builds.md: no file before
- * 10-13 23:17 UTC carries a 12.1.5-only spell id; 20 after).
- */
-export const PATCH_1215_GOLIVE_EPOCH_MS = Date.UTC(2026, 9, 13, 15, 0, 0);
+/** The 12.1.5 go-live (utils/logEra.ts, with its regional bands), here
+ * too for the readers that import it from the talent map. */
+export { PATCH_1215_GOLIVE_EPOCH_MS };
 /**
  * Talent definitions whose spell traded places at 12.1.5 (TraitDefinition
  * SpellID 12.1.0.69587 → 12.1.5.70391): on a 12.1.0 log the (node, entry)
