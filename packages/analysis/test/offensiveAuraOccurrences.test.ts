@@ -9,7 +9,7 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 
 import { effectiveCooldownSeconds } from "../src/data/spellEffectData";
-import { nextAuraPressMs } from "../src/utils/auraSurelyUp";
+import { auraSurelyUpPastMs, nextAuraPressMs } from "../src/utils/auraSurelyUp";
 import { hasOffensiveSpellActive } from "../src/utils/cooldowns";
 import {
   isEnemyCdWindowSpell,
@@ -855,5 +855,116 @@ describe("T308 round 3 (codex 85-tk-L5-T308-1c)", () => {
     expect(occEnd(u)).toBe(40_000);
     (u as any).deathRecords = [{ timestamp: s(29) }];
     expect(occEnd(u)).toBe(29_000);
+  });
+});
+
+describe("T308 round 4 (codex 85-tk-L5-T308-1d)", () => {
+  const hit = (src: string, id: string, name: string, sec: number) => ({
+    srcUnitId: src,
+    destUnitId: "e1",
+    spellId: id,
+    spellName: name,
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(sec) },
+  });
+  const round = (u: any, endSec = 60) => ({
+    startTime: START,
+    endTime: s(endSec),
+    units: { [u.id]: u },
+  });
+  const occEnd = (u: any) =>
+    (auraOffensiveOccurrences(u, round(u) as any).occurrences.find(
+      (o) => o.spellId === "384352",
+    )?.endMs ?? 0) - START;
+  const doomEnd = (casts: any[]) => {
+    const u = enh(casts, [
+      {
+        ...aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh"),
+        srcUnitName: "Enh",
+      },
+    ]);
+    (u as any).damageOut = [hit("sh", "466772", "Doom Winds", 22)];
+    const tl = reconstructEnemyCDTimeline([u], round(u) as any);
+    return tl.players[0]?.offensiveCDs.find((c) => c.spellId === "384352")
+      ?.buffEndSeconds;
+  };
+  it("1c #1 (codex's fixture): a logged press's life ends at Ascendance, the next button that grants it", () => {
+    expect(doomEnd([cast("384352", 10, "sh"), cast("114051", 40, "sh")])).toBe(
+      40,
+    );
+  });
+  it("#1: Doom Winds' pulse (same name, no cooldown of its own) is no next press", () => {
+    expect(
+      doomEnd([
+        cast("384352", 10, "sh"),
+        cast("469270", 13, "sh"),
+        cast("114051", 40, "sh"),
+      ]),
+    ).toBe(40);
+    expect(
+      nextAuraPressMs(
+        enh([cast("469270", 13, "sh")], []),
+        "466772",
+        "384352",
+        s(10),
+      ),
+    ).toBe(Infinity);
+  });
+  it("#3: an APPLIED re-sent inside a REFRESHed life, with no press near, vetoes nothing", () => {
+    const u = makeUnit("dk", {
+      name: "Frost",
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [cast("152279", 10, "dk")],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "1249658", 10, "dk"),
+        aura(LogEvent.SPELL_AURA_REFRESH, "1249658", 17, "dk"),
+        aura(LogEvent.SPELL_AURA_APPLIED, "1249658", 20, "dk"),
+      ],
+      damageOut: [hit("dk", "1249658", "Breath of Sindragosa", 29)],
+    } as any);
+    expect(auraSurelyUpPastMs(u, u, "1249658", "152279", s(18), s(60))).toBe(
+      true,
+    );
+  });
+  it("#4: an aura-only life with no REMOVED ends at its holder's death, refreshed or not", () => {
+    const u = enh(
+      [],
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh"),
+        aura(LogEvent.SPELL_AURA_REFRESH, "466772", 15, "sh"),
+      ],
+    );
+    (u as any).deathRecords = [{ timestamp: s(16) }];
+    expect(occEnd(u)).toBe(16_000);
+    expect(hasOffensiveSpellActive(u, s(21), null, undefined, round(u))).toBe(
+      false,
+    );
+  });
+  it("#5: a run first seen as a REFRESH is the oldest open one a source-less REMOVED closes", () => {
+    const t = makeUnit("t", {
+      name: "Target",
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_REFRESH, "210824", s(10), "mA", "t"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "210824", s(11), "mB", "t"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "210824",
+          s(13),
+          "0000000000000000",
+          "t",
+        ),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "210824", s(20), "mB", "t"),
+      ],
+    } as any);
+    expect(hasOffensiveSpellActive(t, s(15), new Set(["mA", "mB"]))).toBe(true);
+  });
+  it("#6: an aura row added since is read again", () => {
+    const u = enh([], [aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh")]);
+    (u as any).damageOut = [hit("sh", "466772", "Doom Winds", 22)];
+    expect(occEnd(u)).toBe(60_000);
+    (u as any).auraEvents = [
+      ...u.auraEvents,
+      aura(LogEvent.SPELL_AURA_REMOVED, "466772", 24, "sh"),
+    ];
+    expect(occEnd(u)).toBe(24_000);
   });
 });

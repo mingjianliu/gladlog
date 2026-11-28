@@ -9167,7 +9167,11 @@ export function hasOffensiveSpellActive(
       applied.set(runKey, [...(applied.get(runKey) ?? []), aura.timestamp]);
     } else if (ev === LogEvent.SPELL_AURA_REFRESH) {
       const run = open.get(runKey);
+      // a REFRESH with no open run opens one, as the builder's does (an
+      // aura already up before its first row): a source-less REMOVED then
+      // closes it first (codex 85-tk-L5-T308-1d #5)
       if (run) run.lastSeenMs = aura.timestamp;
+      else open.set(runKey, { lastSeenMs: aura.timestamp });
       refreshed.set(runKey, [...(refreshed.get(runKey) ?? []), aura.timestamp]);
     } else if (isClose(ev)) {
       open.delete(runKey);

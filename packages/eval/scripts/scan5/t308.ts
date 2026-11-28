@@ -67,9 +67,15 @@ export function run(ctx: IRoundCtx): void {
   // re-broadcast pairs dropped, as the interval builder and the predicate
   // read them (codex 85-tk-L5-T308-1 #7: a REMOVED / APPLIED pair mid-life
   // read as a closed life)
+  // …and a REMOVED written with no source of an aura on the owner: it
+  // closes the life as the builder pairs it (codex 85-tk-L5-T308-1d #7)
   const own = dropAuraRebroadcasts(
     ((owner.auraEvents ?? []) as any[]).filter(
-      (r) => r.srcUnitId === owner.id && r.destUnitId === owner.id,
+      (r) =>
+        r.destUnitId === owner.id &&
+        (r.srcUnitId === owner.id ||
+          ((!r.srcUnitId || r.srcUnitId === "0000000000000000") &&
+            ev(r) === REMOVED)),
     ),
   );
   const all = ledger.flatMap((x) => x.spells);
@@ -103,12 +109,27 @@ export function run(ctx: IRoundCtx): void {
     // the REMOVED that closes THIS life: before the spell's next press — a
     // later life's REMOVED leaves this one unclosed (codex 85-tk-L5-T308-1b
     // #11)
+    // …and before the aura's next APPLIED: a REMOVED past it is that later
+    // life's (codex 85-tk-L5-T308-1d #2, d79985d0 r6: Malevolence applied
+    // at 25.7 and 48.6 s, removed at 61.7 s — read as a 36 s closed life)
+    const nextApplied = own.find(
+      (r) =>
+        r.spellId === app.spellId &&
+        ev(r) === APPLIED &&
+        r.srcUnitId === owner.id &&
+        tsOf(r) > tsOf(app),
+    );
     const gone = own.find(
       (r) =>
         r.spellId === app.spellId &&
         ev(r) === REMOVED &&
         tsOf(r) > tsOf(app) &&
-        tsOf(r) <= Math.min(endMs, ctx.start + renewed * 1000),
+        tsOf(r) <=
+          Math.min(
+            endMs,
+            ctx.start + renewed * 1000,
+            nextApplied ? tsOf(nextApplied) : Infinity,
+          ),
     );
     auraName.set(app.spellId, s.spellName);
     // a life the log closes, with no later press of the spell inside it

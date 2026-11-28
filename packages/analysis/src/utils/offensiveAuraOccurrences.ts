@@ -434,9 +434,9 @@ export function auraOffensiveOccurrences(
       ? roundEndMs(bounds)
       : undefined;
   // …and the rows the evidence is read from: a unit whose damage / heal
-  // rows, casts (its next press) or deaths grew since is read again (codex
-  // 85-tk-L5-T308-1b #10, 1c #8)
-  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${unit.damageOut?.length ?? 0}:${unit.healOut?.length ?? 0}:${unit.spellCastEvents?.length ?? 0}:${unit.deathRecords?.length ?? 0}:${OFFENSIVE_AURA_FLAGS.demonic}`;
+  // rows, casts (its next press), deaths or aura rows grew since is read
+  // again (codex 85-tk-L5-T308-1b #10, 1c #8, 1d #6)
+  const key = `${bounds.startTime}:${bounds.endTime}:${roundEnd ?? "-"}:${unit.damageOut?.length ?? 0}:${unit.healOut?.length ?? 0}:${unit.spellCastEvents?.length ?? 0}:${unit.deathRecords?.length ?? 0}:${unit.auraEvents?.length ?? 0}:${OFFENSIVE_AURA_FLAGS.demonic}`;
   let byKey = cache.get(unit);
   if (!byKey) {
     byKey = new Map();
@@ -576,6 +576,12 @@ export function auraOffensiveOccurrences(
       )
         endMs = untilMs;
     }
+    // a life the log never closes ends at its holder's death, whatever its
+    // cap — as the timeline and the threat reader end it (codex
+    // 85-tk-L5-T308-1d #4: a REFRESHed Doom Winds ran 7 s past its
+    // holder's death). On the combat itself only, as above.
+    if (roundEnd !== undefined && iv.inferredEnd)
+      endMs = Math.max(startMs, auraSurelyUpUntilMs(unit, startMs, endMs));
     const formName = OFFENSIVE_FORM_FACT_AURAS.get(iv.spellId);
     if (formName !== undefined) {
       if (iv.inferredStart) continue;

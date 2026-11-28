@@ -5,9 +5,13 @@ import {
   castsOfEffectAura,
   castsOfTalentEffectAura,
   effectSpanIdsOfCast,
+  sourcePressedAuraNear,
 } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { officialDurationS } from "./auraIntervals";
 import { dropAuraRebroadcasts } from "./auraRebroadcast";
+import { COPY_CAST_IDS } from "./castPress";
+import { isVariantPress } from "./cooldowns";
 
 /** T308: how far past an aura's official end its life must show before
  * the log counts as saying it was still up (a row in the cap's own second
@@ -69,9 +73,16 @@ export function nextAuraPressMs(
       t >= next
     )
       continue;
+    // a same-named id is a press only when it is one of its own — a
+    // cooldown of its own and no copy (`isVariantPress`, `COPY_CAST_IDS`,
+    // the ledger's press reading): Doom Winds' pulse 469270 is not (codex
+    // 85-tk-L5-T308-1d #1, 42059a52 r1: the pulse at 11.0 s read as the
+    // press after 9.0 s)
     if (
       granting.has(c.spellId) ||
-      names.has(getEnglishSpellName(c.spellId, c.spellName ?? ""))
+      (names.has(getEnglishSpellName(c.spellId, c.spellName ?? "")) &&
+        isVariantPress(c.spellId) &&
+        !COPY_CAST_IDS.has(c.spellId))
     )
       next = t;
   }
@@ -110,7 +121,8 @@ export function otherEffectAurasOf(
  * `burstAuraPastSpan`.
  */
 export function auraSurelyUpPastMs(
-  caster: Pick<ICombatUnit, "id" | "damageOut" | "healOut">,
+  caster: Pick<ICombatUnit, "id" | "damageOut" | "healOut"> &
+    Partial<Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">>,
   holder: Pick<ICombatUnit, "id" | "auraEvents">,
   auraId: string,
   castSpellId: string,
@@ -131,15 +143,45 @@ export function auraSurelyUpPastMs(
   if (!(untilMs > fromMs)) return false;
   // a re-broadcast REMOVED + APPLIED pair is one aura, not a lost end
   // (`dropAuraRebroadcasts`, as the interval builder reads it)
-  const rows = dropAuraRebroadcasts(
+  const own = dropAuraRebroadcasts(
     (holder.auraEvents ?? []).filter(
       (a) => a.spellId === auraId && a.srcUnitId === caster.id,
     ),
-  ).filter(
+  );
+  const rows = own.filter(
     (a) => a.logLine.timestamp > capMs && a.logLine.timestamp <= untilMs,
   );
-  // a lost end: applied again with nothing closing the life before it
-  if (rows.some((a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED))
+  // a lost end: applied again with nothing closing the life before it —
+  // unless it is the aura re-sent, as the interval builder reads one: no
+  // press of it near, inside the official length of its last row (codex
+  // 85-tk-L5-T308-1d #3: a re-sent APPLIED inside a REFRESHed life vetoed
+  // the hits after it)
+  const resent = (a: (typeof own)[number]): boolean => {
+    const last = own
+      .filter((o) => o.logLine.timestamp < a.logLine.timestamp)
+      .pop();
+    if (!last || last.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+      return false;
+    const d = officialDurationS(
+      auraId,
+      caster as never,
+      last.logLine.timestamp,
+    );
+    return (
+      d !== null &&
+      a.logLine.timestamp <= last.logLine.timestamp + d * 1000 &&
+      !sourcePressedAuraNear(
+        caster.spellCastEvents ?? [],
+        auraId,
+        a.logLine.timestamp,
+      )
+    );
+  };
+  if (
+    rows.some(
+      (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED && !resent(a),
+    )
+  )
     return false;
   if (
     rows.some(
