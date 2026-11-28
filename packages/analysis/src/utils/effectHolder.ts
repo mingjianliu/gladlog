@@ -5,7 +5,9 @@ import { CombatUnitType, type ICombatUnit } from "@gladlog/parser-compat";
  * pet's, a guardian's or a totem's copy is not. One reading, three readers:
  * - `observedEffectEndSeconds` (FT F13: The Hunt's DoT left its player
  *   target at 83.9 s and sat on a Jade Serpent Statue until 85.1 s, and a
- *   kick at 84.7 s read `ourBurst=The Hunt`);
+ *   kick at 84.7 s read `ourBurst=The Hunt`) — save a press that reached no
+ *   player but its caster, which runs on the non-player copy (T323, user
+ *   ruling 2026-11-28: The Hunt into a Water Elemental read a 0-s span);
  * - `pressEffectCutShort`'s one-holder count (user ruling R67, 2026-11-18:
  *   a pet or guardian copy does not count as a holder);
  * - `casterAuraOutlives`, the death / round-end cut (pipeline T158: batch

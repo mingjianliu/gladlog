@@ -29,6 +29,7 @@ import {
 } from "./castCommitSpans";
 import { missBelongsToCast } from "./castMissRows";
 import {
+  anyForcedStopMs,
   CANCEL_CC_NEAR_S,
   forcedStopInstantsMs,
   STOPPED_JUST_BEFORE_S,
@@ -474,12 +475,10 @@ export function analyzeKickAudit(
     const forcedInside = () => {
       const forced = forcedOf(enemy);
       const fromS = last.t;
-      return [...forced.cc, ...forced.displaced, ...forced.gripped].some(
-        (ms) => {
-          const t = (ms - matchStartMs) / 1000;
-          return t >= fromS && t <= kickS;
-        },
-      );
+      return anyForcedStopMs(forced).some((ms) => {
+        const t = (ms - matchStartMs) / 1000;
+        return t >= fromS && t <= kickS;
+      });
     };
     // fact10 D22 / D5: a bar with no end row was over once the unit did
     // something a cast bar cannot outlive — a press of a button, on the
@@ -622,7 +621,7 @@ export function analyzeKickAudit(
     // juke became a plain miss). Same width as before (ruling A′17's
     // CANCEL_CC_NEAR_S), one side; + 1 ms for a line across a ms boundary.
     const forcedNear = (ms: number) =>
-      [...forced.cc, ...forced.displaced, ...forced.gripped].some(
+      anyForcedStopMs(forced).some(
         (t) => t <= ms + 1 && ms - t <= CANCEL_CC_NEAR_S * 1000,
       );
     return channelSpans(enemy)

@@ -6,7 +6,10 @@
  *  - a landed enemy knockback or pull of the cast-stop evidence family
  *    (`forcedStopInstantsMs().displaced`: Thunderstorm, Typhoon, Gorefiend's
  *    Grasp — the instants `[CAST STOPPED]` reads for "as an enemy knockback
- *    or pull landed on you").
+ *    or pull landed on you");
+ *  - a teammate's Leap of Faith on it (`forcedStopInstantsMs().allyPulled`,
+ *    T323 — the instants `[CAST STOPPED]` reads for "as a teammate's Leap
+ *    of Faith pulled you", the user's wording of 2026-11-28).
  *
  * One reading for the three places that state it: the `[GRIP]` line, the
  * STAYED IN line's "you moved N yd" (FT leftovers 2026-10-11, the I13 fact
@@ -55,7 +58,7 @@ export function deathGripsOn(
   return out;
 }
 
-export type ForcedMoveKind = "grip" | "displacement";
+export type ForcedMoveKind = "grip" | "displacement" | "allyPull";
 export interface ForcedMove {
   atSeconds: number;
   kind: ForcedMoveKind;
@@ -69,12 +72,14 @@ export interface ForcedMove {
  * knockback logs its aura and its damage a few ms apart).
  */
 export function forcedMovesInRenderedSpan(
-  unit: Pick<ICombatUnit, "id" | "missesIn" | "auraEvents" | "damageIn">,
+  unit: Pick<ICombatUnit, "id" | "missesIn" | "auraEvents" | "damageIn"> &
+    Partial<Pick<ICombatUnit, "actionIn">>,
   opponents: readonly ICombatUnit[],
   matchStartMs: number,
   fromRenderS: number,
   toRenderS: number,
 ): ForcedMove[] {
+  const forced = forcedStopInstantsMs(unit);
   const all: ForcedMove[] = [
     ...deathGripsOn(unit, opponents)
       .filter((g) => g.missType === undefined)
@@ -82,9 +87,13 @@ export function forcedMovesInRenderedSpan(
         atSeconds: (g.castMs - matchStartMs) / 1000,
         kind: "grip" as const,
       })),
-    ...forcedStopInstantsMs(unit).displaced.map((ms) => ({
+    ...forced.displaced.map((ms) => ({
       atSeconds: (ms - matchStartMs) / 1000,
       kind: "displacement" as const,
+    })),
+    ...forced.allyPulled.map((ms) => ({
+      atSeconds: (ms - matchStartMs) / 1000,
+      kind: "allyPull" as const,
     })),
   ];
   const seen = new Set<string>();
@@ -104,6 +113,7 @@ export function forcedMovesInRenderedSpan(
 export const FORCED_MOVE_TEXT: Record<ForcedMoveKind, string> = {
   grip: "Death Grip pulled you",
   displacement: "an enemy knockback or pull landed on you",
+  allyPull: "a teammate's Leap of Faith pulled you",
 };
 
 /** `Death Grip pulled you at 0:15, an enemy knockback or pull landed on you

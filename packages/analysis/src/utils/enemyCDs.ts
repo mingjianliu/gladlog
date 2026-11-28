@@ -1,5 +1,6 @@
 import {
   AtomicArenaCombat,
+  CombatUnitReaction,
   CombatUnitType,
   ICombatUnit,
   IMissEvent,
@@ -654,14 +655,153 @@ export function observedEffectCopy(
     combat,
     undefined,
     out,
+    // the timeline's own reading, pet copies included (T323)
+    true,
   );
   return end ?? out.openHolder ?? null;
+}
+
+/** Non-player units' aura intervals (pets, guardians, totems), the
+ * counterpart of `auraIndexOf` for T323's second reading. */
+const OTHER_AURA_INDEX = new WeakMap<
+  AtomicArenaCombat,
+  Array<{ destId: string; reaction: unknown; iv: IAuraInterval }>
+>();
+function nonPlayerAuraIndexOf(combat: AtomicArenaCombat) {
+  let idx = OTHER_AURA_INDEX.get(combat);
+  if (!idx) {
+    idx = [];
+    for (const u of Object.values(combat.units ?? {})) {
+      if (isEffectHolderUnit(u) || !u.auraEvents?.length) continue;
+      for (const iv of buildAuraIntervals(u, combat))
+        idx.push({ destId: u.id, reaction: u.reaction, iv });
+    }
+    OTHER_AURA_INDEX.set(combat, idx);
+  }
+  return idx;
+}
+
+/**
+ * The observed end of a press's effect (`observedEffectEndOn`), read on
+ * players (FT F13: a copy on a pet, a totem or a guardian is not the
+ * effect's span) — save a press whose effect reached no player but its
+ * caster. T323 (user ruling 2026-11-28, 「没有玩家持有时读宠物」): The Hunt
+ * into a Water Elemental (0a118f43 r1 5:29) read its caster's 0.37 s charge,
+ * 5:29–5:29, while the DoT ran on the pet to 5:35. With no other player
+ * holding a copy of the caster's effect auras at the press (applied, or
+ * still running and refreshed by it), the same chain reading runs again on
+ * the caster's own copies and those of non-player units of the OTHER side
+ * (hostile to the caster, not neutral), sourced by the caster's GUID, and
+ * its end stands when it lies on such a unit; a copy there still open
+ * (refreshed, never removed) is no observed end. A copy on the caster's own
+ * pet is never read (Bestial Wrath's, 1 s past the hunter's). The
+ * offensive-cooldown timeline only (`readPressTargets`): every burst-span
+ * reader reads its `buffEndSeconds`; a defensive's answer
+ * (`observedEffectEndSeconds`, burstWindowDecisionPoints) is its own copy.
+ */
+function observedEffectEnd(
+  caster: ICombatUnit,
+  castSpellId: string,
+  castS: number,
+  nextSameCastS: number,
+  combat: AtomicArenaCombat,
+  onlyDestId?: string,
+  out?: Parameters<typeof observedEffectEndOn>[7],
+  /** the offensive-cooldown timeline only (codex 85-tk-L6-T323-2 #1): a
+   * defensive's answer is its own copy (Touch of Karma's shield on the monk,
+   * not its redirect on an enemy pet) */
+  readPressTargets = false,
+): ReturnType<typeof observedEffectEndOn> {
+  const players = auraIndexOf(combat);
+  const first: NonNullable<typeof out> = {};
+  const onPlayers = observedEffectEndOn(
+    players,
+    caster,
+    castSpellId,
+    castS,
+    nextSameCastS,
+    combat,
+    onlyDestId,
+    first,
+  );
+  const keep = (
+    r: ReturnType<typeof observedEffectEndOn>,
+    o: NonNullable<typeof out>,
+  ) => {
+    if (out) {
+      if (o.windowEndS === undefined) delete out.windowEndS;
+      else out.windowEndS = o.windowEndS;
+      if (o.openHolder === undefined) delete out.openHolder;
+      else out.openHolder = o.openHolder;
+    }
+    return r;
+  };
+  if (!readPressTargets || onlyDestId !== undefined)
+    return keep(onPlayers, first);
+  // another player's copy, closed or open, keeps the players' reading —
+  // whether or not the caller asked for `out` (codex -2 #4)
+  if (onPlayers !== null && onPlayers.holderId !== caster.id)
+    return keep(onPlayers, first);
+  if (first.openHolder && first.openHolder.holderId !== caster.id)
+    return keep(onPlayers, first);
+  const ids = effectSpanIdsOfCast(castSpellId);
+  const fromS = castS - EFFECT_START_BEFORE_S;
+  const toS = castS + EFFECT_START_AFTER_S;
+  const byCaster = (iv: IAuraInterval) =>
+    ids.has(iv.spellId) &&
+    iv.srcUnitName === caster.name &&
+    (iv.srcUnitId === undefined || iv.srcUnitId === caster.id);
+  const anotherPlayerHeldOne = players.some(
+    ({ destId, iv }) =>
+      destId !== caster.id &&
+      byCaster(iv) &&
+      iv.fromS <= toS &&
+      iv.toS >= fromS &&
+      iv.fromS < nextSameCastS,
+  );
+  if (anotherPlayerHeldOne) return keep(onPlayers, first);
+  const opposite =
+    caster.reaction === CombatUnitReaction.Friendly
+      ? CombatUnitReaction.Hostile
+      : caster.reaction === CombatUnitReaction.Hostile
+        ? CombatUnitReaction.Friendly
+        : undefined;
+  if (opposite === undefined) return keep(onPlayers, first);
+  const onTargets = nonPlayerAuraIndexOf(combat).filter(
+    ({ reaction, iv }) => reaction === opposite && byCaster(iv),
+  );
+  // which copy belongs to the press is the chain reading's question (an
+  // effect laid along a flight starts past the start window, codex -2 #3);
+  // here only whether one could
+  if (!onTargets.some(({ iv }) => iv.toS >= fromS && iv.fromS < nextSameCastS))
+    return keep(onPlayers, first);
+  const second: NonNullable<typeof out> = {};
+  const read = observedEffectEndOn(
+    [...players.filter(({ destId }) => destId === caster.id), ...onTargets],
+    caster,
+    castSpellId,
+    castS,
+    nextSameCastS,
+    combat,
+    undefined,
+    second,
+  );
+  if (read !== null)
+    return read.holderId === caster.id
+      ? keep(onPlayers, first)
+      : keep(read, second);
+  // the pet's copy ran on with no end the log shows (a refresh, no removal):
+  // no observed end, as on a player — not the caster's charge (codex -2 #2)
+  return second.openHolder && second.openHolder.holderId !== caster.id
+    ? keep(null, second)
+    : keep(onPlayers, first);
 }
 
 /** `observedEffectEndSeconds` with the unit whose chain it read — the
  * effect's holder (codex 20-G167-02: Power Infusion's end is its target's,
  * not its caster's). */
-function observedEffectEnd(
+function observedEffectEndOn(
+  index: ReturnType<typeof auraIndexOf>,
   caster: ICombatUnit,
   castSpellId: string,
   castS: number,
@@ -691,7 +831,7 @@ function observedEffectEnd(
   // Divine Resonance, GH #184 part B)
   const ids = effectSpanIdsOfCast(castSpellId);
   const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
-  const mine = auraIndexOf(combat).filter(
+  const mine = index.filter(
     ({ iv, destId }) =>
       ids.has(iv.spellId) &&
       iv.srcUnitName === caster.name &&
@@ -2083,6 +2223,7 @@ function reconstructEnemyCDTimelineUncached(
         combat,
         undefined,
         endNote,
+        true,
       );
       if (endNote.windowEndS !== undefined)
         cd.windowEndSeconds = endNote.windowEndS;

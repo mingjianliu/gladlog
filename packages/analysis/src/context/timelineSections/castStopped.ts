@@ -41,6 +41,7 @@ import {
   ownerCastBarOutcomes,
 } from "../../utils/castCancels";
 import { CANCEL_CC_NEAR_S } from "../../utils/castStopEvidence";
+import { FORCED_MOVE_TEXT } from "../../utils/forcedDisplacement";
 import { JUKE_LOOKBACK_MS } from "../../utils/kickAudit";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 import { fmtTime } from "../../utils/renderGrid";
@@ -78,6 +79,8 @@ export const CAST_STOPPED_NEAR_TEXT = {
   none: "; not kicked; no control, silence or knockback landed on you then",
   cc: " as a control or silence landed on you",
   displaced: " as an enemy knockback or pull landed on you",
+  // the STAYED IN line's words for the same move (T323)
+  allyPulled: ` as ${FORCED_MOVE_TEXT.allyPull}`,
   dodged:
     "; not kicked; an enemy pressed Shadowmeld, Transcendence: Transfer or Feign Death then",
 } as const;
@@ -87,7 +90,8 @@ export const CAST_STOPPED_LEGEND = [
   `  ${CAST_STOPPED_TAG} = you began a cast bar of that control at that second and it did not go off, and no enemy kick ended it (a`,
   "    kicked cast is on its [KICK] line). `cast bar stopped after Ns` = the log shows the bar interrupted N s in, with no kick:",
   "    you stopped it or you moved — the log cannot tell which, so claim neither. `as a control or silence landed on you` /",
-  `    \`as an enemy knockback or pull landed on you\` = one landed within ${CANCEL_CC_NEAR_S} s of the stop; \`an enemy pressed Shadowmeld,`,
+  `    \`as an enemy knockback or pull landed on you\` = one landed within ${CANCEL_CC_NEAR_S} s of the stop; \`as a teammate's Leap of Faith`,
+  `    pulled you\` = a teammate's Leap of Faith on you went out within ${CANCEL_CC_NEAR_S} s of it; \`an enemy pressed Shadowmeld,`,
   `    Transcendence: Transfer or Feign Death then\` = one of those, which drop a targeted cast, was pressed within ${CANCEL_CC_NEAR_S} s of it; \`no control, silence or knockback`,
   "    landed on you then` = none did. `refused Ns in: <reason>` = the client failed the cast N s in for that reason",
   `    (\`${CAST_REFUSED_OTHER_REASON}\` = for another reason, which is not printed). \`no end logged; the round ended …\` = the round ended`,

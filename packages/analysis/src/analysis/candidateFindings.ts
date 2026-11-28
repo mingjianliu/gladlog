@@ -6,7 +6,10 @@ import {
 } from "@gladlog/parser-compat";
 
 import { mateHitDuringCc } from "../context/observedConsequences";
-import { refusalWhy } from "../context/spellOutcomeLines";
+import {
+  OTHER_REFUSAL_REASONS,
+  refusalWhy,
+} from "../context/spellOutcomeLines";
 import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import { ALTER_TIME_RETURN_ID } from "../context/timelineSections/alterTime";
 import { isNotMajorDefensive } from "../data/abilityProfile";
@@ -2727,7 +2730,21 @@ export function postKickFact(
   }
   const kickedBy = (h: CastFailedEvent) => kickOfRow.get(h);
   const kickedAgain = everyRejectedRows.filter((h) => kickedBy(h));
-  const everyRejected = everyRejectedRows.filter((h) => !kickedBy(h));
+  // T323 (B-report, c27cae13 r3 1:01.150): a kicked bar can write a second
+  // SPELL_CAST_FAILED row in the interruption row's own millisecond
+  // ("Another action is in progress" beside "Interrupted") — the same bar,
+  // no second press: neither a refused press nor a second kick. That reason
+  // only (every locale, `OTHER_REFUSAL_REASONS`): an "Out of range" in the
+  // same millisecond is a press of its own (codex 85-tk-L6-T323-1 #4)
+  const barRowOfKick = (h: CastFailedEvent) =>
+    !kickedBy(h) &&
+    BAR_COMPANION_REASONS.has(h.reason.trim()) &&
+    kickedAgain.some(
+      (r) => r.spellId === h.spellId && ms(r.tSeconds) === ms(h.tSeconds),
+    );
+  const everyRejected = everyRejectedRows.filter(
+    (h) => !kickedBy(h) && !barRowOfKick(h),
+  );
   // I01: the log's own reason first. Only a "not ready" press can be the
   // lock's (or the spell's own cooldown's, or the GCD's) doing.
   const otherReason = everyRejected.filter(
@@ -2908,6 +2925,10 @@ export function postKickFact(
 /** A kicked bar's SPELL_CAST_FAILED row sits this close to its
  * SPELL_INTERRUPT (1d6eee5f: 1 ms before it). */
 const KICKED_BAR_ROW_MS = 50;
+/** T323: the reason a kicked bar's second row in its own millisecond gives */
+const BAR_COMPANION_REASONS: ReadonlySet<string> = new Set(
+  OTHER_REFUSAL_REASONS["another action in progress"],
+);
 
 /** Heads of the `postKick` clauses fact9 D8 / D9 / D12 added (the earlier
  * kick's lock: codex 20-F24-04 #1, user ruling 2026-11-03) — what the

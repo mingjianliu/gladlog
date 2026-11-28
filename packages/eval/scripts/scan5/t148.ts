@@ -49,6 +49,7 @@ import {
 } from "@gladlog/analysis/src/utils/castCancels";
 import { isNoPressRow } from "@gladlog/analysis/src/utils/castPress";
 import {
+  anyForcedStopMs,
   feignDeathInstantsMs,
   forcedStopInstantsMs,
 } from "@gladlog/analysis/src/utils/castStopEvidence";
@@ -153,9 +154,7 @@ export function run(ctx: IRoundCtx): void {
   const failed = streams.castFailed.filter((f) => f.unitGuid === rec.id);
   const forced = forcedStopInstantsMs(rec);
   const forcedS = [
-    ...forced.cc,
-    ...forced.displaced,
-    ...forced.gripped,
+    ...anyForcedStopMs(forced),
     ...((rec.deathRecords ?? []) as any[]).map((d) => d.timestamp),
     ...ctx.players
       .filter((p) => p.id !== rec.id)

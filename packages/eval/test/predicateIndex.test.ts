@@ -4889,6 +4889,11 @@ const INDEX: PredicateRow[] = [
     mod: castStopEvidence,
   },
   {
+    file: `${A}/utils/castStopEvidence.ts`,
+    symbol: "anyForcedStopMs",
+    mod: castStopEvidence,
+  },
+  {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "blocksAsControlOrSilence",
     mod: cannotCastIntervals,

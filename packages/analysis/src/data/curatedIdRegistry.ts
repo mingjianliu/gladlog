@@ -74,7 +74,10 @@ import {
   PRESS_TRIGGERED_CAST_IDS,
 } from "../utils/castMissRows";
 import { COMPANION_CAST_ROWS, COPY_CAST_IDS } from "../utils/castPress";
-import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
+import {
+  ALLY_PULL_IDS,
+  DISPLACEMENT_EVIDENCE_IDS,
+} from "../utils/castStopEvidence";
 import {
   BREAKABLE_CC_SPELL_IDS,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -1008,6 +1011,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // cast bar — the knockback family plus Typhoon's daze aura.
   t("DISPLACEMENT_EVIDENCE_IDS", "utils/castStopEvidence.ts", "mixed", () =>
     set(DISPLACEMENT_EVIDENCE_IDS),
+  ),
+  // T323: a teammate's pull that breaks a cast bar (Leap of Faith).
+  t("ALLY_PULL_IDS", "utils/castStopEvidence.ts", "cast", () =>
+    set(ALLY_PULL_IDS),
   ),
   // Triage 2026-09-29 F-K6b (ruling A12 + U2): caster-displacing abilities
   // an enemy kicker can close a gap with — kick-eaten's out-range gate.

@@ -128,20 +128,26 @@ export function castBarStartsOf(
  *    `CANCEL_CC_NEAR_S` against. For the recorder that is a stopped bar; for
  *    any other unit a refusal has no row either, so it says only "ended".
  */
+/** What landed on the unit within `CANCEL_CC_NEAR_S` of a stop: a control
+ * or silence, an enemy displacement or grip, a teammate's pull (T323), its
+ * death, the target dropping itself — or nothing (`null`, a cancel). */
+export type CastStopNear =
+  "cc" | "displaced" | "allyPulled" | "death" | "dodged";
+
 export type CastBarEnd =
   | { kind: "completed"; atS: number; queued?: true }
   | { kind: "kicked"; atS: number }
   | {
       kind: "stopped";
       atS: number;
-      near: "cc" | "displaced" | "death" | "dodged" | null;
+      near: CastStopNear | null;
     }
   | { kind: "refused"; atS: number; row: CastFailedEvent }
   | {
       kind: "none";
       superseded?: {
         atS: number;
-        near: "cc" | "displaced" | "death" | "dodged" | null;
+        near: CastStopNear | null;
       };
     };
 
@@ -235,6 +241,8 @@ export function castBarOutcomesOf(params: {
   const ccAt = [...forced.cc, ...(params.unloggedSilenceMs ?? [])].map(sec);
   // a landed Death Grip is a displacement too (fact9 D11)
   const displacedAt = [...forced.displaced, ...forced.gripped].map(sec);
+  // a teammate's pull (Leap of Faith) moved the unit too — no enemy's (T323)
+  const allyPulledAt = forced.allyPulled.map(sec);
   const diedAt = (unit.deathRecords ?? []).map((d) => sec(d.timestamp));
   const othersDiedAt = (params.otherDeathMs ?? []).map(sec);
   const starts = castBarStartsOf(unit, startMs);
@@ -330,14 +338,16 @@ export function castBarOutcomesOf(params: {
             ? "cc"
             : near(displacedAt)
               ? "displaced"
-              : near(diedAt)
-                ? "death"
-                : // fact4 D52 (a8056a0f r0 0:51): the enemy the bar was on
-                  // went into Shadowmeld 1 ms before "Interrupted" — no
-                  // stop of the player's
-                  near(dodgeAt)
-                  ? "dodged"
-                  : null,
+              : near(allyPulledAt)
+                ? "allyPulled"
+                : near(diedAt)
+                  ? "death"
+                  : // fact4 D52 (a8056a0f r0 0:51): the enemy the bar was on
+                    // went into Shadowmeld 1 ms before "Interrupted" — no
+                    // stop of the player's
+                    near(dodgeAt)
+                    ? "dodged"
+                    : null,
         },
         earlierFailure: first !== barFail,
       };
@@ -445,11 +455,13 @@ export function castBarOutcomesOf(params: {
             ? "cc"
             : inside(displacedAt)
               ? "displaced"
-              : inside(diedAt) || inside(othersDiedAt)
-                ? "death"
-                : inside(dodgeAt)
-                  ? "dodged"
-                  : null,
+              : inside(allyPulledAt)
+                ? "allyPulled"
+                : inside(diedAt) || inside(othersDiedAt)
+                  ? "death"
+                  : inside(dodgeAt)
+                    ? "dodged"
+                    : null,
         },
       },
     };

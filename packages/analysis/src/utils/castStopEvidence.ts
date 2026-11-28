@@ -42,6 +42,17 @@ export const DISPLACEMENT_EVIDENCE_IDS: ReadonlySet<string> = new Set([
   "61391", // Typhoon (daze aura)
 ]);
 
+/**
+ * A teammate's pull that moves the caster and so breaks its cast bar: Leap
+ * of Faith 73325 (648 casts on the 605, all on an ally — spellIdLists.ts).
+ * Like Death Grip it leaves its cast row naming the pulled unit as the
+ * evidence. T323 (B-report, 7686e97d r5 2:46): a Polymorph bar stopped 18 ms
+ * after a teammate's Leap of Faith on the mage read "not kicked; no
+ * control, silence or knockback landed on you then" — a self-stop.
+ */
+/** @internal exported for data/curatedIdRegistry (corpus rot scan) */
+export const ALLY_PULL_IDS: ReadonlySet<string> = new Set(["73325"]);
+
 export const DEATH_GRIP_ID = "49576";
 /** A SPELL_MISSED row of the grip sits within this of its cast row. */
 export const GRIP_MISS_PAIR_MS = 200;
@@ -92,13 +103,42 @@ export function gripsOn(
  * `gripsOn`: fact9 D11, 1d6eee5f 1:26.609 — a Pyroblast stopped 1 ms before
  * the grip's cast row was counted as the player's own cancel). `gripped` is
  * kept apart from `displaced` because the forced-move readers list a grip
- * under its own name (`forcedMovesInRenderedSpan`). */
+ * under its own name (`forcedMovesInRenderedSpan`). And a teammate's pull
+ * (`allyPulled`, `ALLY_PULL_IDS`: its cast row naming the unit, cast by
+ * another unit — T323), kept apart because it is no enemy's doing. */
 export function forcedStopInstantsMs(
   unit: Pick<ICombatUnit, "auraEvents" | "damageIn"> &
     Partial<Pick<ICombatUnit, "id" | "actionIn" | "missesIn">>,
-): { cc: number[]; displaced: number[]; gripped: number[] } {
+): {
+  cc: number[];
+  displaced: number[];
+  gripped: number[];
+  allyPulled: number[];
+} {
   const auras = unit.auraEvents ?? [];
   return {
+    allyPulled:
+      unit.id === undefined
+        ? []
+        : (unit.actionIn ?? [])
+            .filter(
+              (c) =>
+                c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                !!c.spellId &&
+                ALLY_PULL_IDS.has(c.spellId) &&
+                c.destUnitId === unit.id &&
+                c.srcUnitId !== unit.id &&
+                // a pull the player was immune to moved nobody: the same
+                // pairing as a grip's (`gripsOn`, codex 85-tk-L6-T323-1 #5)
+                !(unit.missesIn ?? []).some(
+                  (m) =>
+                    m.spellId === c.spellId &&
+                    m.srcUnitId === c.srcUnitId &&
+                    Math.abs(m.timestamp - c.logLine.timestamp) <=
+                      GRIP_MISS_PAIR_MS,
+                ),
+            )
+            .map((c) => c.logLine.timestamp),
     gripped:
       unit.id === undefined
         ? []
@@ -124,6 +164,21 @@ export function forcedStopInstantsMs(
       ),
     ].map((e) => e.timestamp),
   };
+}
+
+/** Every instant of `forcedStopInstantsMs` — whatever stopped the cast, it
+ * was not the unit: the one list the juke tests and the scans that ask
+ * "did something else stop it" read, so a new kind of evidence (T323's
+ * teammate pull) reaches all of them. */
+export function anyForcedStopMs(
+  forced: ReturnType<typeof forcedStopInstantsMs>,
+): number[] {
+  return [
+    ...forced.cc,
+    ...forced.displaced,
+    ...forced.gripped,
+    ...forced.allyPulled,
+  ];
 }
 
 /** Feign Death's cast id, which the log never writes as a SUCCESS. */
