@@ -1307,7 +1307,15 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "400320",
       untalentedBaseSeconds: 6,
       pct: -20,
-      note: "Circle of Life and Death on Feral Frenzy's bleed 274838 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 5 / 0 / 5 (6 × 0.8 = 4.8). Tear 391356 is on the same row with 4 / 0 / 4 — under the 5-life bar, not priced, FLAGged by the scan",
+      note: "Circle of Life and Death on Feral Frenzy's bleed 274838 — REDUCTION with mechanism: DB2 aura 108 −20 % (effect 2), mask covers it; pipeline T48, scan5/t48 on the 605, holder lives at the cut length / at the uncut one / all: 5 / 0 / 5 (6 × 0.8 = 4.8). Tear 391356 is on the same row: priced below (pipeline T319)",
+    },
+  ],
+  "391356": [
+    {
+      talentSpellId: "400320",
+      untalentedBaseSeconds: 8,
+      pct: -20,
+      note: "Circle of Life and Death on Tear 391356 — REDUCTION with mechanism: DB2 aura 108 misc 1 −20 % (effect 2), class mask covers it (inventory target via mask), the same row as Rip, Rake, Thrash and Feral Frenzy; tooltip `damage over time effects deal their damage in $s1% less time`; maxRanks 1, rank read from COMBATANT_INFO. Pipeline T319, scan5/t48 shortenedDuration, holder lives at the cut length / at the uncut one / all: 605 4 / 0 / 4 (two archives), the 12.1.5 files 12 / 0 / 12 (one archive) — 16 lives at 6.4–6.5 s = 8 × 0.8, none at 8 s. T48 had left it under its 5-life bar on the 605 alone. On the same scan and still FLAGged, not priced: Meteor Storm 1240262 on Starfall 191034 (aura 108 −50 %, mask covers it; one life, 4.0 s = 8 × 0.5 — under the bar) and Gorefiend's Avarice 1270701 on Drain Life 234153 (aura 108 −50 %; 122 holder lives, 9 within 0.6 s of 2.5 s and those at 1.9–2.1 s: a hasted channel, the arithmetic does not reconcile)",
     },
   ],
   "451084": [

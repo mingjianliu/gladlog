@@ -31,7 +31,11 @@ import {
   TIMEWALKER_LENGTHENED_IDS,
   TIMEWALKER_MASTERY_ID,
 } from "../src/utils/buffDuration";
-import { talentOwnershipOf, talentRankOf } from "../src/utils/talentOwnership";
+import {
+  talentModifierOwnershipOf,
+  talentOwnershipOf,
+  talentRankOf,
+} from "../src/utils/talentOwnership";
 import { makeUnit } from "./ported/testHelpers";
 
 const BARKSKIN = "22812";
@@ -174,8 +178,11 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     expect(
       buffFullDurationForCaster("274838", feral("f4", [COLD])),
     ).toBeCloseTo(4.8);
-    // Tear, on the same DB2 row, has 4 holder lives on the 605: not priced
-    expect(buffFullDurationForCaster("391356", feral("f4", [COLD]))).toBe(8);
+    // Tear, on the same DB2 row: priced since pipeline T319 (16 holder
+    // lives on the 605 + 12.1.5 files, all at the cut length)
+    expect(
+      buffFullDurationForCaster("391356", feral("f4", [COLD])),
+    ).toBeCloseTo(6.4);
     expect(
       buffFullDurationForCaster("164812", feral("f5", [COLD])),
     ).toBeCloseTo(14.4);
@@ -207,6 +214,27 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
         lock("wl3", [ABSOLUTE_CORRUPTION, HATEFURY_RITUALS]),
       ),
     ).toBeCloseTo(20.4);
+  });
+
+  it("pipeline T319:撕裂 8s;生死循环 ×0.8 = 6.4s;读不到天赋保持 8s", () => {
+    const CIRCLE = { id1: 82092, id2: 103152, count: 1 };
+    // Feral's own Rip and Tear node: a resolvable loadout without Circle
+    // (so "no", not "unknown"; codex 85-tk-L8-T319-1 #2)
+    const OTHER = { id1: 82093, id2: 103153, count: 1 };
+    const feral = (id: string, talents: (typeof CIRCLE)[]) =>
+      makeUnit(id, {
+        spec: CombatUnitSpec.Druid_Feral,
+        info: { talents, pvpTalents: [] },
+      });
+    expect(
+      buffFullDurationForCaster("391356", feral("f0", [CIRCLE])),
+    ).toBeCloseTo(6.4);
+    expect(talentModifierOwnershipOf(feral("f1", [OTHER]), "400320")).toBe(
+      "no",
+    );
+    expect(buffFullDurationForCaster("391356", feral("f1", [OTHER]))).toBe(8);
+    expect(buffFullDurationForCaster("391356", feral("f2", []))).toBe(8);
+    expect(buffFullDurationForCaster("391356", undefined)).toBe(8);
   });
 
   it("按级数生效:时间膨胀 0/1/2 级 = 8 / 9.2 / 10.4s", () => {
