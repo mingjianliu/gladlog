@@ -30,7 +30,7 @@ import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcas
 import {
   AURA_SURELY_UP_PAST_MS,
   auraLifeLastPress,
-  auraSurelyUpPastMs,
+  auraSurelyUpEndMs,
   auraSurelyUpUntilMs,
   otherEffectAurasOf,
   resentAuraApplications,
@@ -98,6 +98,22 @@ export function run(ctx: IRoundCtx): void {
     // next cast row of any button that puts the aura up — the producers'
     // own reading (`nextAuraPressMs`; codex 85-tk-L5-T308-1c #10:
     // Ascendance's Doom Winds closed the first press's life)
+    // a granting press inside the life carries it on (the producers'
+    // `auraLifeLastPress`; codex 85-tk-L5-T308-1f #3: 90c01e7f r6's
+    // Ascendance 3.3 s into Doom Winds read as its next press) — from the
+    // aura's own official end, as the producers cap it, not the printed span
+    // (under ruling (B) the printed span IS the evidence's end)
+    const ownFullS = buffDurationOfApplication(app.spellId, owner, tsOf(app));
+    const life = auraLifeLastPress(
+      owner,
+      app.spellId,
+      s.spellId,
+      castMs,
+      ownFullS === undefined
+        ? ctx.start + s.spanToSeconds * 1000
+        : tsOf(app) + ownFullS * 1000,
+      (atMs) => buffDurationOfApplication(app.spellId, owner, atMs),
+    );
     const renewed = Math.min(
       all
         .filter(
@@ -105,22 +121,7 @@ export function run(ctx: IRoundCtx): void {
             o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
         )
         .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity),
-      // a granting press inside the life carries it on (the producers'
-      // `auraLifeLastPress`; codex 85-tk-L5-T308-1f #3: 90c01e7f r6's
-      // Ascendance 3.3 s into Doom Winds read as its next press)
-      (auraLifeLastPress(
-        owner,
-        app.spellId,
-        s.spellId,
-        castMs,
-        castMs +
-          (buffDurationOfApplication(app.spellId, owner, tsOf(app)) ??
-            s.spanToSeconds - s.castTimeSeconds) *
-            1000,
-        (atMs) => buffDurationOfApplication(app.spellId, owner, atMs),
-      ).nextPressMs -
-        ctx.start) /
-        1000,
+      (life.nextPressMs - ctx.start) / 1000,
     );
     // the REMOVED that closes THIS life: before the spell's next press — a
     // later life's REMOVED leaves this one unclosed (codex 85-tk-L5-T308-1b
@@ -169,9 +170,7 @@ export function run(ctx: IRoundCtx): void {
       Math.min(endMs, ctx.start + renewed * 1000),
     );
     const upTo = (untilMs - ctx.start) / 1000;
-    if (s.spanToSeconds >= upTo - 1) continue;
-    ctx.bump("burstAuraPastSpan");
-    const capMs = ctx.start + s.spanToSeconds * 1000;
+    const capMs = life.capMs;
     const reapplied = auraRows.some(
       (r) =>
         ev(r) === APPLIED &&
@@ -179,21 +178,35 @@ export function run(ctx: IRoundCtx): void {
         tsOf(r) > tsOf(app) + AURA_SURELY_UP_PAST_MS &&
         tsOf(r) <= untilMs,
     );
+    // ruling (B) (codex 85-tk-L5-T308-1h #1): a life the log shows up past
+    // its deadline is printed to its last evidence row — ±1 s, the printed
+    // grid — no shorter (the T308 bug) and no longer (The Hunt, 7abf7067 r6)
+    const evidenceEndMs = reapplied
+      ? undefined
+      : auraSurelyUpEndMs(
+          owner,
+          owner,
+          app.spellId,
+          s.spellId,
+          capMs,
+          untilMs,
+          {
+            nextPressMs: ctx.start + renewed * 1000,
+            // a row of the press's other effect aura is no evidence (1c #9)
+            otherAuraIds: otherEffectAurasOf(s.spellId, app.spellId),
+            lifeStartMs: tsOf(app),
+          },
+        );
+    if (evidenceEndMs === undefined && s.spanToSeconds >= upTo - 1) continue;
+    ctx.bump("burstAuraPastSpan");
+    if (
+      evidenceEndMs !== undefined &&
+      Math.abs(s.spanToSeconds - (evidenceEndMs - ctx.start) / 1000) <= 1
+    )
+      continue;
     const evidence = reapplied
       ? "lost: re-applied"
-      : auraSurelyUpPastMs(
-            owner,
-            owner,
-            app.spellId,
-            s.spellId,
-            capMs,
-            untilMs,
-            {
-              nextPressMs: ctx.start + renewed * 1000,
-              // a row of the press's other effect aura is no evidence (1c #9)
-              otherAuraIds: otherEffectAurasOf(s.spellId, app.spellId),
-            },
-          )
+      : evidenceEndMs !== undefined
         ? "surely up"
         : "can't tell";
     if (first) {
@@ -212,7 +225,7 @@ export function run(ctx: IRoundCtx): void {
       evidence,
       castMs,
       key,
-      `${s.spellName} ${s.castTimeSeconds.toFixed(1)}–${s.spanToSeconds.toFixed(1)}s printed (official ${(s.spanToSeconds - s.castTimeSeconds).toFixed(1)}s); aura ${app.spellId} has no REMOVED to ${((untilMs - ctx.start) / 1000).toFixed(1)}s`,
+      `${s.spellName} ${s.castTimeSeconds.toFixed(1)}–${s.spanToSeconds.toFixed(1)}s printed; aura ${app.spellId} has no REMOVED to ${((untilMs - ctx.start) / 1000).toFixed(1)}s${evidenceEndMs !== undefined ? `, its last evidence at ${((evidenceEndMs - ctx.start) / 1000).toFixed(1)}s` : ""}`,
     );
   }
 }

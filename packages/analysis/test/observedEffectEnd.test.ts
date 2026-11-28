@@ -530,19 +530,20 @@ describe("T308: a life the log never closes, shown still up past its official en
     ).toBeNull();
   });
 
-  it("its own REFRESH past the official end: it ran on to the round's end", () => {
+  it("its own REFRESH past the official end: it ran on for the length that REFRESH renewed (ruling (B))", () => {
     const { caster, combat } = open([[LogEvent.SPELL_AURA_REFRESH, 33]]);
     expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
-      60,
+      53,
     );
   });
 
-  it("a row under its name past the official end: to the round's end, or to the next press", () => {
+  it("a row under its name past the official end: to that row (ruling (B)); a next press before it leaves no evidence", () => {
     const { caster, combat } = open([], [35]);
     expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
-      60,
+      35,
     );
-    expect(observedEffectEndSeconds(caster, AVATAR, 10, 50, combat)).toBe(50);
+    expect(observedEffectEndSeconds(caster, AVATAR, 10, 50, combat)).toBe(35);
+    expect(observedEffectEndSeconds(caster, AVATAR, 10, 34, combat)).toBeNull();
   });
 
   it("evidence inside the cap's own second is none; a re-APPLIED is a lost end", () => {
@@ -683,9 +684,9 @@ describe("T308: a copy shown still up outranks a closed one (codex 85-tk-L5-T308
       name: "Mate",
       auraEvents: [
         a(LogEvent.SPELL_AURA_APPLIED, 10.5, "c2"),
-        // closed past the caster's copy's refreshed cap (33 + 20 s): the
-        // longest chain before the fix, so the press read 55
-        a(LogEvent.SPELL_AURA_REMOVED, 55, "c2"),
+        // closed at 50 s, before the caster's copy's evidence end (its
+        // REFRESH at 33 s + 20 s): the closed copy outranked it before the fix
+        a(LogEvent.SPELL_AURA_REMOVED, 50, "c2"),
       ],
     } as never);
     const combat = {
@@ -694,7 +695,7 @@ describe("T308: a copy shown still up outranks a closed one (codex 85-tk-L5-T308
       units: { c1: caster, c2: mate },
     } as never;
     expect(observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat)).toBe(
-      60,
+      53,
     );
   });
 });

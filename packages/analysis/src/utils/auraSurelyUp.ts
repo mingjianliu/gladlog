@@ -205,7 +205,7 @@ export function auraLifeLastPress(
  * builder does — #7) is a lost end, not evidence. Shared with scan5/t308
  * `burstAuraPastSpan`.
  */
-export function auraSurelyUpPastMs(
+export function auraSurelyUpEndMs(
   caster: Pick<ICombatUnit, "id" | "damageOut" | "healOut"> &
     Partial<Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">>,
   holder: Pick<ICombatUnit, "id" | "auraEvents">,
@@ -221,11 +221,14 @@ export function auraSurelyUpPastMs(
      * (codex 85-tk-L5-T308-1b #1: Feral Frenzy's bleed 274838 ticking
      * past the caster's own 1 s 274837, both named "Feral Frenzy") */
     otherAuraIds?: ReadonlySet<string>;
+    /** the life's start: its own REFRESH / DOSE rows from here on renew the
+     * deadline (codex 85-tk-L5-T308-1h #2); unset, only rows past `capMs` */
+    lifeStartMs?: number;
   } = {},
-): boolean {
+): number | undefined {
   const nextPressMs = opts.nextPressMs ?? Infinity;
   const fromMs = capMs + AURA_SURELY_UP_PAST_MS;
-  if (!(untilMs > fromMs)) return false;
+  if (!(untilMs > fromMs)) return undefined;
   // a re-broadcast REMOVED + APPLIED pair is one aura, not a lost end
   // (`dropAuraRebroadcasts`, as the interval builder reads it)
   const own = dropAuraRebroadcasts(
@@ -245,17 +248,41 @@ export function auraSurelyUpPastMs(
       (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED && !resent.has(a),
     )
   )
-    return false;
-  if (
-    rows.some(
-      (a) =>
-        a.logLine.timestamp > fromMs &&
-        (a.logLine.event === LogEvent.SPELL_AURA_REFRESH ||
-          a.logLine.event === LogEvent.SPELL_AURA_APPLIED_DOSE ||
-          a.logLine.event === LogEvent.SPELL_AURA_REMOVED_DOSE),
-    )
-  )
-    return true;
+    return undefined;
+  // the deadline runs with the life's own refreshes: a REFRESH / DOSE inside
+  // the life's current length renews it from there (the builder's cap) and
+  // proves nothing past it; one logged more than the slack past that
+  // deadline is the aura up after it was due off — the evidence (codex
+  // 85-tk-L5-T308-1 #4: a refresh 5 s past an 8 s Doom Winds; 1h #2:
+  // a52e5d1d r1's Ignite, refreshed to 185.3 s, its 9 s due off at 194.3 s,
+  // had read up to the round's end off its own routine refreshes)
+  const renewing = (ev: string) =>
+    ev === LogEvent.SPELL_AURA_REFRESH ||
+    ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+    ev === LogEvent.SPELL_AURA_REMOVED_DOSE;
+  const lifeStartMs = opts.lifeStartMs ?? capMs;
+  /** [row ms, deadline from that row on] */
+  const deadlines: [number, number][] = [];
+  let deadline = capMs;
+  let surely = false;
+  /** the life's last row of its own (REFRESH / DOSE) up to `untilMs` */
+  let lastOwnMs = -Infinity;
+  for (const a of own) {
+    const t = a.logLine.timestamp;
+    if (t < lifeStartMs || t > untilMs || !renewing(a.logLine.event)) continue;
+    lastOwnMs = t;
+    if (t > deadline + AURA_SURELY_UP_PAST_MS) surely = true;
+    const d = officialDurationS(auraId, caster as never, t);
+    if (d !== null && t + d * 1000 > deadline) {
+      deadline = t + d * 1000;
+      deadlines.push([t, deadline]);
+    }
+  }
+  const deadlineAt = (t: number): number => {
+    let at = capMs;
+    for (const [r, dl] of deadlines) if (r <= t) at = dl;
+    return at;
+  };
   const names = new Set([
     getEnglishSpellName(auraId, ""),
     getEnglishSpellName(castSpellId, ""),
@@ -265,24 +292,44 @@ export function auraSurelyUpPastMs(
     untilMs + 1,
     nextPressMs - AURA_SURELY_UP_NEXT_PRESS_LEAD_MS,
   );
-  return [...(caster.damageOut ?? []), ...(caster.healOut ?? [])].some((r) => {
-    if (r.srcUnitId !== caster.id) return false;
-    if (holder.id !== caster.id && r.destUnitId !== holder.id) return false;
+  // the caster's own rows of it: each is the aura up at its instant
+  let lastRowMs = -Infinity;
+  for (const r of [...(caster.damageOut ?? []), ...(caster.healOut ?? [])]) {
+    if (r.srcUnitId !== caster.id) continue;
+    if (holder.id !== caster.id && r.destUnitId !== holder.id) continue;
     const t = r.logLine.timestamp;
-    if (t <= fromMs || t >= rowsUntilMs) return false;
+    if (t < lifeStartMs || t >= rowsUntilMs || t > untilMs) continue;
     const { attackSpellId, attackSpellName } = r as {
       attackSpellId?: string;
       attackSpellName?: string;
     };
-    if (attackSpellId)
-      return (
-        !opts.otherAuraIds?.has(attackSpellId) &&
+    const ofIt = attackSpellId
+      ? !opts.otherAuraIds?.has(attackSpellId) &&
         names.has(getEnglishSpellName(attackSpellId, attackSpellName ?? ""))
-      );
-    if (r.logLine.event === LogEvent.SPELL_ABSORBED) return false;
-    if (r.spellId && opts.otherAuraIds?.has(r.spellId)) return false;
-    return names.has(getEnglishSpellName(r.spellId, r.spellName ?? ""));
-  });
+      : r.logLine.event !== LogEvent.SPELL_ABSORBED &&
+        !(r.spellId && opts.otherAuraIds?.has(r.spellId)) &&
+        names.has(getEnglishSpellName(r.spellId, r.spellName ?? ""));
+    if (!ofIt) continue;
+    if (t > lastRowMs) lastRowMs = t;
+    if (t > deadlineAt(t) + AURA_SURELY_UP_PAST_MS) surely = true;
+  }
+  // ruling (B) (coordinator 2026-11-27, codex 85-tk-L5-T308-1h #1): a life
+  // shown up past its deadline ends at its LAST evidence — its last row of
+  // it, or the official length its last REFRESH / DOSE renewed it for (the
+  // interval builder's own reading of any unclosed life) — never past what
+  // the log shows, nor `untilMs` (7abf7067 r6: The Hunt's DoT ticked to
+  // 74.6 s and the span had run on to the 94.7 s death)
+  return surely
+    ? Math.min(untilMs, Math.max(deadline, lastOwnMs, lastRowMs))
+    : undefined;
+}
+
+/** T308: `auraSurelyUpEndMs` as a yes / no — the log shows the aura up past
+ * its deadline */
+export function auraSurelyUpPastMs(
+  ...args: Parameters<typeof auraSurelyUpEndMs>
+): boolean {
+  return auraSurelyUpEndMs(...args) !== undefined;
 }
 
 /**

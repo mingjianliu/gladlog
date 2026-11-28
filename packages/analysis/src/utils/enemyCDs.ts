@@ -38,7 +38,7 @@ import {
 } from "./auraIntervals";
 import {
   auraLifeLastPress,
-  auraSurelyUpPastMs,
+  auraSurelyUpEndMs,
   auraSurelyUpUntilMs,
 } from "./auraSurelyUp";
 import { buffDurationOfApplication } from "./buffDuration";
@@ -794,17 +794,14 @@ function observedEffectEnd(
   };
   // T308 (user 2026-11-27, T284 (a)): a chain the log never closes — no
   // REMOVED, the builder's official-length cap — that the log shows still
-  // up past that cap (`auraSurelyUpPastMs`) ran on to the round's end, or
-  // to the caster's next press of the spell (41243fd2-shaped: Breath of
-  // Sindragosa's damage rows 2 s past its 8 s with no REMOVED). Without that
-  // evidence the official end stands: ~4.5 % of REMOVED rows are lost.
-  // To the round's end, not to the last evidence row (coordinator (A),
-  // 2026-11-27): the four surely-up presses of 605 + 1215 ran from their
-  // last row to the printed end 0 / 0.7 / 0.9 / 0 s (Doom Winds 33.21 → the
-  // kill 33.2, Breath of Sindragosa 223.29 → 224.0 and 39.36 → 40.3,
-  // Recklessness 139.975 → its next press). Reopen when a corpus shows the
-  // evidence stopping well before the end — a later REMOVED lost there
-  // would print past what the log proves.
+  // up past that cap (`auraSurelyUpEndMs`) ran on to its last evidence row,
+  // never past the caster's next press of the spell, its holder's death or
+  // the round's end (41243fd2-shaped: Breath of Sindragosa's damage rows 2 s
+  // past its 8 s with no REMOVED). Without that evidence the official end
+  // stands: ~4.5 % of REMOVED rows are lost. To the last evidence row, not
+  // to the round's end — ruling (B), coordinator 2026-11-27, replacing (A)
+  // on codex 85-tk-L5-T308-1h #1 (7abf7067 r6: The Hunt's DoT ticked to
+  // 74.6 s and (A) ran the burst on to the 94.7 s death).
   // Read per copy, before the copies are ranked: a copy the log shows still
   // up outranks a longer-capped or a closed one (codex 85-tk-L5-T308-1 #5:
   // The Hunt's DoT on A ticking past its cap lost to B's REMOVED).
@@ -853,19 +850,25 @@ function observedEffectEnd(
     );
     const otherAuraIds = new Set(ids);
     otherAuraIds.delete(b.auraId);
-    if (
-      untilMs > capMs &&
-      auraSurelyUpPastMs(
-        caster,
-        holder,
-        b.auraId,
-        castSpellId,
-        capMs,
-        untilMs,
-        { nextPressMs, otherAuraIds },
-      )
-    )
-      return (untilMs - combat.startTime) / 1000;
+    // …to its last evidence row (ruling (B), codex 85-tk-L5-T308-1h #1)
+    const evidenceEndMs =
+      untilMs > capMs
+        ? auraSurelyUpEndMs(
+            caster,
+            holder,
+            b.auraId,
+            castSpellId,
+            capMs,
+            untilMs,
+            {
+              nextPressMs,
+              otherAuraIds,
+              lifeStartMs: combat.startTime + appliedS * 1000,
+            },
+          )
+        : undefined;
+    if (evidenceEndMs !== undefined)
+      return (evidenceEndMs - combat.startTime) / 1000;
     // …and with none past it, a life a granting press carried on runs that
     // press's own length (codex 85-tk-L5-T308-1f #1)
     if (life.pressMs > combat.startTime + castS * 1000) {

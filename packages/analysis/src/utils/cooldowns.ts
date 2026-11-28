@@ -108,7 +108,7 @@ import {
   auraMasteryPressWallStartMs,
 } from "./auraMasteryBranch";
 import {
-  auraSurelyUpPastMs,
+  auraSurelyUpEndMs,
   auraSurelyUpUntilMs,
   nextAuraPressMs,
   otherEffectAurasOf,
@@ -9251,8 +9251,9 @@ export function hasOffensiveSpellActive(
         return true;
       // T308 (user 2026-11-27): …unless the log shows it still up past that
       // length — the burst ledger's and the timeline's own reading
-      // (`auraSurelyUpPastMs`): then it ran on to the round's end or its
-      // next application (codex 85-tk-L5-T308-1 #6: a Breath of Sindragosa
+      // (`auraSurelyUpEndMs`): then it ran on to its last evidence row,
+      // ruling (B), never past its next application or the round's end
+      // (codex 85-tk-L5-T308-1 #6: a Breath of Sindragosa
       // ticking 4 s past its 8 s, no REMOVED, read off by the threat gate
       // while the timeline ran it on). The round's end only on the combat
       // itself (its units); a caster this reader does not hold, no reading.
@@ -9292,13 +9293,17 @@ export function hasOffensiveSpellActive(
           Math.min(roundEndMs(combat as never), nextPressMs),
         );
         const otherAuraIds = otherEffectAurasOf(cdId, spellId);
-        if (
-          timestampMs <= untilMs &&
-          auraSurelyUpPastMs(caster, unit, spellId, cdId, capMs, untilMs, {
-            nextPressMs,
-            otherAuraIds,
-          })
-        )
+        // …to its last evidence row (ruling (B), codex 85-tk-L5-T308-1h #1)
+        const evidenceEndMs = auraSurelyUpEndMs(
+          caster,
+          unit,
+          spellId,
+          cdId,
+          capMs,
+          untilMs,
+          { nextPressMs, otherAuraIds, lifeStartMs: applyTs },
+        );
+        if (evidenceEndMs !== undefined && timestampMs <= evidenceEndMs)
           return true;
       }
     }

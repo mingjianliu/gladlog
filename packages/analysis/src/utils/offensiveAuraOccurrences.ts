@@ -12,7 +12,7 @@ import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
 import {
   auraLifeLastPress,
-  auraSurelyUpPastMs,
+  auraSurelyUpEndMs,
   auraSurelyUpUntilMs,
   otherEffectAurasOf,
 } from "./auraSurelyUp";
@@ -535,8 +535,9 @@ export function auraOffensiveOccurrences(
     let auraOfficialEndMs =
       auraFull === undefined ? undefined : startMs + auraFull * 1000;
     // T308 (user 2026-11-27): a life the log never closes that it shows
-    // still up past its official end ran on to the round's end, or to the
-    // caster's next press of it (605 90c01e7f r6: Doom Winds, pressed with
+    // still up past its official end ran on to its last evidence row
+    // (ruling (B)), never past the round's end or the caster's next press of
+    // it (605 90c01e7f r6: Doom Winds, pressed with
     // only its aura in the log, struck 2 s past its 10 s with no REMOVED) —
     // the press-row reading's own predicate (`observedEffectEnd`). Past the
     // aura's own official end, not the builder's cap from a later REFRESH:
@@ -578,18 +579,19 @@ export function auraOffensiveOccurrences(
         Math.min(roundEnd, nextPressMs),
       );
       const otherAuraIds = otherEffectAurasOf(pressId, iv.spellId);
-      if (
-        auraSurelyUpPastMs(
-          unit,
-          unit,
-          iv.spellId,
-          pressId ?? iv.spellId,
-          capMs,
-          untilMs,
-          { nextPressMs, otherAuraIds },
-        )
-      )
-        endMs = untilMs;
+      // …to its last evidence row (ruling (B), codex 85-tk-L5-T308-1h #1)
+      const evidenceEndMs = auraSurelyUpEndMs(
+        unit,
+        unit,
+        iv.spellId,
+        pressId ?? iv.spellId,
+        capMs,
+        untilMs,
+        { nextPressMs, otherAuraIds, lifeStartMs: startMs },
+      );
+      // (it holds the renewed length already; shorter only where the next
+      // press, a death or the round's end cuts it)
+      if (evidenceEndMs !== undefined) endMs = evidenceEndMs;
       // …and with none past it, a life a granting press carried on runs
       // that press's own length (codex 85-tk-L5-T308-1f #1: strikes to 22.2
       // s after an Ascendance at 12.5 s, the life read off at 19.2 s)

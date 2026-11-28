@@ -610,17 +610,19 @@ describe("T308: an aura-only life the log shows still up (codex 85-tk-L5-T308-1 
     endTime: s(60),
     units: { sh: u },
   });
-  it("a REFRESH past its official end is the evidence: to the round's end", () => {
+  it("a REFRESH past its official end is the evidence: to the length it renewed (ruling (B))", () => {
     const u = doom();
-    expect(endOf(u, combatOf(u))).toBe(60_000);
+    // REFRESH at 25 s, past the 18 s end: up for its 8 s from there
+    expect(endOf(u, combatOf(u))).toBe(33_000);
   });
   it("a synthetic window (no units, no round end) keeps the cap", () => {
     const u = doom();
     expect(endOf(u, { startTime: START, endTime: s(60) })).toBe(33_000);
   });
   it("the caster's next press ends it, though its application row was lost", () => {
-    const u = doom([cast("384352", 40, "sh")]);
-    expect(endOf(u, combatOf(u))).toBe(40_000);
+    // a press at 30 s, inside the renewed length, cuts the life there
+    const u = doom([cast("384352", 30, "sh")]);
+    expect(endOf(u, combatOf(u))).toBe(30_000);
   });
 });
 
@@ -643,14 +645,17 @@ describe("T308: the threat reader runs on what the timeline runs on (codex 85-tk
         },
       ],
     } as any);
-  it("active at 30 s with the combat's units; off without them", () => {
+  it("active at 21 s with the combat's units; off without them; off past the last tick (ruling (B))", () => {
     const u = dk();
     const combat = { startTime: START, endTime: s(60), units: { dk: u } };
-    expect(hasOffensiveSpellActive(u, s(30), null, undefined, combat)).toBe(
+    expect(hasOffensiveSpellActive(u, s(21), null, undefined, combat)).toBe(
       true,
     );
+    expect(hasOffensiveSpellActive(u, s(30), null, undefined, combat)).toBe(
+      false,
+    );
     expect(
-      hasOffensiveSpellActive(u, s(30), null, undefined, {
+      hasOffensiveSpellActive(u, s(21), null, undefined, {
         startTime: START,
         endTime: s(60),
       }),
@@ -673,12 +678,12 @@ describe("T308 round 2 (codex 85-tk-L5-T308-1b)", () => {
     } as any).occurrences.find((o) => o.spellId === "384352")?.endMs ?? 0) -
     START;
   it("#3: another button that grants the aura (Ascendance) is its next press", () => {
-    expect(endOf(doom([cast("114051", 40, "sh")]))).toBe(40_000);
+    expect(endOf(doom([cast("114051", 30, "sh")]))).toBe(30_000);
   });
   it("#4: never past its holder's death", () => {
     const u = doom();
-    (u as any).deathRecords = [{ timestamp: s(45) }];
-    expect(endOf(u)).toBe(45_000);
+    (u as any).deathRecords = [{ timestamp: s(30) }];
+    expect(endOf(u)).toBe(30_000);
   });
   it("#10: rows added since are read again", () => {
     const u = enh([], [aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh")]);
@@ -692,7 +697,7 @@ describe("T308 round 2 (codex 85-tk-L5-T308-1b)", () => {
         logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(22) },
       },
     ];
-    expect(endOf(u)).toBe(60_000);
+    expect(endOf(u)).toBe(22_000);
   });
   it("#2: a hit just before the next press is that press's, for the threat reader too", () => {
     const u = makeUnit("dk", {
@@ -834,9 +839,14 @@ describe("T308 round 3 (codex 85-tk-L5-T308-1c)", () => {
         aura(LogEvent.SPELL_AURA_REFRESH, "1719", 75, "w"),
       ],
     } as any);
+    // the second press's Recklessness, refreshed at 75 s past its due end:
+    // up to that refresh's length, no further (ruling (B))
+    expect(
+      hasOffensiveSpellActive(u, s(80), null, undefined, round(u, 110)),
+    ).toBe(true);
     expect(
       hasOffensiveSpellActive(u, s(100), null, undefined, round(u, 110)),
-    ).toBe(true);
+    ).toBe(false);
   });
   it("#7: an APPLIED re-sent inside the official length with no press is the same life", () => {
     const u = frost(
@@ -847,18 +857,20 @@ describe("T308 round 3 (codex 85-tk-L5-T308-1c)", () => {
       ],
       [bosHit(22)],
     );
-    expect(hasOffensiveSpellActive(u, s(40), null, undefined, round(u))).toBe(
+    expect(hasOffensiveSpellActive(u, s(21), null, undefined, round(u))).toBe(
       true,
     );
   });
   it("#8: casts and deaths added since are read again", () => {
     const u = enh([], [aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh")]);
     (u as any).damageOut = [doomHit(22)];
-    expect(occEnd(u)).toBe(60_000);
-    (u as any).spellCastEvents = [cast("114051", 40, "sh")];
-    expect(occEnd(u)).toBe(40_000);
-    (u as any).deathRecords = [{ timestamp: s(29) }];
-    expect(occEnd(u)).toBe(29_000);
+    expect(occEnd(u)).toBe(22_000);
+    // a press at 21 s: the 22 s hit is that press's, no evidence of this life
+    (u as any).spellCastEvents = [cast("114051", 21, "sh")];
+    expect(occEnd(u)).toBe(18_000);
+    (u as any).spellCastEvents = [];
+    (u as any).deathRecords = [{ timestamp: s(21) }];
+    expect(occEnd(u)).toBe(18_000);
   });
 });
 
@@ -891,9 +903,14 @@ describe("T308 round 4 (codex 85-tk-L5-T308-1d)", () => {
     return tl.players[0]?.offensiveCDs.find((c) => c.spellId === "384352")
       ?.buffEndSeconds;
   };
-  it("1c #1 (codex's fixture): a logged press's life ends at Ascendance, the next button that grants it", () => {
+  it("1c #1 (codex's fixture): a logged press's life runs to its last evidence before Ascendance, the next button that grants it", () => {
+    // ruling (B): its 22 s hit, not on to the Ascendance at 40 s
     expect(doomEnd([cast("384352", 10, "sh"), cast("114051", 40, "sh")])).toBe(
-      40,
+      22,
+    );
+    // an Ascendance before that hit ends the life at its official end
+    expect(doomEnd([cast("384352", 10, "sh"), cast("114051", 21, "sh")])).toBe(
+      18,
     );
   });
   it("#1: Doom Winds' pulse (same name, no cooldown of its own) is no next press", () => {
@@ -903,7 +920,7 @@ describe("T308 round 4 (codex 85-tk-L5-T308-1d)", () => {
         cast("469270", 13, "sh"),
         cast("114051", 40, "sh"),
       ]),
-    ).toBe(40);
+    ).toBe(22);
     expect(
       nextAuraPressMs(
         enh([cast("469270", 13, "sh")], []),
@@ -969,7 +986,7 @@ describe("T308 round 4 (codex 85-tk-L5-T308-1d)", () => {
   it("#6: an aura row added since is read again", () => {
     const u = enh([], [aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh")]);
     (u as any).damageOut = [hit("sh", "466772", "Doom Winds", 22)];
-    expect(occEnd(u)).toBe(60_000);
+    expect(occEnd(u)).toBe(22_000);
     (u as any).auraEvents = [
       ...u.auraEvents,
       aura(LogEvent.SPELL_AURA_REMOVED, "466772", 24, "sh"),
@@ -998,7 +1015,8 @@ describe("T308 round 5 (codex 85-tk-L5-T308-1e)", () => {
     const o = auraOffensiveOccurrences(u, bounds as any).occurrences.find(
       (x) => x.spellId === "384352",
     );
-    expect((o?.endMs ?? 0) - START).toBe(33_234);
+    // its last strike, ruling (B) (the kill follows at 33.234 s)
+    expect((o?.endMs ?? 0) - START).toBe(33_211);
     expect(hasOffensiveSpellActive(u, s(30.217), null, undefined, bounds)).toBe(
       true,
     );
@@ -1134,5 +1152,28 @@ describe("T308 round 7 (codex 85-tk-L5-T308-1g)", () => {
     expect(
       hasOffensiveSpellActive(t, s(15), new Set(["mA"]), undefined, combat),
     ).toBe(false);
+  });
+});
+
+describe("T308 round 8 (codex 85-tk-L5-T308-1h)", () => {
+  it("#2 (a52e5d1d r1 shape): routine in-life REFRESHes renew the deadline and are no evidence past it", () => {
+    const u = enh([], []);
+    const t = 10;
+    // an 8 s Doom Winds refreshed every 5 s to 35 s: due off at 43 s
+    const rows = [
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", t, "sh"),
+      ...[15, 20, 25, 30, 35].map((x) =>
+        aura(LogEvent.SPELL_AURA_REFRESH, "466772", x, "sh"),
+      ),
+    ];
+    (u as any).auraEvents = rows;
+    const args = [u, u, "466772", "384352", s(18), s(60)] as const;
+    expect(auraSurelyUpPastMs(...args, { lifeStartMs: s(t) })).toBe(false);
+    // …a refresh after the renewed deadline is the evidence (1 #4)
+    (u as any).auraEvents = [
+      ...rows,
+      aura(LogEvent.SPELL_AURA_REFRESH, "466772", 45, "sh"),
+    ];
+    expect(auraSurelyUpPastMs(...args, { lifeStartMs: s(t) })).toBe(true);
   });
 });

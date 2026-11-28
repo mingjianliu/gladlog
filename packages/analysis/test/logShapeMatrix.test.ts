@@ -322,12 +322,19 @@ describe("log-shape matrix", () => {
       );
     };
     it("is indifferent to the neutral shapes, with and without the evidence", () => {
+      // on the printed grid: under ruling (B) the end is a log row's own
+      // instant (the REFRESH's renewed length), which a 4-decimal stamp
+      // moves below a millisecond
+      const onGrid = (v: number | null) => (v === null ? null : r2(v));
       for (const evidence of [true, false]) {
-        const base = read(avatar(evidence));
+        const base = onGrid(read(avatar(evidence)));
         for (const shape of NEUTRAL_SHAPES)
-          expect(read(shape.apply(avatar(evidence))), shape.name).toEqual(base);
+          expect(
+            onGrid(read(shape.apply(avatar(evidence)))),
+            shape.name,
+          ).toEqual(base);
       }
-      expect(read(avatar(true))).toBe(90);
+      expect(read(avatar(true))).toBe(53);
       expect(read(avatar(false))).toBeNull();
     });
     it("a re-broadcast mid-life is no lost end", () => {
