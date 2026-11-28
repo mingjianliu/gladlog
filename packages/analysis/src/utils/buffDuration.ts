@@ -928,7 +928,7 @@ function ownAuraRowsOf(
 /**
  * The stack count of the caster's own `auraId` row by row, and the rows
  * that are a stack GAINED: an APPLIED that finds it down, a DOSE row with a
- * higher count. An APPLIED while it is up is the aura re-sent — the count
+ * higher count (by as many stacks as it rose). An APPLIED while it is up is the aura re-sent — the count
  * stands and nothing is gained (codex 85-tk-L5-T309-1 #1, 30846f8e r1: a
  * re-listed Fired Up read as a third gain); a lone REFRESH shows it up.
  * A row logged more than the aura's own length after its last one finds
@@ -940,7 +940,10 @@ function ownStackWalk(
 ): Array<{
   row: ICombatUnit["auraEvents"][number];
   stacks: number;
-  gained: boolean;
+  /** stacks this row shows gained over the count before it; 0 = none */
+  gained: number;
+  /** the aura's row before this one, if any */
+  prev: ICombatUnit["auraEvents"][number] | undefined;
 }> {
   // a REMOVED the log lost: the aura cannot outlive its own length from
   // its last row, so a row later than that finds it down (codex
@@ -949,7 +952,10 @@ function ownStackWalk(
   const lengthS = spellEffectData[auraId]?.durationSeconds;
   let stacks = 0;
   let lastMs = -Infinity;
+  let prevRow: ICombatUnit["auraEvents"][number] | undefined;
   return ownAuraRowsOf(caster, auraId).map((row) => {
+    const prev = prevRow;
+    prevRow = row;
     const ev = row.logLine.event;
     const t = row.logLine.timestamp;
     if (
@@ -976,9 +982,11 @@ function ownStackWalk(
       row,
       stacks,
       gained:
-        stacks > before &&
-        (ev === LogEvent.SPELL_AURA_APPLIED ||
-          ev === LogEvent.SPELL_AURA_APPLIED_DOSE),
+        ev === LogEvent.SPELL_AURA_APPLIED ||
+        ev === LogEvent.SPELL_AURA_APPLIED_DOSE
+          ? Math.max(0, stacks - before)
+          : 0,
+      prev,
     };
   });
 }
@@ -1045,11 +1053,19 @@ function auraGainExtensionSeconds(
     return start;
   let ext = 0;
   for (const w of ownStackWalk(caster, p.gainAuraId)) {
-    if (!w.gained || loggedBeforeEdge(w.row, from)) continue;
+    if (w.gained === 0 || loggedBeforeEdge(w.row, from)) continue;
     if (to && loggedAfterEdge(w.row, to)) break;
     if (w.row.logLine.timestamp > from.ms + (baseSeconds + start + ext) * 1000)
       break;
-    ext += p.addSecondsPerEvent;
+    // a DOSE row that raises the count by more than one is that many gains
+    // (the log drops the rows between: codex 85-tk-L5-T309-1c, f966f2d1
+    // 2 → 4, dac75479 1 → 3) — when the count before it was read inside
+    // this run too; from an older reading only this row's own gain is sure
+    const n =
+      w.gained > 1 && (!w.prev || loggedBeforeEdge(w.prev, from))
+        ? 1
+        : w.gained;
+    ext += n * p.addSecondsPerEvent;
   }
   return start + ext;
 }

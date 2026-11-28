@@ -628,6 +628,26 @@ describe("pipeline T309 — review 85-tk-L5-T309-1", () => {
     );
     expect(buffFullDurationForCaster("190319", u, T0)).toBe(11);
   });
+  it("1c (f966f2d1 / dac75479): a DOSE row two stacks above the last reading inside Combustion is two gains; above a reading from before it, one", () => {
+    const inside = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 1),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 4, { amount: 3 }),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", inside, T0)).toBe(13);
+    const before = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", -3),
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 2, { amount: 3 }),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", before, T0)).toBe(11);
+  });
   it("#2 (581d783f): the ghoul's Dark Transformation ends where the death knight's does — coils after it add nothing", () => {
     const dk = {
       id: "dk",
