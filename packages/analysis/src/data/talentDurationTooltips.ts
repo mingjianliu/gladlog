@@ -552,6 +552,13 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   // 0.3 s — 605 files | the 1215-set: non-holders of Savor the Moment 169
   // of 169 | 92 of 93 (at a flat 10 s: 3 | 3 of all 446 | 419); its
   // holders run 0.8 / 1.6 / 2.4 s past that reading with 1 / 2 / 3 spheres.
+  // FLAG, known open (buffDurationScan --per-app, clean lives exact: 471 of
+  // 479 | 433 of 451, shorter 0): reads short by 0.8 s per uncounted start
+  // sphere, never long — the sphere count comes from numbered DOSE rows
+  // only, and 19 of the 27 longer lives have a sphere-sized gap with no
+  // numbered row before the cast (562fab04: 12.8 s read, 14.4 s logged =
+  // three spheres). Reading it off sphere REFRESH rows / Glorious
+  // Incandescence procs is pipeline T338.
   "190319": {
     event: "aura-gain",
     talentSpellId: "1257348",
