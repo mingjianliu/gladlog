@@ -300,8 +300,25 @@ export interface ITooltipPerCritDuration extends ITooltipPerEventBase {
   event: "own-crit";
 }
 
+/** The event is the caster gaining (a stack of) another aura of its own —
+ * each APPLIED / APPLIED_DOSE row of `gainAuraId` on it while the aura is
+ * up. No cap. */
+export interface ITooltipAuraGainDuration extends ITooltipPerEventBase {
+  event: "aura-gain";
+  gainAuraId: string;
+  /** a second talent that lengthens the application at its start by the
+   * stacks of an aura the caster holds at that instant (the press spends
+   * them) */
+  startStacks?: {
+    talentSpellId: string;
+    stackAuraId: string;
+    secondsPerStack: number;
+    capSeconds: number;
+  };
+}
+
 export type ITooltipPerEventDuration =
-  ITooltipPerPressDuration | ITooltipPerCritDuration;
+  ITooltipPerPressDuration | ITooltipPerCritDuration | ITooltipAuraGainDuration;
 
 // Spiritwalker's Momentum 443425: 「使用带有施法时间的法术会使灵魂行者的恩赐和
 // 灵魂行者的神盾的持续时间延长1秒，最多可延长4秒」. 605 files, per holder
@@ -508,6 +525,39 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   },
   ...ROLL_ENHANCEMENT_ROWS,
   ...DARK_TRANSFORMATION_ROWS,
+  // Combustion 190319 (pipeline T309 c), two Fire talents:
+  // · Fired Up 1257348: 「焚烧殆尽现在会将燃烧的持续时间延长${$s2/1000}.1秒」
+  //   — effect 1 is a label modifier (aura 219, op 23, label 5673, base
+  //   1000 ms) whose label covers no observed spell, and nothing of the
+  //   talent reaches 190319 by class mask or label: the script reads the
+  //   value. Each gain of its buff 1257350 (APPLIED / APPLIED_DOSE on the
+  //   mage) while Combustion is up adds 1 s
+  //   (05b762f1: 13.0 / 12.0 / 13.0 s with 3 / 2 / 3 gains). Every Fire
+  //   mage in both sets holds it.
+  // · Savor the Moment 449412 (Sunfury): 「当你施放燃烧时，每有一个法术火焰
+  //   宝珠，其持续时间就延长${$s1/1000}.1秒，最多${$s2/1000}.1秒」 — 0.8 s
+  //   per Spellfire Sphere 448604 held at the cast, up to 2.4 s (effect 0:
+  //   aura 219, op 23, 800 ms on label 3511 = the sphere; effect 1: 2400);
+  //   the cast removes the spheres 1–23 ms after Combustion's APPLIED.
+  // Raw rows, pressed closed runs not cut by a death or the round's end,
+  // life against 10 s + 1 s per gain inside the growing window, within
+  // 0.3 s — 605 files | the 1215-set: non-holders of Savor the Moment 169
+  // of 169 | 92 of 93 (at a flat 10 s: 3 | 3 of all 446 | 419); its
+  // holders run 0.8 / 1.6 / 2.4 s past that reading with 1 / 2 / 3 spheres.
+  "190319": {
+    event: "aura-gain",
+    talentSpellId: "1257348",
+    untalentedBaseSeconds: 10,
+    addSecondsPerEvent: 1,
+    specs: ["63"],
+    gainAuraId: "1257350",
+    startStacks: {
+      talentSpellId: "449412",
+      stackAuraId: "448604",
+      secondsPerStack: 0.8,
+      capSeconds: 2.4,
+    },
+  },
   // Chosen of Frostbrood 1265633 (pipeline T309 b; two ranks): 「冰霜巨龙
   // 之怒使一个激活的冰霜之柱的持续时间延长${$s1/1000}.1秒」 — effect 0 a
   // dummy, base 2000 ms per rank, no class mask and no label (scripted).

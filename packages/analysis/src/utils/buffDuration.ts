@@ -1,4 +1,4 @@
-import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   sourcePressedAuraNear,
@@ -16,6 +16,7 @@ import {
 } from "../data/spellEffectData";
 import {
   type IHiddenCastEffect,
+  type ITooltipAuraGainDuration,
   type ITooltipPerEventDuration,
   TOOLTIP_DURATION_ROWS,
   TOOLTIP_PER_EVENT_DURATIONS,
@@ -455,6 +456,8 @@ function perEventExtensionSeconds(
   if (atMs === undefined) return 0;
   const p = perEventFor(spellId, caster);
   if (!p) return 0;
+  if (p.event === "aura-gain")
+    return auraGainExtensionSeconds(p, spellId, caster, baseSeconds, atMs);
   if (p.event === "own-crit")
     return onUnitId === undefined
       ? 0
@@ -858,6 +861,95 @@ function pressLanded(
     c.logLine.timestamp,
     dest,
   );
+}
+
+/** A REMOVED of the stack aura this close before the application is the
+ * press spending it (the rows of one press can be logged either way round). */
+const START_STACKS_SPENT_LEAD_MS = 100;
+
+/**
+ * The stacks of the caster's own `auraId` just before `atMs`: the last DOSE
+ * row's count, 1 after an APPLIED that found it down, 0 after its REMOVED.
+ * An APPLIED while it is up is the aura re-sent and keeps the count; a
+ * REMOVED within `START_STACKS_SPENT_LEAD_MS` before `atMs` is read past.
+ */
+function ownStacksBefore(
+  caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+  auraId: string,
+  atMs: number,
+): number {
+  let stacks = 0;
+  for (const a of caster.auraEvents ?? []) {
+    if (a.spellId !== auraId) continue;
+    if (a.srcUnitId !== caster.id || a.destUnitId !== caster.id) continue;
+    const t = a.logLine.timestamp;
+    if (t >= atMs) continue;
+    const ev = a.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      if (t >= atMs - START_STACKS_SPENT_LEAD_MS) continue;
+      stacks = 0;
+    } else if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      if (stacks === 0) stacks = 1;
+    } else if (
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+      ev === LogEvent.SPELL_AURA_REMOVED_DOSE
+    ) {
+      if (typeof a.amount === "number") stacks = a.amount;
+    } else if (ev === LogEvent.SPELL_AURA_REFRESH && stacks === 0) stacks = 1;
+  }
+  return stacks;
+}
+
+/**
+ * Pipeline T309: an aura that grows each time its caster gains another
+ * aura of its own (`ITooltipAuraGainDuration` — Combustion under Fired Up:
+ * +1 s per Fired Up stack gained) — each APPLIED / APPLIED_DOSE row of the
+ * gain aura on the caster inside the (growing) duration adds
+ * `addSecondsPerEvent` — plus what a second talent adds at the start for
+ * the stacks held then (`startStacks`: Savor the Moment). Walked on the run
+ * the log shows, as a press talent is; a gain after its REMOVED adds nothing.
+ */
+function auraGainExtensionSeconds(
+  p: ITooltipAuraGainDuration,
+  spellId: string,
+  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
+    Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+  baseSeconds: number,
+  atMs: number,
+): number {
+  const run = ownAuraRunNear(caster, spellId, atMs);
+  const fromMs = run?.fromMs ?? atMs;
+  const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
+  const st = p.startStacks;
+  const start =
+    st && talentModifierOwnershipOf(caster, st.talentSpellId) === "yes"
+      ? Math.min(
+          st.capSeconds,
+          Math.round(
+            st.secondsPerStack *
+              ownStacksBefore(caster, st.stackAuraId, fromMs) *
+              10,
+          ) / 10,
+        )
+      : 0;
+  const gains = (caster.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === p.gainAuraId &&
+        a.srcUnitId === caster.id &&
+        a.destUnitId === caster.id &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED_DOSE),
+    )
+    .map((a) => a.logLine.timestamp)
+    .filter((t) => t >= fromMs && t <= toMs)
+    .sort((a, b) => a - b);
+  let ext = 0;
+  for (const t of gains) {
+    if (t > fromMs + (baseSeconds + start + ext) * 1000) break;
+    ext += p.addSecondsPerEvent;
+  }
+  return start + ext;
 }
 
 /**

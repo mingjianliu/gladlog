@@ -18,6 +18,8 @@ import {
   buffFullDurationForCaster,
 } from "../src/utils/buffDuration";
 
+import { makeAuraEvent } from "./ported/testHelpers";
+
 beforeAll(async () => {
   await ensureAnalysisData();
 });
@@ -490,5 +492,87 @@ describe("pipeline T309 — Pillar of Frost under Chosen of Frostbrood", () => {
     expect(
       buffFullDurationForCaster("51271", dk(2, [["279302", 12.5]]), T0),
     ).toBe(12);
+  });
+});
+
+describe("pipeline T309 — Combustion under Fired Up and Savor the Moment", () => {
+  // Fired Up 1257348: spec node 110423, entry 137035; Savor the Moment
+  // 449412: hero node 94650, entry 117253 (talentIdMap)
+  const FIRED_UP = { id1: 110423, id2: 137035, count: 1 };
+  const SAVOR = { id1: 94650, id2: 117253, count: 1 };
+  const row = (ev: LogEvent, id: string, sec: number, amount?: number) => ({
+    ...makeAuraEvent(ev, id, T0 + sec * 1000, "mage", "mage", "BUFF"),
+    ...(amount !== undefined ? { amount } : {}),
+  });
+  const mage = (talents: unknown[], auraEvents: unknown[]) =>
+    ({
+      id: "mage",
+      spec: "63",
+      info: { talents, pvpTalents: [] },
+      spellCastEvents: [],
+      auraEvents,
+    }) as never;
+  const COMBUSTION = row(LogEvent.SPELL_AURA_APPLIED, "190319", 0);
+  it("05b762f1: 10 s + 1 s per Fired Up stack gained inside it — three gains, 13 s", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        COMBUSTION,
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 2.15),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 5.19, 2),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 6.34, 3),
+        // a refresh, a spent stack and a gain past the end add nothing
+        row(LogEvent.SPELL_AURA_REFRESH, "1257350", 6.34),
+        row(LogEvent.SPELL_AURA_REMOVED_DOSE, "1257350", 10.16, 2),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 18.35),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(13);
+    // without the talent, or without the application's time: 10 s
+    expect(
+      buffFullDurationForCaster("190319", mage([], [COMBUSTION]), T0),
+    ).toBe(10);
+    expect(buffFullDurationForCaster("190319", u)).toBe(10);
+  });
+  it("Savor the Moment: 0.8 s per Spellfire Sphere held at the cast, up to 2.4 s; a gain inside the longer window counts", () => {
+    const spheres = (n: number) => [
+      row(LogEvent.SPELL_AURA_APPLIED, "448604", -30),
+      ...(n >= 2
+        ? [row(LogEvent.SPELL_AURA_APPLIED_DOSE, "448604", -20, 2)]
+        : []),
+      ...(n >= 3
+        ? [row(LogEvent.SPELL_AURA_APPLIED_DOSE, "448604", -10, 3)]
+        : []),
+      // the aura re-sent while up keeps the count
+      row(LogEvent.SPELL_AURA_APPLIED, "448604", -5),
+      // the cast spends them just after Combustion goes up
+      row(LogEvent.SPELL_AURA_REMOVED, "448604", 0.02),
+    ];
+    const life = (n: number, talents: unknown[], more: unknown[] = []) =>
+      buffFullDurationForCaster(
+        "190319",
+        mage(talents, [...spheres(n), COMBUSTION, ...more]),
+        T0,
+      );
+    expect(life(1, [FIRED_UP, SAVOR])).toBeCloseTo(10.8, 5);
+    expect(life(2, [FIRED_UP, SAVOR])).toBeCloseTo(11.6, 5);
+    expect(life(3, [FIRED_UP, SAVOR])).toBeCloseTo(12.4, 5);
+    // not a holder: the spheres add nothing
+    expect(life(3, [FIRED_UP])).toBe(10);
+    // a gain at 12 s is inside 12.4 s, and outside the 10 s of a non-holder
+    const late = [row(LogEvent.SPELL_AURA_APPLIED, "1257350", 12)];
+    expect(life(3, [FIRED_UP, SAVOR], late)).toBeCloseTo(13.4, 5);
+    expect(life(3, [FIRED_UP], late)).toBe(10);
+  });
+  it("spheres removed before the cast (not by it) count for nothing", () => {
+    const u = mage(
+      [FIRED_UP, SAVOR],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "448604", -30),
+        row(LogEvent.SPELL_AURA_REMOVED, "448604", -8),
+        COMBUSTION,
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(10);
   });
 });

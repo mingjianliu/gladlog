@@ -703,6 +703,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
           ? [...p.qualifyingSpellIds, ...(p.endsAtCastIds ?? [])]
           : [],
       ),
+      // the aura whose gain extends it, and the stack aura / talent read at
+      // its start (pipeline T309: Fired Up, Savor the Moment)
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) =>
+        p.event === "aura-gain"
+          ? [
+              p.gainAuraId,
+              ...(p.startStacks
+                ? [p.startStacks.stackAuraId, p.startStacks.talentSpellId]
+                : []),
+            ]
+          : [],
+      ),
       // the effect rows read as casts with no cast row, and what sends them
       // (T246 review: a renumbered effect id would rot unseen)
       ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) =>
