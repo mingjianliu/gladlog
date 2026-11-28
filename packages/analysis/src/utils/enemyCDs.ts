@@ -839,6 +839,10 @@ function observedEffectEndOn(
     ({ iv, destId }) =>
       ids.has(iv.spellId) &&
       iv.srcUnitName === caster.name &&
+      // …and, where the row gives its source, this caster's own: a
+      // same-name unit's copy is not this press's (assembly review
+      // 80-PIPE-261, codex 85-tk-L6-T323-3 #3)
+      (iv.srcUnitId === undefined || iv.srcUnitId === caster.id) &&
       !iv.inferredStart &&
       iv.fromS < nextSameCastS &&
       (onlyDestId === undefined || destId === onlyDestId),

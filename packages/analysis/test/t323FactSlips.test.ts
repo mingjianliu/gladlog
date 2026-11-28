@@ -515,6 +515,21 @@ describe("T323 (c) — codex 85-tk-L6-T323-2", () => {
     expect(s.to).toBeCloseTo(335.43, 2);
   });
 
+  it("…nor is it this press's span when it starts inside the press's window (assembly review 80-PIPE-261)", () => {
+    const other = holder("v", CombatUnitType.Player, [
+      {
+        ...aura("v", "370969", LogEvent.SPELL_AURA_APPLIED, 329.42),
+        srcUnitId: "dh2",
+      },
+      {
+        ...aura("v", "370969", LogEvent.SPELL_AURA_REMOVED, 333.9),
+        srcUnitId: "dh2",
+      },
+    ]);
+    const s = huntSpan({ v: other, ...pet(dotRows("pet", 329.42, 335.43)) });
+    expect(s.to).toBeCloseTo(335.43, 2);
+  });
+
   // #3 / #4: an effect laid along the press's flight (Breath of Eons 442204,
   // Temporal Wound 409560, T122)
   const BOE = "442204";
