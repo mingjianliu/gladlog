@@ -1203,3 +1203,37 @@ describe("T308 round 9 (codex 85-tk-L5-T308-1i)", () => {
     ).toBe(s(21));
   });
 });
+
+describe("T308 (codex 80-PIPE-259): `untilLine` — the next life's millisecond is split by log line", () => {
+  const hit = (sec: number, lineIndex: number) => ({
+    srcUnitId: "sh",
+    destUnitId: "e1",
+    spellId: "466772",
+    spellName: "Doom Winds",
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(sec), lineIndex },
+  });
+  const unit = (damage: unknown[]) => {
+    const u = enh([], []);
+    (u as any).auraEvents = [
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh"),
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", 22.7, "sh"),
+    ];
+    (u as any).damageOut = damage;
+    return u;
+  };
+  // 8 s from 10 s: due off at 18 s; the next life's APPLIED at 22.7 s, line 500
+  const read = (u: ReturnType<typeof unit>, untilLine?: number) =>
+    auraSurelyUpEndMs(u, u, "466772", "384352", s(18), s(22.7), {
+      lifeStartMs: s(10),
+      ...(untilLine !== undefined ? { untilLine } : {}),
+    });
+  it("a hit in that millisecond logged after the APPLIED is the new life's: no evidence", () => {
+    expect(read(unit([hit(22.7, 501)]), 500)).toBeUndefined();
+  });
+  it("…logged before it, it is this life up at that instant", () => {
+    expect(read(unit([hit(22.7, 499)]), 500)).toBe(s(22.7));
+  });
+  it("without a line the whole millisecond counts, as before", () => {
+    expect(read(unit([hit(22.7, 501)]))).toBe(s(22.7));
+  });
+});

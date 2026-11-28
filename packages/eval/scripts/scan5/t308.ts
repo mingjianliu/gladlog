@@ -57,6 +57,18 @@ let seen = new Set<string>();
 /** spell → evidence → distinct facts */
 let perSpell = new Map<string, Map<string, number>>();
 
+/** a REMOVED in the next APPLIED's own millisecond, by which is logged first */
+let sameMs = new Map<string, number>();
+
+const lineOf = (r: any): number | undefined => r.logLine?.lineIndex;
+/** `a` before `b` in the log: by time, then by line */
+const loggedBefore = (a: any, b: any): boolean =>
+  tsOf(a) !== tsOf(b)
+    ? tsOf(a) < tsOf(b)
+    : lineOf(a) !== undefined &&
+      lineOf(b) !== undefined &&
+      lineOf(a)! < lineOf(b)!;
+
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;
   if (!owner) return;
@@ -197,18 +209,34 @@ export function run(ctx: IRoundCtx): void {
         tsOf(r) > tsOf(app) &&
         !resent.has(r),
     );
+    // …in log order: a REMOVED in the new APPLIED's own millisecond closes
+    // this life only when logged before it (codex 80-PIPE-259 (a))
     const gone = own.find(
       (r) =>
         r.spellId === app.spellId &&
         ev(r) === REMOVED &&
         tsOf(r) > tsOf(app) &&
-        tsOf(r) <=
-          Math.min(
-            endMs,
-            ctx.start + renewed * 1000,
-            nextApplied ? tsOf(nextApplied) : Infinity,
-          ),
+        tsOf(r) <= Math.min(endMs, ctx.start + renewed * 1000) &&
+        (!nextApplied || loggedBefore(r, nextApplied)),
     );
+    // inventory: a REMOVED sharing its millisecond with the next APPLIED
+    if (first && nextApplied) {
+      // …the life's first REMOVED after its start: an earlier one closed it
+      const firstGone = own.find(
+        (r) =>
+          r.spellId === app.spellId && ev(r) === REMOVED && tsOf(r) > tsOf(app),
+      );
+      const same =
+        firstGone && tsOf(firstGone) === tsOf(nextApplied)
+          ? firstGone
+          : undefined;
+      if (same) {
+        const k = loggedBefore(same, nextApplied)
+          ? "REMOVED first"
+          : "APPLIED first";
+        sameMs.set(k, (sameMs.get(k) ?? 0) + 1);
+      }
+    }
     // the aura's own name: an effect aura is not its cast (codex
     // 85-tk-L5-T308-1l: Divine Resonance 1266308 printed as Divine Toll)
     auraName.set(
@@ -255,6 +283,11 @@ export function run(ctx: IRoundCtx): void {
       capMs,
       reappliedRow ? Math.min(untilMs, tsOf(reappliedRow)) : untilMs,
       {
+        // …by log line: a row in the new APPLIED's millisecond logged after
+        // it is the new life's (codex 80-PIPE-259 (b))
+        ...(reappliedRow && lineOf(reappliedRow) !== undefined
+          ? { untilLine: lineOf(reappliedRow) }
+          : {}),
         nextPressMs: ctx.start + renewed * 1000,
         // a row of the press's other effect aura is no evidence (1c #9)
         otherAuraIds: otherEffectAurasOf(s.spellId, app.spellId),
@@ -305,6 +338,9 @@ export function report(): string[] {
   const out = [
     "burstAuraPastSpan inventory — closed lives per aura (APPLIED to REMOVED, no later press inside): n / max s; can't-tell facts ending inside the longest closed life",
   ];
+  out.push(
+    `  a REMOVED in the next APPLIED's own millisecond (facts): REMOVED first ${sameMs.get("REMOVED first") ?? 0} (closes the life), APPLIED first ${sameMs.get("APPLIED first") ?? 0} (the new life's)`,
+  );
   const by = new Map<string, { n: number; inside: number }>();
   for (const u of undecided) {
     const max = Math.max(0, ...(lives.get(u.aura) ?? []));
@@ -329,7 +365,14 @@ export function report(): string[] {
   return out;
 }
 
-export const state = () => ({ lives, auraName, undecided, seen, perSpell });
+export const state = () => ({
+  lives,
+  auraName,
+  undecided,
+  seen,
+  perSpell,
+  sameMs,
+});
 export const load = (st: ReturnType<typeof state>): void => {
-  ({ lives, auraName, undecided, seen, perSpell } = st);
+  ({ lives, auraName, undecided, seen, perSpell, sameMs } = st);
 };

@@ -224,9 +224,21 @@ export function auraSurelyUpEndMs(
     /** the life's start: its own REFRESH / DOSE rows from here on renew the
      * deadline (codex 85-tk-L5-T308-1h #2); unset, only rows past `capMs` */
     lifeStartMs?: number;
+    /** the log line `untilMs` stands for (the next life's APPLIED row): a
+     * row in that millisecond is this life's only when logged before it
+     * (codex 80-PIPE-259: a hit of the new life in its APPLIED's own
+     * millisecond read as the old one up) */
+    untilLine?: number;
   } = {},
 ): number | undefined {
   const nextPressMs = opts.nextPressMs ?? Infinity;
+  const pastUntil = (r: {
+    logLine: { timestamp: number; lineIndex?: number };
+  }) =>
+    r.logLine.timestamp > untilMs ||
+    (opts.untilLine !== undefined &&
+      r.logLine.timestamp === untilMs &&
+      (r.logLine.lineIndex ?? -1) >= opts.untilLine);
   const fromMs = capMs + AURA_SURELY_UP_PAST_MS;
   if (!(untilMs > fromMs)) return undefined;
   // a re-broadcast REMOVED + APPLIED pair is one aura, not a lost end
@@ -273,7 +285,7 @@ export function auraSurelyUpEndMs(
   let lastOwnMs = -Infinity;
   for (const a of own) {
     const t = a.logLine.timestamp;
-    if (t < lifeStartMs || t > untilMs || !renewing(a.logLine.event)) continue;
+    if (t < lifeStartMs || pastUntil(a) || !renewing(a.logLine.event)) continue;
     lastOwnMs = t;
     if (t > deadline + AURA_SURELY_UP_PAST_MS) surely = true;
     const d = officialDurationS(auraId, caster as never, t);
@@ -302,7 +314,7 @@ export function auraSurelyUpEndMs(
     if (r.srcUnitId !== caster.id) continue;
     if (holder.id !== caster.id && r.destUnitId !== holder.id) continue;
     const t = r.logLine.timestamp;
-    if (t < lifeStartMs || t >= rowsUntilMs || t > untilMs) continue;
+    if (t < lifeStartMs || t >= rowsUntilMs || pastUntil(r)) continue;
     const { attackSpellId, attackSpellName } = r as {
       attackSpellId?: string;
       attackSpellName?: string;
