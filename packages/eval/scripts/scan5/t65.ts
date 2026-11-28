@@ -67,6 +67,7 @@ import {
   TIMEWALKER_LENGTHENED_IDS,
 } from "@gladlog/analysis/src/utils/buffDuration";
 import { feignsWithoutTacticsMs } from "@gladlog/analysis/src/utils/castStopEvidence";
+import { FEIGN_NO_TACTICS_NOTE } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -408,7 +409,8 @@ function feignNoTactics(ctx: IRoundCtx): void {
           !!t &&
           t[2] === pid &&
           Math.abs(secOf(t[1]!) - s) <= 1 &&
-          l.includes("Feign Death")
+          // the talentless form, not the shield's (codex 85-tk-L5-T324-1b #2)
+          l.includes(`Feign Death (${FEIGN_NO_TACTICS_NOTE})`)
         );
       });
       if (line) continue;

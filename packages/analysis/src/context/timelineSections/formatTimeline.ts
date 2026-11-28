@@ -513,7 +513,7 @@ export function formatTimeline(
       : []),
     ...(enemyDefLines.some((l) => l.includes(FEIGN_NO_TACTICS_NOTE))
       ? [
-          `    \`(${FEIGN_NO_TACTICS_NOTE})\` = a Feign Death of a hunter without the Survival Tactics PvP talent: it drops the hunter as a target and stops casts aimed at it, shields nothing, and the log writes no end for it;`,
+          `    \`(${FEIGN_NO_TACTICS_NOTE})\` = a Feign Death of a hunter without the Survival Tactics PvP talent: it drops the hunter as a target and stops casts aimed at it, shields nothing, and the log writes no end for it — a fact only: KILL ATTEMPTS never names it;`,
         ]
       : []),
     "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
