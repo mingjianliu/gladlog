@@ -69,7 +69,6 @@ import {
   TIMEWALKER_LENGTHENED_IDS,
 } from "@gladlog/analysis/src/utils/buffDuration";
 import { feignsWithoutTacticsMs } from "@gladlog/analysis/src/utils/castStopEvidence";
-import { FEIGN_NO_TACTICS_NOTE } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -79,6 +78,7 @@ import {
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "@gladlog/analysis/src/utils/enemyCDs";
+import { FEIGN_NO_TACTICS_NOTE } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 
 import {

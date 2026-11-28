@@ -17,7 +17,6 @@ import {
   buffDurationRangeForCaster,
   buffFullDurationForCaster,
 } from "../src/utils/buffDuration";
-
 import { makeAuraEvent } from "./ported/testHelpers";
 
 beforeAll(async () => {

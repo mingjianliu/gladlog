@@ -37,6 +37,7 @@
  * impossible presses and all re-presses, and the shortfall after the
  * Blackout Kick reduction is taken.
  */
+import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import {
   cdAvailableAt,
   cdMaybeAvailableAt,
@@ -45,7 +46,6 @@ import {
   spendsSharedChargeOf,
   unitCooldownEntry,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import { EVENT_COOLDOWN_REDUCTIONS } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import {
   getPlayerTalentRanks,
   talentsOf,
