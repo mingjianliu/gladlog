@@ -207,7 +207,12 @@ export function run(ctx: IRoundCtx): void {
             nextApplied ? tsOf(nextApplied) : Infinity,
           ),
     );
-    auraName.set(app.spellId, s.spellName);
+    // the aura's own name: an effect aura is not its cast (codex
+    // 85-tk-L5-T308-1l: Divine Resonance 1266308 printed as Divine Toll)
+    auraName.set(
+      app.spellId,
+      getEnglishSpellName(app.spellId, app.spellName ?? "") || s.spellName,
+    );
     // a life the log closes, with no later press of the spell inside it
     if (gone) {
       if (first && (tsOf(gone) - ctx.start) / 1000 <= renewed) {
