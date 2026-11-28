@@ -46,6 +46,17 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set(
   ]),
 );
 
+/** the kind of a press whose aura row has rows of the file before it */
+const ROWS_BETWEEN = "rows between | ";
+/**
+ * The file did not stall when rows lie between the aura and the press: the
+ * aura went up without a press and the press came after (a proc, then a
+ * press — the audit's 67/67 on the 605). Out of the total (T314); the two
+ * stall kinds stay in.
+ */
+export const outOfTotalKind = (check: string, kind: string): boolean =>
+  check === "noPressBesideLatePress" && kind.startsWith(ROWS_BETWEEN);
+
 /** how far after the aura row a press of the button is looked for */
 const LATE_PRESS_MS = 5000;
 
@@ -158,7 +169,7 @@ export function run(ctx: IRoundCtx): void {
           ? `no row of the file between the aura and the press | ${name}`
           : gapMs >= 1000
             ? `a ${(gapMs / 1000).toFixed(1)} s hole after the aura row, then rows before the press | ${name}`
-            : `rows between | ${name}`;
+            : `${ROWS_BETWEEN}${name}`;
       ctx.violate(
         C,
         kind,

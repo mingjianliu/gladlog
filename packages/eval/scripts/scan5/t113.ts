@@ -86,6 +86,12 @@ export const CHECKS = [
   "openerDebuffNoUnits",
   "sameMsActionBelowApplied",
 ] as const;
+/** whole checks out of the total (T314): an occasion and two measurements (its own header) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "visibleRunCastStart",
+  "openerDebuffNoUnits",
+  "sameMsActionBelowApplied",
+]);
 
 export const LINE_RE =
   /^(\d+):(\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?) \(immune, (\d+(?:\.\d)?)s — ended by a hit/;

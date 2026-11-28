@@ -123,6 +123,19 @@ export interface IScanModule {
   DB2_TABLES?: Readonly<Record<string, readonly string[]>>;
   /** kinds counted but kept out of a check's total, as `${check}|${kind}` */
   OUT_OF_TOTAL?: ReadonlySet<string>;
+  /** kinds kept out of the total that no fixed list can name (the kind is
+   * built from the row: a spell name, a length) — asked of every kind */
+  outOfTotalKind?: (check: string, kind: string) => boolean;
+  /** whole checks kept out of the total (T314): an inventory, an occasion,
+   * a measurement or another check's rows split again — by the check's own
+   * definition no row of it says a rendered line is false. Every kind of
+   * such a check prints `[not in the total]`. Names must be in `CHECKS`. */
+  MEASURED_ONLY?: ReadonlySet<string>;
+  /** whole checks that count a gap in the product's model which no rendered
+   * line states (T314): reported in their own section, and in or out of the
+   * total by the one switch `MODEL_GAPS_IN_TOTAL` (corpusFactScan5.ts).
+   * Names must be in `CHECKS`. */
+  MODEL_GAP?: ReadonlySet<string>;
   run: (ctx: IRoundCtx) => void;
   /** optional lines printed after the checks (inventories) */
   report?: () => string[];

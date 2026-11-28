@@ -262,9 +262,47 @@ const ALL_CHECKS = new Set(modules.flatMap((m) => [...m.CHECKS]));
 const OUT_OF_TOTAL = new Set(
   modules.flatMap((m) => [...(m.OUT_OF_TOTAL ?? [])]),
 );
+/**
+ * Whether the model-gap checks (`MODEL_GAP` of their modules: a gap in the
+ * product's model that no rendered line states) count in the total — the
+ * one switch (T314). Out: they are reported in their own section, so a
+ * shelved model gap (R63's Verdant Embrace) stays visible without reading
+ * as a false line (user ruling 2026-11-27: "移出总数").
+ */
+const MODEL_GAPS_IN_TOTAL = false;
+/** whole checks that are measurements (`MEASURED_ONLY` of their modules) */
+const MEASURED_ONLY = new Set(
+  modules.flatMap((m) => [...(m.MEASURED_ONLY ?? [])]),
+);
+const MODEL_GAP = new Set(modules.flatMap((m) => [...(m.MODEL_GAP ?? [])]));
+// a whole-check name that is not one of its module's checks would keep
+// nothing out and say nothing: the run fails on it instead
+for (const m of modules)
+  for (const c of [...(m.MEASURED_ONLY ?? []), ...(m.MODEL_GAP ?? [])])
+    if (!m.CHECKS.includes(c))
+      loadFailures.push(
+        `module ${m.file}: whole-check exclusion ${c} is not one of its CHECKS`,
+      );
+/** this process's own failures at import (a module that did not load, a
+ * whole-check name its module lacks) — kept apart so each `load` joins them
+ * to that snapshot's, never to an earlier snapshot's (codex
+ * 85-tk-L6-T314-2 #2) */
+const importFailures: readonly string[] = [...loadFailures];
+const kindRules = modules.flatMap((m) =>
+  m.outOfTotalKind ? [m.outOfTotalKind] : [],
+);
+/** why a whole check is out of the total, or undefined when it is in */
+const wholeCheckOut = (check: string): string | undefined =>
+  MEASURED_ONLY.has(check)
+    ? "measured only"
+    : MODEL_GAP.has(check) && !MODEL_GAPS_IN_TOTAL
+      ? "model gap, no rendered line"
+      : undefined;
 /** the report's total and the coverage rows read this one predicate */
 const inTotal = (check: string, kind: string): boolean =>
-  !OUT_OF_TOTAL.has(`${check}|${kind}`);
+  wholeCheckOut(check) === undefined &&
+  !OUT_OF_TOTAL.has(`${check}|${kind}`) &&
+  !kindRules.some((r) => r(check, kind));
 
 /**
  * The DB2 tables the selected checks read (`DB2_TABLES` of their modules)
@@ -356,6 +394,42 @@ function runRound(base: IContext): void {
       timed(`scan5/${m.file}`, () => m.run(ctx));
 }
 
+/**
+ * The total and what is kept out of it, by reason (T314); the model gaps
+ * get their own section with their counts, in the total or not.
+ */
+function reportTotals(checks: string[], say: (s: string) => void): void {
+  const rows = (c: string) => violations.filter((v) => v.check === c);
+  const facts = (vs: IViolation[]) => new Set(vs.map((v) => v.fact)).size;
+  let inTot = 0;
+  let measured = 0;
+  let gaps = 0;
+  let kinds = 0;
+  const kindOut = (c: string, k: string) =>
+    OUT_OF_TOTAL.has(`${c}|${k}`) || kindRules.some((r) => r(c, k));
+  // a kind already out of its check's total (a denominator kind) is filed
+  // there, not under its whole check's reason
+  for (const c of checks)
+    for (const v of rows(c)) {
+      if (inTotal(c, v.kind)) inTot++;
+      else if (kindOut(c, v.kind)) kinds++;
+      else if (MEASURED_ONLY.has(c)) measured++;
+      else gaps++;
+    }
+  say(
+    `corpusFactScan5 total: ${inTot} in-total violations; not in the total: measured-only checks ${measured}, model gaps ${gaps}, kinds out of their check's total ${kinds}`,
+  );
+  const gapChecks = checks.filter((c) => MODEL_GAP.has(c));
+  if (gapChecks.length === 0) return;
+  say(
+    `model gaps, no rendered line (${MODEL_GAPS_IN_TOTAL ? "in" : "not in"} the total):`,
+  );
+  for (const c of gapChecks) {
+    const vs = rows(c).filter((v) => !kindOut(c, v.kind));
+    say(`  ${c}: ${vs.length} (distinct facts ${facts(vs)})`);
+  }
+}
+
 function report(): void {
   for (const m of modules) m.finalize?.(record);
   const CHECKS = modules
@@ -367,8 +441,9 @@ function report(): void {
     const all = violations.filter((v) => v.check === c);
     const vs = all.filter((v) => inTotal(c, v.kind));
     const distinct = new Set(vs.map((v) => v.fact));
+    const out = wholeCheckOut(c);
     say(
-      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})`,
+      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size})${out ? `  [${out}: ${all.length} rows not in the total]` : ""}`,
     );
     const kinds = new Map<string, IViolation[]>();
     for (const v of all) {
@@ -388,6 +463,7 @@ function report(): void {
     }
   }
   for (const m of modules) for (const l of m.report?.() ?? []) say(l);
+  reportTotals(CHECKS, say);
   if (JSON_OUT) {
     writeJsonIndent1(JSON_OUT, {
       capture: resolve(dir),
@@ -437,7 +513,14 @@ export const scan: IScan<ReturnType<typeof state>> = {
   state,
   load(s) {
     ({ contexts, checked, violations } = s);
-    loadFailures.splice(0, loadFailures.length, ...s.loadFailures);
+    // the saved walk's failures and this process's own at import (a
+    // whole-check name its module lacks: a join under edited scan code must
+    // not drop it — codex 85-tk-L6-T314-1 #3)
+    loadFailures.splice(
+      0,
+      loadFailures.length,
+      ...new Set([...importFailures, ...s.loadFailures]),
+    );
     for (const m of stateful) m.load!(s.modules[m.file] as never);
   },
   merge: {

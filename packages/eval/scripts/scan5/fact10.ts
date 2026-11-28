@@ -215,6 +215,11 @@ export const CHECKS = [
   "trinketTookSeveralRoots",
   "evidencePressOnRestatedAura",
 ] as const;
+/** whole checks out of the total (T314): two exposures (their own headers) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "trinketTookSeveralRoots",
+  "evidencePressOnRestatedAura",
+]);
 
 /** fact10 class 1: ruled into the roster 2026-11-04; Ravager and Execution
  * Sentence 2026-11-05 (GH #184); the five 45 s buttons 2026-11-10 (R19,

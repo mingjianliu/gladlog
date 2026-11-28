@@ -27,6 +27,10 @@ import {
 import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = ["setBonusPressBeforeBack"] as const;
+/** whole checks a model gap, in its own section (T314): the set-bonus recharge the model misses; no rendered line states it (Verdant Embrace's is shelved by R63) */
+export const MODEL_GAP: ReadonlySet<string> = new Set([
+  "setBonusPressBeforeBack",
+]);
 
 const WATCH = [
   // Preservation 12.0 2pc 1264823: Verdant Embrace −2 s

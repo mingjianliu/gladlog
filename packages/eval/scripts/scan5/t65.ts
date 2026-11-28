@@ -100,6 +100,8 @@ export const CHECKS = [
   "survivalSet4",
   "timewalkerCap",
 ] as const;
+/** whole checks a model gap, in its own section (T314): GH #147 item 16's gap: the death row's claim (the healer was under control) still holds */
+export const MODEL_GAP: ReadonlySet<string> = new Set(["deathSetupUsable"]);
 
 const OCC_SYNC_VARIANT = "occasion: press on the timeline under another id";
 const OCC_SYNC_NONE = "occasion: no timeline press in the ms";

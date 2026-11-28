@@ -36,6 +36,11 @@ import { extractOffListPresses } from "@gladlog/analysis/src/utils/offListPress"
 import { type IRoundCtx, nameOf } from "./ctx";
 
 export const CHECKS = ["backSecondFloatBand", "resSecondFloatBand"] as const;
+/** whole checks out of the total (T314): occasions, counted so one guard can be chosen with a number (its own header) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "backSecondFloatBand",
+  "resSecondFloatBand",
+]);
 
 /** the kit low end's guard (`SECONDS_FLOAT_NOISE`) */
 const NARROW = 1e-8;

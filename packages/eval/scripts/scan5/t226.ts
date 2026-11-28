@@ -40,6 +40,10 @@ export const CHECKS = [
   "anothersSelfOnlyHealCd",
   "anothersSelfOnlyHealCdAnswers",
 ] as const;
+/** whole checks out of the total (T314): the inventory; `anothersSelfOnlyHealCdAnswers` is the assertion */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "anothersSelfOnlyHealCd",
+]);
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;

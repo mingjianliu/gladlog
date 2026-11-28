@@ -37,6 +37,8 @@ export const CHECKS = [
   "petLockOwnerTimeS",
   "petLockOwnerLockedS",
 ] as const;
+/** whole checks out of the total (T314): a game-behaviour measurement of the log; it reads no prompt line */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set(["petKickOwnerLock"]);
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   "petKickOwnerLock|ownerCommand",
   "petKickOwnerLock|ownerCommandWhileBlocked",

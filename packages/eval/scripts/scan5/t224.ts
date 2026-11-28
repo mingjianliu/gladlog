@@ -55,6 +55,11 @@ export const CHECKS = [
   "anothersOwnWallById",
   "anothersPressCategory",
 ] as const;
+/** whole checks out of the total (T314): inventories of the presses a window's answer reads; `anothersOwnWallAnswers` is the assertion */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "anothersPressCategory",
+  "anothersOwnWallById",
+]);
 
 export function run(ctx: IRoundCtx): void {
   const owner = ctx.owner;

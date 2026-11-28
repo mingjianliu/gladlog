@@ -69,6 +69,8 @@ import { APPLIED, ev, type IRoundCtx, REFRESH, REMOVED, tsOf } from "./ctx";
 const DUP = "sameSecondIdenticalLine";
 const UP = "stillUpAtRoundEndRemovedEarlier";
 export const CHECKS = [DUP, UP] as const;
+/** whole checks out of the total (T314): it cannot tell two real events of one second from one printed twice (its own header) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([DUP]);
 
 const K_BEFORE = "REMOVED before roundEndMs";
 const K_EDGE = "REMOVED within 100 ms before roundEndMs";

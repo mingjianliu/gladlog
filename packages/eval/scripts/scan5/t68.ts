@@ -36,6 +36,11 @@ import {
 } from "./ctx";
 
 export const CHECKS = ["resendPastBaseLength"] as const;
+/** `past-both`: the log lost the REMOVED and both readings close it at
+ * their length — they agree, nothing to contradict (T314) */
+export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
+  "resendPastBaseLength|past-both",
+]);
 
 /** a re-send this close to the base length is the expiry's own row order */
 const SLACK_S = 0.1;

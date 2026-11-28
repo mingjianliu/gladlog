@@ -253,6 +253,10 @@ export const CHECKS = [
   "primeRacialReadyUnstated",
   "stealthImmuneThroughHit",
 ] as const;
+/** whole checks out of the total (T314): read the kinds, not the total (its own header): every name is on the signed healer-save roster (GH #63) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "healMajorAsDefensive",
+]);
 
 export function run(ctx: IRoundCtx): void {
   doomWindsNoPressReading(ctx);

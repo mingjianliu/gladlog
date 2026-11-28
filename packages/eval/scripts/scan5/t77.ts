@@ -72,6 +72,18 @@ export const CHECKS = [
   "multiBoltAbsorbId",
   "mergedCcNoCast",
 ] as const;
+/** whole checks out of the total (T314): each counts an OCCASION of an
+ * item's trigger (the header). Named one by one, so a check added here later
+ * counts until it is named; divineHammerParry and multiBoltAbsorbId (0 rows
+ * on the 605 and the 1215) are not on T314's list and stay in. */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "ascendanceProcAsPress",
+  "iceBarrierNoPress",
+  "stealthAllowedPress",
+  "stealthVisibleRunPress",
+  "divineHammerMissTypes",
+  "mergedCcNoCast",
+]);
 
 const ASCENDANCE_RESTO = "114052";
 const PROC_MAX_S = 8;

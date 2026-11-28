@@ -31,6 +31,13 @@ export const CHECKS = [
   "hoverPressBeforeBack",
   "hoverRefusedAfterBack",
 ] as const;
+/** whole checks a model gap, in its own section (T314): Hover is in no kit
+ * and no `back` line, so neither direction of the gap reaches a rendered
+ * fact (the refusal side: codex 85-tk-L6-T314-1 #1, 6 rows on the 1215) */
+export const MODEL_GAP: ReadonlySet<string> = new Set([
+  "hoverPressBeforeBack",
+  "hoverRefusedAfterBack",
+]);
 /** a refusal this soon after an own cast is the global cooldown's */
 const GCD_S = 1.5;
 /** the model's return must be at least this far behind the refusal */

@@ -91,6 +91,8 @@ const SK = "sacrificeKitLasts";
 const CF = "cheetahFoxPress";
 const ZB = "statedInstantInZoneBand";
 export const CHECKS = [TD, SK, CF, ZB] as const;
+/** whole checks out of the total (T314): the time-less length's exposure (its own header) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([TD]);
 
 const SK_AGREES = "agrees";
 const SK_ALL_CUT = "every life cut";
@@ -106,6 +108,23 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   ...Object.values(CF_PHASES).map((p) => `${CF}|agrees (${p})`),
   `${ZB}|${ZB_NONE}`,
 ]);
+/** `kit Ns, longest full life Ms (…)` / `kit N–Ns, …`: the kind the row
+ * builds when the longest un-cut life is off the kit */
+const SK_OFF_KIND =
+  /^kit (\d+(?:\.\d+)?)(?:–\d+(?:\.\d+)?)?s, longest full life (\d+)s /;
+/**
+ * A Sacrifice life shorter than the kit refutes nothing (T314, the audit's
+ * 76/76 on the 605): an aura can end early but cannot outlive its length
+ * (Game-Behaviour Rule 7), and T194 ruled the early ends "nothing wrong".
+ * Out of the total; only a life past the kit stays in. M is rounded from a
+ * life more than `DIFFERS_S` off the kit, so `M < kitMin` is exactly the
+ * shorter side.
+ */
+export function outOfTotalKind(check: string, kind: string): boolean {
+  if (check !== SK) return false;
+  const m = SK_OFF_KIND.exec(kind);
+  return m !== null && Number(m[2]) < Number(m[1]);
+}
 
 /** a length this far off another is a different length */
 const DIFFERS_S = 0.5;

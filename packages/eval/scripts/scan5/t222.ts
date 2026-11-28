@@ -60,6 +60,11 @@ export const CHECKS = [
   "castlessPressCredited",
   "answeredOnlyByAnothersWall",
 ] as const;
+/** whole checks out of the total (T314): inventories (their own headers; the second for ruling R68) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "castlessPressCredited",
+  "answeredOnlyByAnothersWall",
+]);
 
 const WALLS = new Set<string>(spellIdLists.bigDefensiveSpellIds.map(String));
 /** the aura-only table's ids that are a self-targeted answer */
@@ -160,7 +165,13 @@ export function run(ctx: IRoundCtx): void {
         !burstWindowLongEnoughToJudge(p) ||
         p.responses.kite ||
         p.responses.attackerMoved ||
-        p.responseCasts.length === 0 ||
+        p.responseCasts.length === 0
+      )
+        continue;
+      // checked = the answered windows the candidate would judge (it read 0
+      // with rows under it: the audit's B report, T314)
+      ctx.bump("answeredOnlyByAnothersWall");
+      if (
         !p.responseCasts.every(
           (r) => r.category === "wall" && r.casterId !== pr.unitId,
         )

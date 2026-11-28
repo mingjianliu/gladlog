@@ -105,6 +105,8 @@ const PD = "passiveDispelPartPressedForm";
 const TS = "timeSpiralFreePressOnCooldown";
 const HP = "hiddenPressAtRelisting";
 export const CHECKS = [PD, TS, HP] as const;
+/** whole checks out of the total (T314): the precision of a line that stands at the latest its legend allows (T194: report, no fix) */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([HP]);
 
 const PD_AWAY =
   "pressed this round, every passive removal away from its presses";

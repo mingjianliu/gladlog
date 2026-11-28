@@ -83,6 +83,10 @@ export const CHECKS = [
   "healerLockEndedByAllyImmunity",
   "passiveAbsorbForward",
 ] as const;
+/** whole checks out of the total (T314): the forward inventory of passive absorbs */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "passiveAbsorbForward",
+]);
 
 export function run(ctx: IRoundCtx): void {
   troughPastRoundEndReaders(ctx);

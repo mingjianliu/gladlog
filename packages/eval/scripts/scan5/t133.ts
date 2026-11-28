@@ -55,6 +55,11 @@ import { pressedInsideEntries } from "./fact11";
 import { backBeforeNextPresses } from "./offListPress";
 
 export const CHECKS = ["pressedInsideSplit", "backBeforeNextSplit"] as const;
+/** whole checks out of the total (T314): each re-splits another check's rows by cause (`pressedInsideNeverBack`, `offListPressLine|backBeforeNextPress`), so every row is counted there already */
+export const MEASURED_ONLY: ReadonlySet<string> = new Set([
+  "pressedInsideSplit",
+  "backBeforeNextSplit",
+]);
 
 /** the entry with only the presses before `t` */
 function before(cd: IMajorCooldownInfo, t: number): IMajorCooldownInfo {
