@@ -410,3 +410,47 @@ describe("buffFullDurationForCaster — Avatar under Capacitance (T76, GH #173 D
     ).toEqual({ min: 20, max: 20 });
   });
 });
+
+describe("pipeline T309 — Dark Transformation grows 1 s per Death Coil / Epidemic", () => {
+  // Dark Transformation 1233448: spec node 76185, entry 96322 (talentIdMap)
+  const dk = (spec: string, casts: Array<[string, number]>) =>
+    ({
+      spec,
+      info: { talents: [{ id1: 76185, id2: 96322, count: 1 }], pvpTalents: [] },
+      spellCastEvents: casts.map(([id, s]) => press(id, s)),
+    }) as never;
+  it("96ada059 r0: four Death Coils inside it — 19 s; the ghoul's aura and the death knight's alike", () => {
+    const u = dk("252", [
+      ["47541", 4.05],
+      ["47541", 11.93],
+      ["47541", 13.49],
+      ["47541", 14.76],
+      // after its end at 19 s: extends nothing
+      ["47541", 21.1],
+    ]);
+    for (const id of ["1233448", "1235391"])
+      expect(buffFullDurationForCaster(id, u, T0)).toBe(19);
+  });
+  it("Necrotic Coil, Epidemic and Graveyard count; Death Strike does not; a press inside the grown window counts", () => {
+    const u = dk("252", [
+      ["1242174", 2],
+      ["207317", 5],
+      ["49998", 6],
+      ["383269", 14],
+      // inside only because the three before it grew the window to 18 s
+      ["47541", 17.5],
+    ]);
+    expect(buffFullDurationForCaster("1235391", u, T0)).toBe(19);
+  });
+  it("no application time, or another spec: the DB2 15 s", () => {
+    expect(buffFullDurationForCaster("1235391", dk("252", []))).toBe(15);
+    expect(
+      buffFullDurationForCaster("1235391", dk("251", [["47541", 2]]), T0),
+    ).toBe(15);
+    // no cap is named: the loadout's range has no upper end to print
+    expect(buffDurationRangeForCaster("1235391", dk("252", []))).toEqual({
+      min: 15,
+      max: 15,
+    });
+  });
+});

@@ -323,7 +323,17 @@ async function main(): Promise<void> {
               const r = resolveName(n);
               return [{ ...r, matchedBy: "subject" as const }];
             })()
-          : c.targets.map(resolveName);
+          : c.targets.map((t) =>
+              // 「此效果」 is the talent's own spell (pipeline T309: Dark
+              // Transformation 1233448 「凋零缠绕和扩散会使此效果的持续时间
+              // 延长…」) — every duration-bearing id of its name
+              t === "此效果" && nameOfId.has(talentId)
+                ? {
+                    ...resolveName(nameOfId.get(talentId)!),
+                    matchedBy: "subject" as const,
+                  }
+                : resolveName(t),
+            );
         if (named.length === 0) {
           unparsed.push({
             talentSpellId: talentId,

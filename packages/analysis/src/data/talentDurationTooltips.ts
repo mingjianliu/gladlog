@@ -428,6 +428,41 @@ const ROLL_ENHANCEMENT_ROWS: Record<string, ITooltipPerPressDuration> =
     ]),
   );
 
+// Dark Transformation 1233448 (pipeline T309, user ruling 2026-11-27: an
+// aura that outlives its official length has a mechanism to model). Its own
+// tooltip: 「凋零缠绕和扩散会使此效果的持续时间延长${$390268s1/1000}.1秒」 —
+// Death Coil and Epidemic extend it by 1 s (Eternal Agony 390268 effect 0,
+// a dummy with base 1000 ms and no class mask or label: scripted, so what
+// counts is read off the logs, as for Spiritwalker's Momentum). The talent
+// is the press itself, so every Unholy caster of it has the row. The press
+// puts 1235391 on the death knight and 1233448 on the ghoul; both end in one
+// millisecond (96ada059 r0: 19.011 s after four Death Coils).
+// Raw rows, every closed run of 1235391 with no REFRESH inside, logged life
+// against 15 s + 1 s per own cast inside it of Death Coil 47541 / Epidemic
+// 207317 and of what replaces each on the bar, Necrotic Coil 1242174 /
+// Graveyard 383269, within 0.2 s — 605 files | the 1215-set:
+//   at the model 632 of 751 | 311 of 379 (at a flat 15 s: 16 | 20);
+//   shorter 115 | 63 — the round ended inside it 74 | 37, its death knight
+//   died 21 | 12, neither 20 | 14 (open: the ghoul's death is not read);
+//   longer 4 | 5, by 0.4–2.0 s (open).
+// Death Strike does not count (96ada059 r0: 17.008 s with two Death Coils
+// and one Death Strike), nor a Death Coil cast by a summoned rider (445513,
+// a creature's row). No cap is named and none shows (26.0 s with nine).
+const DARK_TRANSFORMATION_ROW: ITooltipPerPressDuration = {
+  event: "press",
+  talentSpellId: "1233448",
+  untalentedBaseSeconds: 15,
+  addSecondsPerEvent: 1,
+  specs: ["252"],
+  qualifyingSpellIds: new Set(["47541", "207317", "1242174", "383269"]),
+};
+const DARK_TRANSFORMATION_ROWS: Record<string, ITooltipPerPressDuration> = {
+  // the ghoul's aura, under the cast's id
+  "1233448": DARK_TRANSFORMATION_ROW,
+  // the death knight's own
+  "1235391": DARK_TRANSFORMATION_ROW,
+};
+
 /** aura id → its per-event extension */
 export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   Record<string, ITooltipPerEventDuration>
@@ -465,6 +500,7 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
     qualifyingSpellIds: new Set(["435222"]),
   },
   ...ROLL_ENHANCEMENT_ROWS,
+  ...DARK_TRANSFORMATION_ROWS,
   // Burn to Ash 446663: 「真理觉醒爆击时，其持续时间延长$s1秒」 (effect 0
   // dummy, bp 2) on Truth's Wake 403695, Wake of Ashes' DoT (DB2 9 s). GH
   // #183, 2026-11-03, raw ticks of 605-file subsets: non-holders 54 of 54

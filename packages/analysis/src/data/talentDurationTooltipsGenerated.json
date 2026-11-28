@@ -7607,11 +7607,20 @@
    "sentence": "凋零缠绕和扩散会使此效果的持续时间延长${$390268s1/1000}.1秒",
    "targets": [
     {
-     "name": "此效果",
-     "matchedBy": "exact",
-     "spellIds": [],
-     "observedIds": [],
-     "baseSeconds": {}
+     "name": "黑暗突变",
+     "matchedBy": "subject",
+     "spellIds": [
+      "1233448",
+      "1235391"
+     ],
+     "observedIds": [
+      "1233448",
+      "1235391"
+     ],
+     "baseSeconds": {
+      "1233448": 15,
+      "1235391": 15
+     }
     }
    ]
   },
