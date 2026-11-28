@@ -96,6 +96,7 @@ import {
   hiddenPressMs,
   isResyncBatchAt,
   ownAuraUpBeforeRow,
+  unseenLeadMs,
 } from "./hiddenPress";
 import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
@@ -1879,6 +1880,45 @@ export function spanHoldsOwnWallSecond(
  * second of slack absorbs the log's aura-event jitter. */
 export const REMOVED_EARLY_SLACK_S = 1;
 
+/** Did an aura of `caster`'s that ran `observedS` end early of its full
+ * length (`buffFullDurationForCaster`, `REMOVED_EARLY_SLACK_S`; a hasted
+ * length against the channel bound) — the `[ENEMY DEF]` line's length-alone
+ * reading of `— removed early`. */
+export function endsEarlyOnLength(
+  spellId: string,
+  caster: ICombatUnit,
+  observedS: number,
+): boolean {
+  const full = buffFullDurationForCaster(spellId, caster);
+  if (full === undefined) return false;
+  // a length that moves with haste has no fixed end to be early of (fact8
+  // D38, `runsWithHaste` in timelineHelpers); the channel bound stands in
+  if (HASTE_DURATION_SPELL_IDS.has(spellId))
+    return observedS < full * CHANNEL_STOPPED_MAX_SHARE;
+  return observedS < full - REMOVED_EARLY_SLACK_S;
+}
+
+/**
+ * Could an aura of `holder`'s that the log first showed in the re-stating
+ * batch at `batchMs` (a press made while the unit was unseen —
+ * `[pressed while unseen]`) and that it then showed for `observedS` have
+ * run its full length? The press lies at most `unseenLeadMs` before the
+ * batch, so its life is up to `observedS` + that lead. A `— removed early`
+ * read on length alone holds only when even that falls short (pipeline
+ * T321, 0284fcd9 r1 2:37: Cloak of Shadows 2.4 s seen + 2.6 s unseen of
+ * 5.0 s printed `removed early`). One predicate for the `[ENEMY DEF]` line
+ * and its audit (scan5/t194c `unseenTailRemovedEarly`).
+ */
+export function unseenTailCouldBeFull(
+  holder: ICombatUnit,
+  spellId: string,
+  observedS: number,
+  batchMs: number,
+): boolean {
+  const leadMs = unseenLeadMs(holder, batchMs);
+  return !endsEarlyOnLength(spellId, holder, observedS + leadMs / 1000);
+}
+
 export interface IEnemyDefensiveEvent {
   atSeconds: number;
   /** An aura kind's PRESS: the logged cast of the same button by the same
@@ -2649,15 +2689,8 @@ export function enemyDefensiveEventsUncached(
     }
     return iv;
   };
-  const removedEarly = (spellId: string, observed: number): boolean => {
-    const full = buffFullDurationForCaster(spellId, enemy);
-    if (full === undefined) return false;
-    // a length that moves with haste has no fixed end to be early of (fact8
-    // D38, `runsWithHaste` in timelineHelpers); the channel bound stands in
-    if (HASTE_DURATION_SPELL_IDS.has(spellId))
-      return observed < full * CHANNEL_STOPPED_MAX_SHARE;
-    return observed < full - REMOVED_EARLY_SLACK_S;
-  };
+  const removedEarly = (spellId: string, observed: number): boolean =>
+    endsEarlyOnLength(spellId, enemy, observed);
   /** `removedEarly` with the cause the log gives for that interval's end —
    * read off the aura's HOLDER (the recipient of an external). */
   const earlyEndOf = (
@@ -2843,6 +2876,23 @@ export function enemyDefensiveEventsUncached(
           earlyEndAtMs: undefined,
         }
       : e;
+  /** A press made while its holder was unseen: its life reaches up to
+   * `unseenLeadMs` before the batch the log first showed it in, so an early
+   * end on length alone stands only when even that life falls short
+   * (`unseenTailCouldBeFull`, pipeline T321); an end the log gives a cause
+   * for (dispelled, stolen, died, used up) stands as it is. */
+  const unseenEnd = (
+    iv: ISaveAuraInterval,
+    e: ReturnType<typeof earlyEndOf>,
+  ): ReturnType<typeof earlyEndOf> =>
+    unseenTailCouldBeFull(
+      enemy,
+      iv.spellId,
+      iv.toS - iv.fromS,
+      Math.round(combat.startTime + iv.fromS * 1000),
+    )
+      ? lengthFreeEnd(e)
+      : e;
   /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
    * of an aura kind (`pressSeconds`, F-E11). */
   const castRowsOf = (srcUnitName: string, spellId: string) =>
@@ -2998,7 +3048,10 @@ export function enemyDefensiveEventsUncached(
         pct: wallDoorPct(tableId, { carrierIsCaster: true, caster: enemy }),
         observedSeconds: observed,
         ...(unseenPressed(iv)
-          ? { unseenPress: true as const, ...earlyEndOf(enemy, iv, iv.spellId) }
+          ? {
+              unseenPress: true as const,
+              ...unseenEnd(iv, earlyEndOf(enemy, iv, iv.spellId)),
+            }
           : {
               noPressLogged: true as const,
               ...lengthFreeEnd(earlyEndOf(enemy, iv, iv.spellId)),
@@ -3058,7 +3111,10 @@ export function enemyDefensiveEventsUncached(
       ...(Number.isFinite(press)
         ? earlyEndOf(enemy, iv, iv.spellId)
         : unseenPressed(iv)
-          ? { unseenPress: true as const, ...earlyEndOf(enemy, iv, iv.spellId) }
+          ? {
+              unseenPress: true as const,
+              ...unseenEnd(iv, earlyEndOf(enemy, iv, iv.spellId)),
+            }
           : {
               noPressLogged: true as const,
               ...lengthFreeEnd(earlyEndOf(enemy, iv, iv.spellId)),
@@ -3410,7 +3466,10 @@ export function enemyDefensiveEventsUncached(
         ? {
             observedSeconds: own.toS - own.fromS,
             ...(absorbed !== undefined ? { absorbedAmount: absorbed } : {}),
-            ...earlyEndOf(enemy, own, own.spellId),
+            // a press made unseen is read as the wall line reads one (T321)
+            ...(c.unseenPress
+              ? unseenEnd(own, earlyEndOf(enemy, own, own.spellId))
+              : earlyEndOf(enemy, own, own.spellId)),
           }
         : { removedEarly: false }),
     });

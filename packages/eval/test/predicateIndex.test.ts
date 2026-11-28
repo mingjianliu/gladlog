@@ -5774,6 +5774,17 @@ const INDEX: PredicateRow[] = [
     symbol: "hiddenPressMs",
     mod: hiddenPress,
   },
+  // pipeline T321: a save pressed unseen — could its life have been full
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "unseenTailCouldBeFull",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "unseenLeadMs",
+    mod: hiddenPress,
+  },
   {
     file: `${A}/utils/hiddenPress.ts`,
     symbol: "isResyncBatchAt",

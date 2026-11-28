@@ -126,6 +126,38 @@ const HIDDEN_AURA_LIFE_SLACK_MS = 1000;
  * 17.0 s). */
 const RELISTED_RUN_MAX_LIVES = 2;
 
+/**
+ * How long `unit` can have been out of the log's sight before the batch at
+ * `batchMs` re-stated it: from the last row of its own state before the
+ * batch — an aura row on it, a cast row of its own, an advanced sample of it
+ * — to the batch. A press made unseen lies inside that span, so its aura can
+ * have been up that much longer than the log shows. Its damage and heals are
+ * no such row: a stealthed unit's hits and ticks are still written while its
+ * own rows are not (pipeline T321, 0284fcd9 r1: Vanish at 2:34.618, the
+ * rogue's aura / cast / sample rows stop there and its damage rows run to
+ * 27 ms before the batch at 2:37.729 that re-stated Cloak of Shadows with
+ * 2.4 s of its 5.0 s left). Infinity when the unit has no such row before.
+ */
+export function unseenLeadMs(
+  unit: Pick<
+    ICombatUnit,
+    "id" | "auraEvents" | "spellCastEvents" | "advancedActions"
+  >,
+  batchMs: number,
+): number {
+  const before = batchMs - RESYNC_BATCH_SPAN_MS - 1;
+  let last = -Infinity;
+  const see = (t: number) => {
+    if (t <= before && t > last) last = t;
+  };
+  for (const a of unit.auraEvents ?? [])
+    if (a.destUnitId === unit.id) see(a.logLine.timestamp);
+  for (const c of unit.spellCastEvents ?? [])
+    if (c.srcUnitId === unit.id) see(c.logLine.timestamp);
+  for (const s of unit.advancedActions ?? []) see(s.timestamp);
+  return Number.isFinite(last) ? batchMs - last : Infinity;
+}
+
 /** How long an own aura whose REMOVED the log lost is still read as up
  * after its last (re)application: its official length + 1 s, else for good
  * (codex 21-R12-a #3). The corpus scan's `hiddenPressUnused` reads it too. */

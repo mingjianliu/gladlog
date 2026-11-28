@@ -60,6 +60,13 @@
  *      `anchor outside a re-stating batch` — the producer's own condition
  *        failing (0 by construction);
  *      out of the total: `anchor in a re-stating batch` — every other one.
+ *  - `unseenTailRemovedEarly` (pipeline T321): an `[ENEMY DEF]` line
+ *    tagged `[pressed while unseen]` that says `— removed early` (the
+ *    length-alone reading, no cause given). Wrong: the aura's life could
+ *    have been full — its shown length plus how long the unit was unseen
+ *    before the batch that re-stated it (`unseenTailCouldBeFull`, the
+ *    producer's predicate) reaches its length (0284fcd9 r1 2:37: Cloak of
+ *    Shadows 2.4 s seen + ~2.6 s unseen of 5.0 s).
  */
 import {
   MINOR_DISPEL_CAST_MERGE_S,
@@ -78,6 +85,10 @@ import {
   DISPEL_CAST_MATCH_WINDOW_MS,
   dispelIsDelayedRepeat,
 } from "@gladlog/analysis/src/utils/dispelKind";
+import {
+  ENEMY_DEF_UNSEEN_PRESS_TAG,
+  unseenTailCouldBeFull,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   GAP_CLOSER_BUTTONS,
   GAP_CLOSER_SPELL_IDS,
@@ -104,7 +115,8 @@ import {
 const PD = "passiveDispelPartPressedForm";
 const TS = "timeSpiralFreePressOnCooldown";
 const HP = "hiddenPressAtRelisting";
-export const CHECKS = [PD, TS, HP] as const;
+const UT = "unseenTailRemovedEarly";
+export const CHECKS = [PD, TS, HP, UT] as const;
 /** whole checks out of the total (T314): the precision of a line that stands at the latest its legend allows (T194: report, no fix) */
 export const MEASURED_ONLY: ReadonlySet<string> = new Set([HP]);
 
@@ -403,8 +415,52 @@ function hiddenPressAtRelisting(ctx: IRoundCtx): void {
   }
 }
 
+/** `0:12  [ENEMY DEF]   4(SRogue) (Subtlety Rogue): Cloak of Shadows (immune
+ * to magic, 2.4s — removed early) [pressed while unseen]` */
+const UNSEEN_EARLY = new RegExp(
+  String.raw`^\s*(\d+:\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)[^:]*: (.+?) \((?:[^()]*, )?(\d+\.\d)s — removed early\)(.*)$`,
+);
+
+function unseenTailRemovedEarly(ctx: IRoundCtx): void {
+  for (const line of ctx.lines) {
+    const m = UNSEEN_EARLY.exec(line);
+    if (!m || !m[5]!.includes(ENEMY_DEF_UNSEEN_PRESS_TAG)) continue;
+    const unit: any = ctx.unitOfPid(m[2]!);
+    if (!unit) continue;
+    ctx.bump(UT);
+    const s = secOf(m[1]!);
+    const name = m[3]!;
+    // the re-stated APPLIED the line stands at: the unit's own aura of that
+    // name, in the line's second, inside a re-stating batch
+    const anchor = ((unit.auraEvents ?? []) as any[]).find(
+      (a) =>
+        a.srcUnitId === unit.id &&
+        a.destUnitId === unit.id &&
+        ev(a) === APPLIED &&
+        Math.floor((tsOf(a) - ctx.start) / 1000) === s &&
+        nameOf(a.spellId, a.spellName) === name &&
+        isResyncBatchAt(unit, tsOf(a)),
+    );
+    if (!anchor) continue;
+    const shown = Number(m[4]);
+    if (
+      !unseenTailCouldBeFull(unit, String(anchor.spellId), shown, tsOf(anchor))
+    )
+      continue;
+    ctx.violate(
+      UT,
+      name,
+      tsOf(anchor),
+      `${unit.id}#${anchor.spellId}#${tsOf(anchor)}`,
+      `${unit.name} ${name} ${shown}s seen after a re-statement at ${m[1]}: could have run its full length unseen before it`,
+      line.trim().slice(0, 240),
+    );
+  }
+}
+
 export function run(ctx: IRoundCtx): void {
   passiveDispelPartPressedForm(ctx);
   timeSpiralFreePressOnCooldown(ctx);
   hiddenPressAtRelisting(ctx);
+  unseenTailRemovedEarly(ctx);
 }
