@@ -9054,3 +9054,46 @@ read against a 1.4 s marker). Final bundle on the cover set (wsl2, 87e3bc72c ->
 ce9d4c928, 1,140 contexts): in-total 11,533 -> 11,402, rose 0, gates identical;
 its last T284 commit was cover-checked in the lane (87e3bc72c -> ef784ed16:
 11,516 -> 11,402, rose 0).
+
+v683 (pipeline batch B265, Mac bundle M4: T268 T270b T291 T307 T308, on dev
+842058d06). Full check on wsl2 (BM-5-M4, 842058d06 -> cb53c2111; 605 | 1215,
+contexts 3,519 | 2,955): changed context files 209 | 268, signed lines
+2,431 | 4,828 (the runner's filtered diff: 200 | 127 files, 899 | 910 lines);
+gates identical on both. Per ticket (signed lines naming the spell, filtered
+diff):
+T291 — Void Metamorphosis 1217605 (Devourer) prints as a press the log writes
+only as its form, the GH #193 way (user 2026-11-27): friendly [PROC] -> [CD]
+`(pressed; the log has only its aura)`, enemy [ENEMY CD] / [RES] without
+`(no press)`; Void Metamorphosis lines 824 | 402; listGapPress form/ally,
+form/enemy, form/owner 152 + 184 + 76 -> 0 | 134 + 312 + 67 -> 0; the
+inventory kind resEnemyLeftPastLogEnd moves rows from `no press` to `outran
+its length` one for one (117 -> 3 and 251 -> 365 | 160 -> 0 and 291 -> 451).
+T268 — 12.1.5 went live on EU a day after NA, so EU logs of that day read the
+pre-12.1.5 Holy Priest cooldowns: 605 unchanged (its captures were identical
+in the T268-only run, BM-4-M4); 1215 Holy Word lines 459, Chastise 45,
+Apotheosis 36 (e.g. Chastise 23–55s -> 23–40s in the cooldown kit);
+backBeforeNextSplit Holy Word: Serenity 66 -> 0 and Sanctify 9 -> 0,
+offListPressLine backBeforeNextPress 93 -> 18 on 1215. The parser carries the
+field it reads (capture hashes change on both corpora).
+T270b — one charge given back on a one-charge pool is a reset for the 2 s
+fold: on 605 the restored 2:39 Chastise press of d5f35ce9 r6 (7 lines; they
+also name Holy Word), which leaves "your CC ready" at 2:46 and 3:01 —
+killWindowReadyGrid (printed ready, not ready at the printed second) 2 -> 0,
+drReaderAgreement killWindow:unresolved 420 -> 418; no 1215 lines apart from
+T268's.
+T308 — a burst aura with no logged REMOVED that is surely still up runs to
+its last evidence row (own damage/heal row, or a REFRESH / DOSE plus its
+official length), capped by the next press, death or the round's end: burst
+headers, target, defensive and ally-overlap rows 20 | 19 signed lines, plus
+one removed legend line on 605; ledgerWallSchool falls 6 -> 0 | 6 -> 0.
+The T308 gate reads a re-applied life's evidence up to the new application
+(80-PIPE-258), and splits the new application's millisecond by log line
+(80-PIPE-259; auraSurelyUpEndMs gains an `untilLine` option no product
+caller passes): 605 has no re-applied life, and 1215 has 3, none with an
+evidence row past its official end; no life's REMOVED shares a millisecond
+with the next APPLIED (0 | 0), so the counts are unchanged.
+T307 — the recast-floor scan keeps the paid presses around a bonus-charge
+press; it feeds no prompt (cdRecastFloorGenerated 22842|105 stale until the
+GH #115 regen).
+scan5 in-total 28,785 -> 28,365 | 33,089 -> 32,420 (pre-T314 accounting);
+rose only the inventory relabel above.

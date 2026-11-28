@@ -2041,5 +2041,12 @@
  *  Brewmaster brews read their Keg Smash / Tiger Palm / Black Ox Brew
  *  reductions; a charge-cap buff keeps a second Frenzied Regeneration
  *  press. See docs/prompt-version-history.md.
+ *
+ * v683 (2026-11-28; pipeline batch B265, Mac bundle M4: T268 T270b T291 T307
+ *  T308): 12.1.5's EU go-live a day after NA (Holy Priest cooldowns on EU logs
+ *  of that day); a one-charge give-back is a reset for the 2 s fold
+ *  (Apotheosis -> Chastise); Void Metamorphosis prints as a press the log
+ *  writes only as its form; a surely-up burst span ends at its last evidence
+ *  row. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 682;
+export const PROMPT_VERSION = 683;
