@@ -623,8 +623,10 @@ describe("context.resourceSnapshot unit tests", () => {
       // an offensive cooldown. It runs to its impact (T72 attempt 2,
       // `pressDeliveryEndSeconds`: the log shows the hit ~2 s after the
       // press), no longer the instant member's 8 s
+      // Combustion: pressed at 9.92 s, two Fired Up stacks gained inside it
+      // (11.66 / 13.16 s) — 10 s + 1 s each (pipeline T309 c)
       expect(resText).toContain(
-        "enemy:Meteor/Fire Mage(1s left),Combustion/Fire Mage(10s left)",
+        "enemy:Meteor/Fire Mage(1s left),Combustion/Fire Mage(12s left)",
       );
       // Verify the CC information
       // Counterspell locks for 6 s (user ruling 2026-09-18 over the official
