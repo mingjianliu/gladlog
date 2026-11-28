@@ -74,16 +74,37 @@ export function run(ctx: IRoundCtx): void {
   // closes the life as the builder pairs it (codex 85-tk-L5-T308-1d #7)
   // the owner's auras on a holder (its own, or the copy the press put on
   // another unit)
-  const rowsOn = (holder: any): any[] =>
-    dropAuraRebroadcasts(
+  // …a source-less REMOVED closes the OLDEST open run of its aura on the
+  // holder, whoever's — the threat reader's / builder's pairing, so it is
+  // the owner's only when that run is (codex 85-tk-L5-T308-1k #1: two
+  // mages' Touch of the Magi, the 13 s removal read as both copies' end)
+  const rowsOn = (holder: any): any[] => {
+    const rows = dropAuraRebroadcasts(
       ((holder.auraEvents ?? []) as any[]).filter(
-        (r) =>
-          r.destUnitId === holder.id &&
-          (r.srcUnitId === owner.id ||
-            ((!r.srcUnitId || r.srcUnitId === "0000000000000000") &&
-              ev(r) === REMOVED)),
+        (r) => r.destUnitId === holder.id,
       ),
     );
+    const open = new Map<string, Map<string, true>>();
+    const keep: any[] = [];
+    for (const r of rows) {
+      const runs = open.get(r.spellId) ?? new Map<string, true>();
+      open.set(r.spellId, runs);
+      const src: string = r.srcUnitId ?? "";
+      if (!src || src === "0000000000000000") {
+        if (ev(r) !== REMOVED) continue;
+        const oldest = runs.keys().next().value;
+        if (oldest === undefined) continue;
+        runs.delete(oldest);
+        if (oldest === owner.id) keep.push(r);
+        continue;
+      }
+      if (ev(r) === APPLIED || ev(r) === REFRESH) {
+        if (!runs.has(src)) runs.set(src, true);
+      } else if (ev(r) === REMOVED) runs.delete(src);
+      if (src === owner.id) keep.push(r);
+    }
+    return keep;
+  };
   const ownOnOwner = rowsOn(owner);
   const all = ledger.flatMap((x) => x.spells);
   for (const s of all) {
@@ -285,10 +306,11 @@ export function report(): string[] {
     out.push(
       `  per spell: ${spell}: ${KINDS.map((k) => `${k} ${m.get(k) ?? 0}`).join(", ")}`,
     );
-  const auras = new Set([...by.keys()]);
-  for (const a of auras) {
+  // every aura measured: closed lives alone too (codex 85-tk-L5-T308-1k #2)
+  const auras = new Set([...lives.keys(), ...by.keys()]);
+  for (const a of [...auras].sort()) {
     const l = lives.get(a) ?? [];
-    const b = by.get(a)!;
+    const b = by.get(a) ?? { n: 0, inside: 0 };
     out.push(
       `  ${auraName.get(a) ?? a} (${a}): closed lives ${l.length}, max ${l.length ? Math.max(...l).toFixed(1) : "-"} s; can't tell ${b.n}, of them the round's end inside the longest life ${b.inside}`,
     );
