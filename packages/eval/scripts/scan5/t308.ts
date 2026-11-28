@@ -16,7 +16,9 @@
  *    damage / heal rows under its name, more than 1 s past the printed
  *    end): the span should have run on (T308);
  *  - `lost: re-applied` — an APPLIED of the aura on the owner later in the
- *    round with no REMOVED before it: the first life ended unlogged;
+ *    round with no REMOVED before it: the first life ended unlogged — and
+ *    the predicate, read up to that APPLIED, shows nothing of it past its
+ *    official end (with such a row it is `surely up`);
  *  - `can't tell` — neither.
  * `lost` and `can't tell` are out of the total (an inventory).
  *
@@ -230,32 +232,35 @@ export function run(ctx: IRoundCtx): void {
     );
     const upTo = (untilMs - ctx.start) / 1000;
     const capMs = life.capMs;
-    const reapplied = auraRows.some(
+    const reappliedRow = auraRows.find(
       (r) =>
         ev(r) === APPLIED &&
         !resent.has(r) &&
         tsOf(r) > tsOf(app) + AURA_SURELY_UP_PAST_MS &&
         tsOf(r) <= untilMs,
     );
+    const reapplied = reappliedRow !== undefined;
     // ruling (B) (codex 85-tk-L5-T308-1h #1): a life the log shows up past
     // its deadline is printed to its last evidence row — ±1 s, the printed
     // grid — no shorter (the T308 bug) and no longer (The Hunt, 7abf7067 r6)
-    const evidenceEndMs = reapplied
-      ? undefined
-      : auraSurelyUpEndMs(
-          owner,
-          holder,
-          app.spellId,
-          s.spellId,
-          capMs,
-          untilMs,
-          {
-            nextPressMs: ctx.start + renewed * 1000,
-            // a row of the press's other effect aura is no evidence (1c #9)
-            otherAuraIds: otherEffectAurasOf(s.spellId, app.spellId),
-            lifeStartMs: tsOf(app),
-          },
-        );
+    // …a life applied again with no REMOVED ended unlogged before that
+    // application: the evidence is read up to it, not skipped (codex
+    // 80-PIPE-258 #2 — a tick past the official end and before the new
+    // APPLIED is the aura up at that tick)
+    const evidenceEndMs = auraSurelyUpEndMs(
+      owner,
+      holder,
+      app.spellId,
+      s.spellId,
+      capMs,
+      reappliedRow ? Math.min(untilMs, tsOf(reappliedRow)) : untilMs,
+      {
+        nextPressMs: ctx.start + renewed * 1000,
+        // a row of the press's other effect aura is no evidence (1c #9)
+        otherAuraIds: otherEffectAurasOf(s.spellId, app.spellId),
+        lifeStartMs: tsOf(app),
+      },
+    );
     if (evidenceEndMs === undefined && s.spanToSeconds >= upTo - 1) continue;
     ctx.bump("burstAuraPastSpan");
     if (
@@ -263,11 +268,12 @@ export function run(ctx: IRoundCtx): void {
       Math.abs(s.spanToSeconds - (evidenceEndMs - ctx.start) / 1000) <= 1
     )
       continue;
-    const evidence = reapplied
-      ? "lost: re-applied"
-      : evidenceEndMs !== undefined
+    const evidence =
+      evidenceEndMs !== undefined
         ? "surely up"
-        : "can't tell";
+        : reapplied
+          ? "lost: re-applied"
+          : "can't tell";
     if (first) {
       const m = perSpell.get(s.spellName) ?? new Map<string, number>();
       m.set(evidence, (m.get(evidence) ?? 0) + 1);
