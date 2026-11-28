@@ -448,7 +448,7 @@ describe("Vampiric Embrace (D51 / D55)", () => {
   });
 });
 
-describe("Void Metamorphosis (D69): a form with no button", () => {
+describe("Void Metamorphosis (D69, T291): a press the log writes only as its form", () => {
   const form = [
     aura("1217607", 40.7, LogEvent.SPELL_AURA_APPLIED),
     aura("1217607", 69.3, LogEvent.SPELL_AURA_REMOVED),
@@ -459,19 +459,23 @@ describe("Void Metamorphosis (D69): a form with no button", () => {
     [],
     form,
   );
-  it("enemy: a `(no press)` [ENEMY CD] line, never a burst", () => {
+  it("enemy: an [ENEMY CD] press line without `(no press)`, never a burst", () => {
     expect(enemyLines([dh])).toEqual([
-      "0:40  [ENEMY CD]   5(Enemy) (Devourer Demon Hunter): Void Metamorphosis (no press)",
+      "0:40  [ENEMY CD]   5(Enemy) (Devourer Demon Hunter): Void Metamorphosis",
     ]);
     const [o] = auraOffensiveOccurrences(dh, combat as never).occurrences;
-    expect(o).toMatchObject({ burstRole: "fact", dangerWeight: 0 });
+    expect(o).toMatchObject({
+      burstRole: "fact",
+      dangerWeight: 0,
+      provenance: "press-inferred",
+    });
     expect(
       reconstructEnemyCDTimeline([dh], combat).players[0]!.offensiveCDs,
     ).toEqual([]);
   });
-  it("friendly: [YOU] / [TEAM] [PROC], no HP", () => {
+  it("friendly: [YOU] / [TEAM] [CD] with the unlogged-press suffix, no HP", () => {
     const lines: string[] = [];
-    const emitted = emitFriendlyFormEntries({
+    emitFriendlyFormEntries({
       owner: { id: "me", auraEvents: [] } as never,
       friends: [dh] as never,
       matchStartMs: T0,
@@ -481,9 +485,8 @@ describe("Void Metamorphosis (D69): a form with no button", () => {
         lines.push(l);
       },
     });
-    expect(emitted).toBe(true);
     expect(lines).toEqual([
-      "0:40  [TEAM] [PROC]   2(DDH) (Devourer Demon Hunter): Void Metamorphosis",
+      "0:40  [TEAM] [CD]   2(DDH) (Devourer Demon Hunter): Void Metamorphosis (pressed; the log has only its aura)",
     ]);
   });
   it("friendly: a REMOVED/APPLIED rebroadcast is one form, one line (codex 02-2)", () => {
@@ -511,5 +514,32 @@ describe("Void Metamorphosis (D69): a form with no button", () => {
       },
     });
     expect(lines).toHaveLength(1);
+  });
+  it("friendly: an APPLIED restating the running form (Shadowmeld) is no second press (codex T291-1 #1)", () => {
+    const lines: string[] = [];
+    emitFriendlyFormEntries({
+      owner: { id: "me", auraEvents: [] } as never,
+      friends: [
+        unit(
+          CombatUnitClass.DemonHunter,
+          CombatUnitSpec.DemonHunter_Devourer,
+          [],
+          [
+            aura("1217607", 40.7, LogEvent.SPELL_AURA_APPLIED),
+            aura("1217607", 45.6, LogEvent.SPELL_AURA_APPLIED),
+            aura("1217607", 69.3, LogEvent.SPELL_AURA_REMOVED),
+          ],
+        ),
+      ] as never,
+      matchStartMs: T0,
+      matchEndSeconds: 300,
+      pid: () => "2(DDH)",
+      addEntry: (_t, l) => {
+        lines.push(l);
+      },
+    });
+    expect(lines).toEqual([
+      "0:40  [TEAM] [CD]   2(DDH) (Devourer Demon Hunter): Void Metamorphosis (pressed; the log has only its aura)",
+    ]);
   });
 });

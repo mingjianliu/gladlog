@@ -91,12 +91,19 @@ export const OFFENSIVE_AURA_EVIDENCE: ReadonlyMap<
   ["454351", { cooldownId: "454351", name: "Avenging Wrath", twin: true }],
 ]);
 /**
- * fact7 class 3 (D69): offensive forms with no button at all — a timeline
- * fact, never a burst (`burstRole: "fact"`, the `offensiveFacts` line).
- * Void Metamorphosis 1217607: the Devourer enters it when the 1225789 stacks
- * fill, on no cast (6ac699c9: 0:40.7–1:09.3 and 1:54.4–2:20.3, the
- * [ENEMY CD] timeline silent, the form's spells leading both spikes). DB2 has
- * no cooldown for it. Friendly side: `emitFriendlyFormEntries`. Registered in
+ * fact7 class 3 (D69): offensive forms a press enters that the log never
+ * writes as a press — a timeline fact, never a burst (`burstRole: "fact"`,
+ * the `offensiveFacts` line; DB2 has no cooldown for it).
+ * Void Metamorphosis 1217607 is a button (pipeline T291): SpecializationSpells
+ * 7141 gives the Devourer 1217605, overriding Metamorphosis 191427, which
+ * "Requires" the 1225789 stacks. Its SPELL_CAST_SUCCESS is never logged — 0
+ * rows beside 145 entries (605) and 176 (12.1.5 files) — but the recorder's
+ * own refused presses are (70 SPELL_CAST_FAILED 1217605 on the 605: "Not
+ * yet recovered", "Can't do that while disoriented"), and the entry comes
+ * 0.4–29 s after the stack that filled the bar (median 2.8 / 3.0 s), never
+ * with it: a press, not the stacks. So the line names a press (the enemy
+ * line without `(no press)`; the friendly one `emitFriendlyFormEntries`'
+ * `[CD]` with `UNLOGGED_PRESS_SUFFIX`, GH #193's wording). Registered in
  * `curatedIdRegistry.ts`.
  */
 export const OFFENSIVE_FORM_FACT_AURAS: ReadonlyMap<string, string> = new Map([
@@ -494,9 +501,10 @@ export function auraOffensiveOccurrences(
     const formName = OFFENSIVE_FORM_FACT_AURAS.get(iv.spellId);
     if (formName !== undefined) {
       if (iv.inferredStart) continue;
+      // a press the log writes only as its form (T291)
       result.occurrences.push({
         spellId: iv.spellId,
-        spellName: `${formName}${NO_PRESS_SUFFIX}`,
+        spellName: formName,
         startMs,
         endMs,
         endObserved,
@@ -505,7 +513,7 @@ export function auraOffensiveOccurrences(
         availabilityUnknown: true,
         dangerWeight: 0,
         burstRole: "fact",
-        provenance: "unresolved",
+        provenance: "press-inferred",
       });
       continue;
     }

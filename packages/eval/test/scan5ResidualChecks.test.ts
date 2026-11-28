@@ -215,7 +215,10 @@ describe("duringExternalShare", () => {
     const line = [during("Life Cocoon", "5.0", 50)];
     for (const shieldId of ["375902", "17"])
       expect(
-        of(scan(runDamageBasis, players(shieldId), line), "duringExternalShare"),
+        of(
+          scan(runDamageBasis, players(shieldId), line),
+          "duringExternalShare",
+        ),
       ).toEqual([]);
     // control: a line that left the eaten hit out of the share is wrong
     expect(
@@ -2244,6 +2247,71 @@ describe("listGapPress", () => {
     ).toHaveLength(1);
     expect(
       gaps(["  0:10  [TRINKET]   1(AWarrior) used PvP trinket"], roster),
+    ).toEqual([]);
+  });
+});
+
+describe("listGapPress — Void Metamorphosis is a press the log has only as its form (T291)", () => {
+  const roster = () => [
+    unit("Owner", "1", 1, {
+      info: { teamId: "0" },
+      spec: CombatUnitSpec.DemonHunter_Devourer,
+      auraEvents: [
+        rowOf(LogEvent.SPELL_AURA_APPLIED, 10_500, {
+          spellId: "1217607",
+          spellName: "Void Metamorphosis",
+          srcUnitId: "Owner",
+          destUnitId: "Owner",
+        }),
+      ],
+    }),
+  ];
+  const gaps = (lines: string[]) =>
+    of(scan(runListGap, roster(), lines), "listGapPress");
+  it("a [CD] line names it", () => {
+    expect(
+      gaps([
+        "  0:10  [YOU] [CD]   Void Metamorphosis (pressed; the log has only its aura)",
+      ]),
+    ).toEqual([]);
+  });
+  it("a [PROC] line no longer does", () => {
+    expect(gaps(["  0:10  [YOU] [PROC]   Void Metamorphosis"])).toHaveLength(1);
+  });
+  it("nor the old `(no press)` wording (codex T291-1 #3)", () => {
+    expect(
+      gaps(["  0:10  [YOU] [CD]   Void Metamorphosis (no press)"]),
+    ).toHaveLength(1);
+  });
+  it("a 3v3 form entered after the deciding death is still checked (codex T291-2)", () => {
+    // ctx.roundEndAt (the deciding death) at 20 s; the timeline renders to
+    // the log's end, and so must the check
+    const run = (lines: string[]) =>
+      of(scan(runListGap, roster(), lines, "", [], at(5_000)), "listGapPress");
+    expect(run([])).toHaveLength(1);
+    expect(
+      run([
+        "  0:10  [YOU] [CD]   Void Metamorphosis (pressed; the log has only its aura)",
+      ]),
+    ).toEqual([]);
+  });
+  it("an APPLIED restating the running form is no entry to name (codex T291-1 #2)", () => {
+    const r = roster();
+    (r[0] as any).auraEvents.push(
+      rowOf(LogEvent.SPELL_AURA_APPLIED, 30_200, {
+        spellId: "1217607",
+        spellName: "Void Metamorphosis",
+        srcUnitId: "Owner",
+        destUnitId: "Owner",
+      }),
+    );
+    expect(
+      of(
+        scan(runListGap, r, [
+          "  0:10  [YOU] [CD]   Void Metamorphosis (pressed; the log has only its aura)",
+        ]),
+        "listGapPress",
+      ),
     ).toEqual([]);
   });
 });

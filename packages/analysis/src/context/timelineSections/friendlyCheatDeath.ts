@@ -10,15 +10,15 @@
  * 1286444, Cheat Death 45182 25/25) — the same reading the crisis layer
  * credits, applied on the unit by the unit itself.
  */
-import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import { type ICombatUnit } from "@gladlog/parser-compat";
 
-import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import {
   auraOnlyActivations,
   UNLOGGED_PRESS_SUFFIX,
 } from "../../utils/auraOnlyActivations";
 import { type IMajorCooldownInfo, specToString } from "../../utils/cooldowns";
 import {
+  auraOffensiveOccurrences,
   NO_PRESS_SUFFIX,
   OFFENSIVE_FORM_FACT_AURAS,
 } from "../../utils/offensiveAuraOccurrences";
@@ -82,10 +82,13 @@ export function emitFriendlyCheatDeathEntries(ctx: {
 }
 
 /**
- * fact7 class 3 (D69, every reader): an offensive form with no button
- * (`OFFENSIVE_FORM_FACT_AURAS`) on the owner or a teammate — the `[PROC]`
- * legend's "no press of that button paired to it", the enemy side's `(no press)`
- * [ENEMY CD] line. Nothing was pressed; the line prints no HP.
+ * fact7 class 3 (D69, every reader): an offensive form on the owner or a
+ * teammate whose press the log writes only as the form
+ * (`OFFENSIVE_FORM_FACT_AURAS`). Pipeline T291: Void Metamorphosis is a
+ * button (1217605) whose SPELL_CAST_SUCCESS never logs — a press, the `[CD]`
+ * tag with `UNLOGGED_PRESS_SUFFIX` (GH #193's line for a press the log has
+ * only as its aura), as the enemy side's [ENEMY CD] line names it without
+ * `(no press)`. The line prints no HP: no press row says when it was pressed.
  */
 export function emitFriendlyFormEntries(ctx: {
   owner: ICombatUnit;
@@ -95,32 +98,34 @@ export function emitFriendlyFormEntries(ctx: {
   roundEndAtMs?: number;
   pid: (name: string) => string;
   addEntry: (atSeconds: number, line: string) => void;
-}): boolean {
+}): void {
   const { owner, friends, matchStartMs, matchEndSeconds, pid, addEntry } = ctx;
   const endMs = Math.min(
     ctx.roundEndAtMs ?? Infinity,
     matchStartMs + matchEndSeconds * 1000,
   );
-  let emitted = false;
   for (const u of [owner, ...friends.filter((f) => f.id !== owner.id)]) {
-    for (const a of dropAuraRebroadcasts(u.auraEvents ?? [])) {
-      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      if (a.srcUnitId !== u.id || a.destUnitId !== u.id) continue;
-      const name = OFFENSIVE_FORM_FACT_AURAS.get(a.spellId ?? "");
+    // the entries the enemy side reads (`auraOffensiveOccurrences`): one per
+    // form, whatever restates it while it runs (codex 85-tk-L6-T291-1 #1:
+    // 20c23c12 r1, Shadowmeld 3:17.089 restated the form entered at
+    // 3:12.378 — a second APPLIED with no REMOVED, read as a second press)
+    const { occurrences } = auraOffensiveOccurrences(u, {
+      startTime: matchStartMs,
+      endTime: endMs,
+    });
+    for (const o of occurrences) {
+      const name = OFFENSIVE_FORM_FACT_AURAS.get(o.spellId);
       if (name === undefined) continue;
-      if (a.logLine.timestamp < matchStartMs || a.logLine.timestamp > endMs)
-        continue;
-      const t = (a.logLine.timestamp - matchStartMs) / 1000;
+      if (o.startMs < matchStartMs || o.startMs > endMs) continue;
+      const t = (o.startMs - matchStartMs) / 1000;
       addEntry(
         t,
         u.id === owner.id
-          ? `${fmtTime(t)}  [YOU] [PROC]   ${name}`
-          : `${fmtTime(t)}  [TEAM] [PROC]   ${pid(u.name)} (${specToString(u.spec)}): ${name}`,
+          ? `${fmtTime(t)}  [YOU] [CD]   ${name}${UNLOGGED_PRESS_SUFFIX}`
+          : `${fmtTime(t)}  [TEAM] [CD]   ${pid(u.name)} (${specToString(u.spec)}): ${name}${UNLOGGED_PRESS_SUFFIX}`,
       );
-      emitted = true;
     }
   }
-  return emitted;
 }
 
 /** A ledger row this near an activation is the same fact: the ledger's own

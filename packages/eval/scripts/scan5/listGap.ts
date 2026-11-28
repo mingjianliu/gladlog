@@ -28,8 +28,9 @@
  * it (`PRESS_LINE_WHITELIST_IDS`, GH #183), so it must reach 0;
  * `offListUnder45` is every other button under it, left out by the user's
  * picks. `filled` labels the ids the
- * class fix answers for, which must reach 0. `form/<side>/noLine` is a
- * no-button form's APPLIED row (Void Metamorphosis 1217607, D69) no `[PROC]` /
+ * class fix answers for, which must reach 0. `form/<side>/noLine` is an
+ * APPLIED row of a form whose press the log writes only as the form (Void
+ * Metamorphosis 1217607, D69; a press since T291) that no `[CD]` /
  * `[ENEMY CD]` line names. `report()` prints the ranked gap list, one row per
  * id. A press some other family carries (a press tag of its own) is no gap:
  * `PRESS_LINE_TAG` lists them; a PvP trinket's line names no spell, its tag
@@ -47,6 +48,11 @@ import {
   unreleasedHoldMs,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import {
+  auraOffensiveOccurrences,
+  NO_PRESS_SUFFIX,
+  OFFENSIVE_FORM_FACT_AURAS,
+} from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
+import {
   FILLED_HEAL_IDS,
   isOffListPressId,
   isRosterPressId,
@@ -54,6 +60,7 @@ import {
   pressLineCaster,
   TRINKET_LINE_IDS,
 } from "@gladlog/analysis/src/utils/offListPress";
+import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { OFFENSIVE_PRESS_FACT_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 
 import { ev, type IRoundCtx, nameOf, tsOf } from "./ctx";
@@ -83,8 +90,6 @@ export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
 
 const LINE_AT = /^\s*(\d+):(\d\d)\s+(.*)$/;
 const TRINKET_TAG = /\[(ENEMY )?TRINKET\]/;
-/** a form with no button: nothing presses it (D69) */
-const FORM_AURAS = new Set(["1217607"]);
 
 interface IGapRow {
   name: string;
@@ -107,6 +112,12 @@ function kitOf(lines: string[], name: string): string {
 
 export function run(ctx: IRoundCtx): void {
   const ownerPid = ctx.pidOf(ctx.owner.name);
+  const formEndAt = roundEndMs(ctx.legacy);
+  // the round's bounds, as the enemy timeline reads the occurrences
+  const bounds = {
+    startTime: ctx.legacy.startTime,
+    endTime: ctx.legacy.endTime,
+  };
   const friendly = new Set(
     ctx.players
       .filter((u) => u.info?.teamId === ctx.owner.info?.teamId)
@@ -127,21 +138,28 @@ export function run(ctx: IRoundCtx): void {
         : friendly.has(unit.id)
           ? "ally"
           : "enemy";
-    for (const a of (unit.auraEvents ?? []) as any[]) {
-      if (ev(a) !== "SPELL_AURA_APPLIED" || !FORM_AURAS.has(a.spellId))
-        continue;
-      if (a.srcUnitId !== unit.id || a.destUnitId !== unit.id) continue;
-      const at = tsOf(a);
-      if (at < ctx.start || at > ctx.roundEndAt) continue;
+    // the form's entries as the renderer reads them (`auraOffensiveOccurrences`
+    // — one per form, a Shadowmeld restating it mid-form is no entry: codex
+    // 85-tk-L6-T291-1 #2, 11333a32 r5 0:48.393)
+    for (const o of auraOffensiveOccurrences(unit, bounds).occurrences) {
+      if (!OFFENSIVE_FORM_FACT_AURAS.has(o.spellId)) continue;
+      const at = o.startMs;
+      // the timeline's own round end (`roundEndMs`, setup.ts), not the 3v3
+      // deciding death: it renders a form entered after that death (codex
+      // 85-tk-L6-T291-2: 97529075 r1 2:17.738, 78408483 r1 4:24.452)
+      if (at < ctx.start || at > formEndAt) continue;
       ctx.bump("listGapPress");
-      const name = nameOf(a.spellId, a.spellName ?? "");
+      const name = OFFENSIVE_FORM_FACT_AURAS.get(o.spellId)!;
       const sec = Math.floor((at - ctx.start) / 1000);
       if (
         timed.some(
           (l) =>
             Math.abs(l.t - sec) <= 1 &&
             l.text.includes(name) &&
-            /\[PROC\]|\[ENEMY CD\]/.test(l.text) &&
+            // a press line: the old `(no press)` wording states none (codex
+            // -1 #3)
+            !l.text.includes(`${name}${NO_PRESS_SUFFIX}`) &&
+            /\[CD\]|\[ENEMY CD\]/.test(l.text) &&
             pressLineCaster(l.text, name, ownerPid) === pid,
         )
       )
@@ -150,8 +168,8 @@ export function run(ctx: IRoundCtx): void {
         "listGapPress",
         `form/${side}/noLine`,
         at,
-        `${unit.name}#${a.spellId}#${at}`,
-        `${unit.name} (${unit.spec}) ${name} ${a.spellId} APPLIED at +${at - ctx.start}ms`,
+        `${unit.name}#${o.spellId}#${at}`,
+        `${unit.name} (${unit.spec}) ${name} ${o.spellId} entered at +${at - ctx.start}ms`,
       );
     }
     for (const c of (unit.spellCastEvents ?? []) as any[]) {

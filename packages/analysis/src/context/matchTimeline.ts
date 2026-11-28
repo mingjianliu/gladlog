@@ -716,19 +716,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   )
     procLinesEmitted = true;
 
-  // fact7 class 3: an offensive form with no button (Void Metamorphosis)
-  if (
-    emitFriendlyFormEntries({
-      owner,
-      friends,
-      matchStartMs,
-      matchEndSeconds,
-      roundEndAtMs,
-      pid,
-      addEntry,
-    })
-  )
-    procLinesEmitted = true;
+  // fact7 class 3: an offensive form whose press the log writes only as the
+  // form (Void Metamorphosis, T291) — a [CD] line, no [PROC] legend
+  emitFriendlyFormEntries({
+    owner,
+    friends,
+    matchStartMs,
+    matchEndSeconds,
+    roundEndAtMs,
+    pid,
+    addEntry,
+  });
 
   // fact8 class 5: a tracked cooldown's aura with no press of it
   if (
