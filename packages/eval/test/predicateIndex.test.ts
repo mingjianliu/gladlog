@@ -5853,6 +5853,12 @@ const INDEX: PredicateRow[] = [
     symbol: "reflectedCopyUp",
     mod: spellOutcomeLines,
   },
+  // M5 assembly review 80-PIPE-261: the reflect rows reflectedSpells chains
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectRowsByCaster",
+    mod: spellOutcomeLines,
+  },
   // F20 D9 / D13: what one trinket press removed; the [DEATH] trinket tag
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

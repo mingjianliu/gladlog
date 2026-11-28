@@ -664,22 +664,44 @@ export function reflectedCopyUp(
   );
 }
 
+/** Each caster's counted REFLECT rows, in time order, as `reflectedSpells`
+ *  reads them: its own rows less those a pet command moved away, the rows
+ *  moved to it (`commandReflectRows`), and the Spell Reflection returns the
+ *  log wrote no REFLECT row for (`unrowedSpellReflections`, fact11 D9). Read
+ *  by `reflectedSpells` and by scan5 `burstRatioOwnSideDamage` (pipeline
+ *  T330, M5 assembly review 80-PIPE-261). */
+export function reflectRowsByCaster(
+  units: readonly ICombatUnit[],
+): Map<string, Array<NonNullable<ICombatUnit["missesOut"]>[number]>> {
+  const { commandReflects, reflectsMovedTo } = commandReflectRows(units);
+  const out = new Map<
+    string,
+    Array<NonNullable<ICombatUnit["missesOut"]>[number]>
+  >();
+  for (const caster of units)
+    out.set(
+      caster.id,
+      [
+        ...(caster.missesOut ?? []).filter((m) => !commandReflects.has(m)),
+        ...(reflectsMovedTo.get(caster.id) ?? []),
+        // fact11 D9: a Spell Reflection return with no REFLECT row
+        ...unrowedSpellReflections(caster, units),
+      ]
+        .filter(isCountedReflectRow)
+        .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp),
+    );
+  return out;
+}
+
 export function reflectedSpells(
   units: readonly ICombatUnit[],
   matchStartMs: number,
 ): IReflected[] {
   const byId = new Map(units.map((u) => [u.id, u]));
   const out: IReflected[] = [];
-  const { commandReflects, reflectsMovedTo } = commandReflectRows(units);
+  const reflectRows = reflectRowsByCaster(units);
   for (const caster of units) {
-    const reflects = [
-      ...(caster.missesOut ?? []).filter((m) => !commandReflects.has(m)),
-      ...(reflectsMovedTo.get(caster.id) ?? []),
-      // fact11 D9: a Spell Reflection return with no REFLECT row
-      ...unrowedSpellReflections(caster, units),
-    ]
-      .filter(isCountedReflectRow)
-      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    const reflects = reflectRows.get(caster.id) ?? [];
     // chains: same spell, same reflector, ≤ REFLECT_CHAIN_GAP_MS apart (this
     // also folds one reflect logged once per effect at the same ms)
     const chains: Array<{

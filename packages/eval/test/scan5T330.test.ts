@@ -56,7 +56,9 @@ describe("burstRatioOwnSideDamage's own-side row (T330)", () => {
   });
 
   it("is no enemy's hit", () => {
-    expect(bucket(row(enemy.id, "585", { srcFlags: HOSTILE }))).toBe("pressure");
+    expect(bucket(row(enemy.id, "585", { srcFlags: HOSTILE }))).toBe(
+      "pressure",
+    );
   });
 
   it("is no sacrifice transfer (a DAMAGE_SPLIT row)", () => {
@@ -102,7 +104,13 @@ describe("burstRatioOwnSideDamage's own-side row (T330)", () => {
     expect(b(at(row(victim.id, "1259790"), 5000))).toBe("pressure");
     // a teammate's dispel backlash, 196364 named as the reflected spell
     const mateSees = (e: ReturnType<typeof row>): string =>
-      sideRowBucket(mate, { ...e, destUnitId: mate.id }, sides, ownerOf, reflects);
+      sideRowBucket(
+        mate,
+        { ...e, destUnitId: mate.id },
+        sides,
+        ownerOf,
+        reflects,
+      );
     expect(mateSees(at(row(victim.id, "196364"), 9000))).toBe("pressure");
     expect(mateSees(at(row(victim.id, "196364"), 30_000))).toBe("own");
     // past the window, or another spell: the unit's own again
@@ -128,6 +136,60 @@ describe("burstRatioOwnSideDamage's own-side row (T330)", () => {
     expect(b(at(row(victim.id, "111400"), 5000))).toBe("self");
   });
 
+  it("reads a Spell Reflection return with no REFLECT row as the product does", () => {
+    // M5 assembly review 80-PIPE-261: the victim's Flame Shock 188389 at the
+    // enemy warrior at t = 1000, 18k back under Spell Reflection 23920 1 ms
+    // later, no REFLECT row; its 24k tick on the victim 2 s on
+    const FLAME_SHOCK = "188389";
+    const tick = {
+      ...row(victim.id, FLAME_SHOCK),
+      logLine: {
+        event: LogEvent.SPELL_PERIODIC_DAMAGE as string,
+        timestamp: 3001,
+      },
+    };
+    const caster = (casts: boolean) => ({
+      ...victim,
+      info: {},
+      missesOut: [],
+      spellCastEvents: casts
+        ? [
+            {
+              spellId: FLAME_SHOCK,
+              srcUnitId: victim.id,
+              destUnitId: enemy.id,
+              logLine: {
+                event: LogEvent.SPELL_CAST_SUCCESS as string,
+                timestamp: 1000,
+              },
+            },
+          ]
+        : [],
+      damageIn: [
+        {
+          srcUnitId: enemy.id,
+          destUnitId: victim.id,
+          spellId: "23920",
+          logLine: { event: LogEvent.SPELL_DAMAGE as string, timestamp: 1001 },
+        },
+        tick,
+      ],
+    });
+    const seen = (casts: boolean): string => {
+      const u = caster(casts);
+      return sideRowBucket(
+        u,
+        tick,
+        sides,
+        ownerOf,
+        reflectsByCaster([u, enemy]),
+      );
+    };
+    expect(seen(true)).toBe("pressure");
+    // no cast at the warrior: the return names nothing, the tick is the unit's
+    expect(seen(false)).toBe("self");
+  });
+
   it("lists the unit's other own rows apart, out of the total", () => {
     expect(bucket(row(victim.id, "111400"))).toBe("self"); // Burning Rush
     // Shadow Word: Death's backlash: no source, the victim's side in its flags
@@ -147,8 +209,12 @@ describe("burstRatioOwnSideDamage's own-side row (T330)", () => {
 
   it("is no teammate's hit across a charm the row's flags show", () => {
     // ab7fbe2e r1 4:43: a Mind-Controlled Balance Druid flagged 0x548
-    expect(bucket(row(mate.id, "164812", { srcFlags: HOSTILE }))).toBe("pressure");
+    expect(bucket(row(mate.id, "164812", { srcFlags: HOSTILE }))).toBe(
+      "pressure",
+    );
     // the victim charmed: our side hitting it
-    expect(bucket(row(mate.id, "81297", { destFlags: HOSTILE }))).toBe("pressure");
+    expect(bucket(row(mate.id, "81297", { destFlags: HOSTILE }))).toBe(
+      "pressure",
+    );
   });
 });

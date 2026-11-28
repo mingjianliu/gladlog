@@ -57,10 +57,10 @@ import {
   REFLECT_DAMAGE_WINDOW_S,
   REFLECT_OWN_ID_LEAD_MS,
   reflectedCopyUp,
+  reflectRowsByCaster,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { ENEMY_CAUSED_SELF_DAMAGE_IDS } from "@gladlog/analysis/src/data/enemyCausedSelfDamage";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
-import { isCountedReflectRow } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   BURST_DAMAGE_RATIO_MAX,
   BURST_DAMAGE_RATIO_MIN,
@@ -128,26 +128,31 @@ const flagsCrossSide = (
  *  - `pressure`: everything else — the enemy's hits, a transfer
  *    (`isAttackerDamageRow`), a deferral shield's tick (`isDeferredTickId`),
  *    a charmed unit's hits. */
-/** A caster's counted REFLECT rows (`isCountedReflectRow`), for
- *  `isReflectedReturn`. */
+/** A caster's counted REFLECT rows, for `isReflectedReturn`: the product's
+ *  own set (`reflectRowsByCaster`, the rows `reflectedSpells` chains), so a
+ *  Spell Reflection return the log wrote no REFLECT row for counts too
+ *  (M5 assembly review 80-PIPE-261: a Flame Shock sent back with no REFLECT
+ *  row, its 24k tick on the shaman filed as `self`). */
 export type ReflectsByCaster = ReadonlyMap<
   string,
   ReadonlyArray<{ t: number; spellId: string; name: string }>
 >;
 
 export function reflectsByCaster(units: readonly any[]): ReflectsByCaster {
-  const out = new Map<string, Array<{ t: number; spellId: string; name: string }>>();
-  for (const u of units)
-    for (const m of (u.missesOut ?? []) as any[]) {
-      if (!isCountedReflectRow(m)) continue;
-      const list = out.get(m.srcUnitId ?? u.id) ?? [];
-      list.push({
-        t: m.logLine.timestamp,
-        spellId: String(m.spellId),
-        name: getEnglishSpellName(String(m.spellId), ""),
-      });
-      out.set(m.srcUnitId ?? u.id, list);
-    }
+  const out = new Map<
+    string,
+    Array<{ t: number; spellId: string; name: string }>
+  >();
+  for (const [casterId, rows] of reflectRowsByCaster(units as never))
+    if (rows.length > 0)
+      out.set(
+        casterId,
+        rows.map((m) => ({
+          t: m.logLine.timestamp,
+          spellId: String(m.spellId),
+          name: getEnglishSpellName(String(m.spellId), ""),
+        })),
+      );
   return out;
 }
 
@@ -236,7 +241,9 @@ export function run(ctx: IRoundCtx): void {
     if (u.ownerId && u.ownerId !== "0000000000000000")
       ownerOf.set(u.id, u.ownerId);
   // the roster sides the product's window sums read (`enemyCDs.ts`)
-  const sides = buildRosterSides(Object.values(ctx.legacy.units ?? {}) as never);
+  const sides = buildRosterSides(
+    Object.values(ctx.legacy.units ?? {}) as never,
+  );
   const reflects = reflectsByCaster(ctx.units as any[]);
   const combat = { ...ctx.legacy, startTime: ctx.start, endTime: ctx.end };
   // the round's end the burst readers stop at (`roundDamageEndMs`, T237)
@@ -268,7 +275,10 @@ export function run(ctx: IRoundCtx): void {
       });
     }
   const sum = (rs: typeof rows, side?: string): number =>
-    rs.reduce((s, r) => s + (side === undefined || r.side === side ? r.amount : 0), 0);
+    rs.reduce(
+      (s, r) => s + (side === undefined || r.side === side ? r.amount : 0),
+      0,
+    );
   const total = sum(rows);
   const totalOwn = sum(rows, "own");
   const totalSelf = sum(rows, "self");
