@@ -35,6 +35,7 @@
 import { castsOfTalentEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { isHealerHeldOffensive } from "@gladlog/analysis/src/data/healerHeldOffensive";
 import { effectiveCooldownSeconds } from "@gladlog/analysis/src/data/spellEffectData";
+import { offensiveReadBounds } from "@gladlog/analysis/src/utils/auraSurelyUp";
 import {
   hasOffensiveSpellActive,
   isEnemyCdWindowSpell,
@@ -175,8 +176,15 @@ export function run(ctx: IRoundCtx): void {
   );
   const enemies = ctx.players.filter((u: any) => !friends.includes(u));
   const side = new Set<string>(friends.map((u: any) => u.id));
-  // the bounds the product's tag reads (setup.ts `roundBounds`)
-  const round = { startTime: ctx.start, endTime: ctx.end };
+  // the bounds the product's tag reads (`offensiveReadBounds`, setup.ts
+  // `roundBounds`; codex 85-tk-L5-T308-1g #3: 90c01e7f r6's Doom Winds is
+  // up at 30 s only on bounds that carry the round's players)
+  const round = offensiveReadBounds(
+    ctx.start,
+    ctx.end,
+    [...friends, ...enemies],
+    (ctx.legacy as any)?.startInfo?.bracket,
+  );
   // one answer per unit and instant in this context (a second's two ends are
   // asked for the untagged and the tagged reading alike)
   const memo = new Map<string, string[]>();

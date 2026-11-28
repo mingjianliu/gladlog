@@ -1087,3 +1087,52 @@ describe("T308 round 5 (codex 85-tk-L5-T308-1e)", () => {
     ).toBe(true);
   });
 });
+
+describe("T308 round 7 (codex 85-tk-L5-T308-1g)", () => {
+  it("#2: a carried life clipped by an earlier round end keeps the carried expiry for its countdown", () => {
+    const pulses = [10.196, 11.202, 12.189, 13.2, 14.201, 15.202, 16.209];
+    pulses.push(17.2, 18.202, 19.218);
+    const u = enh(
+      [
+        cast("114051", 12.494, "sh"),
+        ...pulses.map((t) => cast("469270", t, "sh")),
+      ],
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, "466772", 9.197, "sh"),
+        aura(LogEvent.SPELL_AURA_APPLIED, "114051", 12.494, "sh"),
+      ],
+    );
+    const bounds = { startTime: START, endTime: s(19.5), units: { sh: u } };
+    const o = auraOffensiveOccurrences(u, bounds as any).occurrences.find(
+      (x) => x.spellId === "384352",
+    );
+    expect(((o as any)?.officialEndMs ?? 0) - START).toBe(20_494);
+  });
+  it("#4: asked of one mage, a source-less REMOVED still closes the OLDEST copy, as the builder pairs it", () => {
+    const mA = makeUnit("mA", {
+      name: "A",
+      spec: CombatUnitSpec.Mage_Arcane,
+    } as any);
+    const mB = makeUnit("mB", {
+      name: "B",
+      spec: CombatUnitSpec.Mage_Arcane,
+    } as any);
+    const t = makeUnit("t", {
+      name: "Target",
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "210824", s(10), "mA", "t"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "210824", s(11), "mB", "t"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "210824", s(13), "", "t"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "210824", s(20), "mB", "t"),
+      ],
+    } as any);
+    const combat = { startTime: START, endTime: s(60), units: { mA, mB, t } };
+    for (const who of [["mA", "mB"], ["mB"]])
+      expect(
+        hasOffensiveSpellActive(t, s(15), new Set(who), undefined, combat),
+      ).toBe(true);
+    expect(
+      hasOffensiveSpellActive(t, s(15), new Set(["mA"]), undefined, combat),
+    ).toBe(false);
+  });
+});

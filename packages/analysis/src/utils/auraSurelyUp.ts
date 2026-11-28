@@ -305,3 +305,30 @@ export function auraSurelyUpUntilMs(
   }
   return end;
 }
+
+/**
+ * T308: the round bounds the aura-evidenced offensive readers are asked over
+ * (the `[friendly offensive CD active]` tag, `hasOffensiveSpellActive`):
+ * with the round's players and bracket, so an aura the log shows still up
+ * runs on as the timeline runs it (codex 85-tk-L5-T308-1b #6). One builder
+ * for the timeline (setup.ts) and the scans that re-ask its tag (scan5
+ * t153 / friendlyOffensiveTag — 1f #4, 1g #3).
+ */
+export function offensiveReadBounds(
+  startTime: number,
+  endTime: number,
+  players: readonly ICombatUnit[],
+  bracket: string | undefined,
+): {
+  startTime: number;
+  endTime: number;
+  units: Record<string, ICombatUnit>;
+  startInfo: { bracket: string | undefined };
+} {
+  return {
+    startTime,
+    endTime,
+    units: Object.fromEntries(players.map((u) => [u.id, u])),
+    startInfo: { bracket },
+  };
+}

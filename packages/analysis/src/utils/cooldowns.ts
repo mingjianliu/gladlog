@@ -9103,6 +9103,8 @@ export function hasOffensiveSpellActive(
    * its official length and with no press of it near, is the aura re-sent
    * (`sourcePressedAuraNear`), not a new run. */
   const cdOfRun = new Map<string, string>();
+  /** runKey → does the question's source / type / spell filter admit it */
+  const admitted = new Map<string, boolean>();
   const allRows = offensiveAuraRowsOf(unit);
   const continuous = new Set(dropAuraRebroadcasts(allRows.map((r) => r.aura)));
   const unitsOfCombat = (
@@ -9132,20 +9134,22 @@ export function hasOffensiveSpellActive(
         }
       continue;
     }
-    if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
-      continue;
-    // fact2 (2026-10-20): asked of ANY source, the unit's own offensive
-    // cooldown is a buff on it — a DEBUFF is an opponent's (once C10 resolved
-    // Feral Frenzy's 274838 to its cast, the friendly druid's bleed on the
-    // enemy rogue read as the rogue's burst and the threat gate dropped two
-    // uncleansed fears, ab7fbe2e 0:17)
-    if (requiredSourceIds === null && aura.auraType === "DEBUFF") continue;
-    if (
-      spellIdFilter !== undefined &&
-      !spellIdFilter(spellId, casterSpec) &&
-      !spellIdFilter(cdId, casterSpec)
-    )
-      continue;
+    // the question's filters pick which runs ANSWER, after every source's
+    // rows are paired — a source-less REMOVED closes the oldest open run of
+    // the spell whoever's it is, as the builder pairs it (codex
+    // 85-tk-L5-T308-1g #4: asked of mage B alone, the 13 s removal closed
+    // B's copy, A's having been filtered out)
+    const admits =
+      (requiredSourceIds === null || requiredSourceIds.has(aura.srcUnitId)) &&
+      // fact2 (2026-10-20): asked of ANY source, the unit's own offensive
+      // cooldown is a buff on it — a DEBUFF is an opponent's (once C10
+      // resolved Feral Frenzy's 274838 to its cast, the friendly druid's
+      // bleed on the enemy rogue read as the rogue's burst and the threat
+      // gate dropped two uncleansed fears, ab7fbe2e 0:17)
+      !(requiredSourceIds === null && aura.auraType === "DEBUFF") &&
+      (spellIdFilter === undefined ||
+        spellIdFilter(spellId, casterSpec) ||
+        spellIdFilter(cdId, casterSpec));
 
     // one run per aura AND source: two mages' Touch of the Magi on one
     // target are two debuffs, and the first one's REMOVED does not end the
@@ -9154,6 +9158,11 @@ export function hasOffensiveSpellActive(
     // `[friendly offensive CD active]` — fact2Scan offensiveTag)
     const runKey = `${spellId}|${aura.srcUnitId ?? ""}`;
     cdOfRun.set(runKey, cdId);
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    )
+      admitted.set(runKey, admits || admitted.get(runKey) === true);
     if (ev === LogEvent.SPELL_AURA_APPLIED) {
       const run = open.get(runKey);
       const caster = casterOfRun(aura.srcUnitId ?? "");
@@ -9197,6 +9206,7 @@ export function hasOffensiveSpellActive(
   }
 
   for (const [runKey, applications] of Array.from(applied)) {
+    if (admitted.get(runKey) !== true) continue;
     const [spellId, srcId] = runKey.split("|") as [string, string];
     const removals = [...(removed.get(runKey) ?? [])].sort((a, b) => a - b);
     const refreshes = refreshed.get(runKey) ?? [];

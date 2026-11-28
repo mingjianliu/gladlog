@@ -532,7 +532,7 @@ export function auraOffensiveOccurrences(
     const endObserved = !iv.inferredEnd;
     /** the aura's own official end for this caster, from its own start */
     const auraFull = buffDurationOfApplication(iv.spellId, unit, startMs);
-    const auraOfficialEndMs =
+    let auraOfficialEndMs =
       auraFull === undefined ? undefined : startMs + auraFull * 1000;
     // T308 (user 2026-11-27): a life the log never closes that it shows
     // still up past its official end ran on to the round's end, or to the
@@ -566,6 +566,11 @@ export function auraOffensiveOccurrences(
         life.nextPressMs,
       );
       const capMs = life.capMs;
+      // a life a granting press carried on is DUE off at that press's end:
+      // the countdown reads it there (codex 85-tk-L5-T308-1g #2: an earlier
+      // kill clipped the life and `[RES]` counted to the first press's end)
+      if (life.pressMs > startMs && auraOfficialEndMs !== undefined)
+        auraOfficialEndMs = Math.max(auraOfficialEndMs, life.capMs);
       // never past its holder's death, from the life's start (#4, 1c #4)
       const untilMs = auraSurelyUpUntilMs(
         unit,
