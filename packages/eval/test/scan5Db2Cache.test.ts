@@ -66,7 +66,7 @@ describe("corpusFactScan5 refuses a run without its DB2 tables (T249)", () => {
     process.env.DATAGEN_CACHE = join(tmpdir(), "db2-cache-not-there");
     expect(() => configure()).toThrow(
       new RegExp(
-        ["SpellEffect", "SpellMisc", "SpellCategories"]
+        ["SpellEffect", "SpellMisc", "SpellCategories", "ItemEffect"]
           .map((t) => `(?=.*${t}-${DB2_BUILD}\\.csv)`)
           .join(""),
       ),
@@ -88,6 +88,10 @@ describe("corpusFactScan5 refuses a run without its DB2 tables (T249)", () => {
     expect(() => configure(["allyOnlySelfSave"])).toThrow(
       `SpellMisc-${DB2_BUILD}.csv (allyOnlySelfSave)`,
     );
+    // pipeline T329: castLineNoButton reads an item's spell off ItemEffect
+    expect(() => configure(["castLineNoButton"])).toThrow(
+      `ItemEffect-${DB2_BUILD}.csv (castLineNoButton)`,
+    );
   });
 
   it("runs a check that reads no table, and any check with them all", () => {
@@ -98,6 +102,7 @@ describe("corpusFactScan5 refuses a run without its DB2 tables (T249)", () => {
       "SpellEffect",
       "SpellMisc",
       "SpellCategories",
+      "ItemEffect",
     ]);
     expect(() => configure()).not.toThrow();
   });

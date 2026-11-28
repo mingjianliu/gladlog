@@ -74,11 +74,12 @@
  *    Counted: every such answer whose aura came from a non-pet summon.
  *  - castLineNoButton (D3): a `[YOU] [CAST]` line naming a spell whose every
  *    owner SPELL_CAST_SUCCESS row of the name in that second is no button —
- *    no DB2 SpellCooldowns row (`isButtonPress`): a row a passive writes
- *    (Sanctified Ground 289655 after each Holy Word: Serenity). The forward
- *    check of `PASSIVE_PROC_CAST_IDS`; kind = the spell id, or `reviewed
- *    button` (out of the total) for a real button with no such row
- *    (`REVIEWED_BUTTON_IDS`). Counted: every
+ *    no DB2 SpellCooldowns row (`isButtonPress`) and no item's on-use spell
+ *    (DB2 ItemEffect.SpellID: a drink, a toy, a mount — pipeline T329): a
+ *    row a passive writes (Sanctified Ground 289655 after each Holy Word:
+ *    Serenity). The forward check of `PASSIVE_PROC_CAST_IDS`; kind = the
+ *    spell id, or `reviewed button` (out of the total) for a real button
+ *    with no such row (`NO_COOLDOWN_ROW_BUTTON_IDS`). Counted: every
  *    `[YOU] [CAST]` line with an owner row of its name in its second.
  *  - pressedInsideNeverBack (D14): a `team offensive CDs ready at M:SS: …`
  *    clause set listing a cooldown under `pressed inside` that is on none of
@@ -162,6 +163,7 @@ import {
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { ENEMY_HEAL_CD_IDS } from "@gladlog/analysis/src/data/enemyHealCds";
 import { healerSaveCdRoster } from "@gladlog/analysis/src/data/healerSaveCd";
+import { NO_COOLDOWN_ROW_BUTTON_IDS } from "@gladlog/analysis/src/data/noCooldownRowButtons";
 import { OVERRIDE_VARIANTS_GENERATED } from "@gladlog/analysis/src/data/overrideVariantsGenerated";
 import { SHARED_CD_RACIAL_SPELL_IDS } from "@gladlog/analysis/src/data/racialAbilities";
 import {
@@ -224,6 +226,7 @@ import {
   successesOf,
   tsOf,
 } from "./ctx";
+import { db2Lines } from "./db2Cache";
 
 export const CHECKS = [
   "channelEndOnOwnRow",
@@ -257,6 +260,8 @@ export const CHECKS = [
 export const MEASURED_ONLY: ReadonlySet<string> = new Set([
   "healMajorAsDefensive",
 ]);
+
+export const DB2_TABLES = { castLineNoButton: ["ItemEffect"] } as const;
 
 export function run(ctx: IRoundCtx): void {
   doomWindsNoPressReading(ctx);
@@ -1025,23 +1030,52 @@ function answeredByOldSummonPulse(ctx: IRoundCtx): void {
 const YOU_CAST_LINE =
   /^(\d+:\d{2})\s+\[YOU\] \[CAST\]\s+(.+?)(?: \(x\d+(?: over \d+s)?\))?(?: →| \[|$)/;
 
-/** Buttons DB2 gives no SpellCooldowns row: the missing row does not make a
- * passive of them, and no product table tells the two apart, so the ones
- * read on raw rows are listed here and counted out of the total (T243,
- * scan triage 2026-11-22; rows on the 605): Rejuvenation (Germination) —
- * the press beside its 774 companion (`COMPANION_CAST_ROWS`), 1,084; Chi
- * Torpedo — Roll's charge-based replacement, 211; Typhoon — a pressed
- * knockback, 64; Hand of Reckoning — a pressed taunt, 20. */
-const REVIEWED_BUTTON_IDS: ReadonlySet<string> = new Set([
-  "155777",
-  "115008",
-  "61391",
-  "62124",
-]);
+/** Real buttons with no SpellCooldowns row (`NO_COOLDOWN_ROW_BUTTON_IDS`,
+ * the reviewed list, registered in `curatedIdRegistry.ts`) are counted out
+ * of the total under this kind. */
 const REVIEWED_BUTTON_KIND = "reviewed button";
 export const OUT_OF_TOTAL: ReadonlySet<string> = new Set([
   `castLineNoButton|${REVIEWED_BUTTON_KIND}`,
 ]);
+
+let itemSpellIds: ReadonlySet<string> | undefined;
+/** ItemEffect.TriggerType of a spell the player presses: 0 on use (a drink,
+ * a toy, a trinket), 6 learned from the item (a mount). On equip (1) and
+ * chance on hit (2) are passives. */
+const PRESSED_ITEM_TRIGGERS: ReadonlySet<string> = new Set(["0", "6"]);
+/** Every item's pressed spell (DB2 ItemEffect.SpellID, `PRESSED_ITEM_TRIGGERS`):
+ * pressed from the bags or the mount journal; an item's spell has no
+ * SpellCooldowns row of its own (pipeline T329: 39 of castLineNoButton's 54
+ * in-total rows on the 605 at 87e3bc72c — Drink, Winning Hand, Feeling
+ * Fielder Mk. 7, Argent Charger …). No table (a unit test without a cache)
+ * reads as none; a run is refused (`DB2_TABLES`). */
+export function isItemUseSpell(spellId: string): boolean {
+  if (!itemSpellIds) {
+    const out = new Set<string>();
+    const lines = db2Lines("ItemEffect");
+    if (lines) {
+      const cols = lines[0]!.trim().split(",");
+      const sp = cols.indexOf("SpellID");
+      const tr = cols.indexOf("TriggerType");
+      if (sp < 0 || tr < 0)
+        throw new Error("ItemEffect: no SpellID / TriggerType column");
+      for (const l of lines.slice(1)) {
+        const f = l.split(",");
+        const id = f[sp]?.trim();
+        if (id && id !== "0" && PRESSED_ITEM_TRIGGERS.has(f[tr]?.trim() ?? ""))
+          out.add(id);
+      }
+    }
+    itemSpellIds = out;
+  }
+  return itemSpellIds.has(spellId);
+}
+
+/** A row of a button: a DB2 SpellCooldowns row, or an item's on-use spell. */
+const isButtonRow = (c: any): boolean => {
+  const id = String(c.spellId);
+  return isButtonPress(id) || isItemUseSpell(id);
+};
 
 function castLineNoButton(ctx: IRoundCtx): void {
   const owner = ctx.owner;
@@ -1057,14 +1091,16 @@ function castLineNoButton(ctx: IRoundCtx): void {
     );
     if (rows.length === 0) continue;
     ctx.bump("castLineNoButton");
-    if (rows.some((c) => isButtonPress(String(c.spellId)))) continue;
+    if (rows.some(isButtonRow)) continue;
     const id = String(rows[0].spellId);
     ctx.violate(
       "castLineNoButton",
-      REVIEWED_BUTTON_IDS.has(id) ? REVIEWED_BUTTON_KIND : `${name} ${id}`,
+      NO_COOLDOWN_ROW_BUTTON_IDS.has(id)
+        ? REVIEWED_BUTTON_KIND
+        : `${name} ${id}`,
       tsOf(rows[0]),
       `${owner.name}:${id}:${tsOf(rows[0])}`,
-      `${name} ${id} at ${m[1]}: no SpellCooldowns row`,
+      `${name} ${id} at ${m[1]}: no SpellCooldowns row, no item's spell`,
       l,
     );
   }

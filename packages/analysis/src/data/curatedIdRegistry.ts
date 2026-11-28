@@ -293,6 +293,7 @@ import {
 } from "./kickedSpellCategories";
 import { MITIGATION_OVERRIDES, NO_MITIGATION_IDS } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
+import { NO_COOLDOWN_ROW_BUTTON_IDS } from "./noCooldownRowButtons";
 import {
   CHANNEL_PROXY_IDS,
   DRINK_AURA_IDS,
@@ -780,6 +781,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // nothing on non-English clients (23.4% of Reclamation's casts).
   t("PASSIVE_PROC_CAST_IDS", "utils/cooldowns.ts", "cast", () => [
     ...PASSIVE_PROC_CAST_IDS.keys(),
+  ]),
+  // scan5 castLineNoButton's reviewed buttons (no product reader; pipeline T329)
+  t("NO_COOLDOWN_ROW_BUTTON_IDS", "data/noCooldownRowButtons.ts", "cast", () => [
+    ...NO_COOLDOWN_ROW_BUTTON_IDS.keys(),
   ]),
   t("CD_ROLE_TAGS", "utils/cooldowns.ts", "cast", () => keys(CD_ROLE_TAGS)),
   t("TEAM_HEAL_CD_IDS", "utils/cooldowns.ts", "cast", () =>
