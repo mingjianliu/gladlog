@@ -56,6 +56,7 @@
 import {
   REFLECT_DAMAGE_WINDOW_S,
   REFLECT_OWN_ID_LEAD_MS,
+  reflectedCopyUp,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { ENEMY_CAUSED_SELF_DAMAGE_IDS } from "@gladlog/analysis/src/data/enemyCausedSelfDamage";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
@@ -155,10 +156,15 @@ export function reflectsByCaster(units: readonly any[]): ReflectsByCaster {
  *  Unstable Affliction's dispel backlash 196364 is named as its 1259790)
  *  reflected by an enemy from `REFLECT_OWN_ID_LEAD_MS` before the row to
  *  `REFLECT_DAMAGE_WINDOW_S` after the reflect (`reflectedSpells`' own
- *  bounds). The enemy's doing, written in the caster's name (codex
+ *  bounds), or later while the reflected copy's aura still runs on its caster
+ *  (`reflectedCopyUp`). The enemy's doing, written in the caster's name (codex
  *  85-claude-b-T330-1 #2: a912b05a r6 0:21, a Frostfire Bolt Nether Ward
  *  sent back, seven mage → mage rows). */
-export function isReflectedReturn(e: any, reflects: ReflectsByCaster): boolean {
+export function isReflectedReturn(
+  u: any,
+  e: any,
+  reflects: ReflectsByCaster,
+): boolean {
   const list = reflects.get(e.srcUnitId ?? "");
   if (!list) return false;
   const id = String(e.spellId ?? "");
@@ -168,7 +174,12 @@ export function isReflectedReturn(e: any, reflects: ReflectsByCaster): boolean {
     (r) =>
       (r.spellId === id || (name !== "" && r.name === name)) &&
       t >= r.t - REFLECT_OWN_ID_LEAD_MS &&
-      t - r.t <= REFLECT_DAMAGE_WINDOW_S * 1000,
+      (t - r.t <= REFLECT_DAMAGE_WINDOW_S * 1000 ||
+        // the reflected copy's ticks on its caster, for as long as its aura
+        // runs (`reflectedCopyUp`, the product's own; codex
+        // 85-claude-b-T330-1b: 64d4fe00 r2 Wither, four ticks 21–27 s on)
+        (u.id === e.srcUnitId &&
+          reflectedCopyUp(u, id, e.srcUnitId, t, r.t, r.t))),
   );
 }
 
@@ -182,7 +193,7 @@ export function sideRowBucket(
   if (
     !isAttackerDamageRow(e) ||
     isDeferredTickId(e.spellId) ||
-    isReflectedReturn(e, reflects)
+    isReflectedReturn(u, e, reflects)
   )
     return "pressure";
   const victimSide = sides.get(u.id) ?? u.reaction;

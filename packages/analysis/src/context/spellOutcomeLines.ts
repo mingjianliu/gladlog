@@ -598,6 +598,72 @@ export function unrowedSpellReflections(
   return out.sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
 }
 
+/** Whether the reflected copy of `spellId` that `srcId` put on `caster` — a
+ *  run of its aura the reflect started (an APPLIED / REFRESH / dose from
+ *  `REFLECT_OWN_ID_LEAD_MS` before the chain's first REFLECT row to
+ *  `REFLECT_DIRECT_RETURN_MS` after its last) — is up at `ts`. Read by
+ *  `reflectedSpells` (the run's edge cases are noted above its call there)
+ *  and by scan5 `burstRatioOwnSideDamage` (pipeline T330). */
+export function reflectedCopyUp(
+  caster: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  srcId: string,
+  ts: number,
+  firstMs: number,
+  lastMs: number,
+): boolean {
+  let since: number | undefined;
+  /** the run's APPLIED, REFRESH and dose rows */
+  let touches: number[] = [];
+  let cut: { at: number; since: number; touches: number[] } | undefined;
+  let reappliedAt: number | undefined;
+  for (const a of caster.auraEvents ?? []) {
+    if (a.logLine.timestamp > ts) break;
+    if (a.spellId !== spellId || a.srcUnitId !== srcId) continue;
+    const at = a.logLine.timestamp;
+    const ev = a.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      // …in either order: an APPLIED logged first in that ms
+      if (reappliedAt === at) continue;
+      // the run's last tick can share its removal ms (c5ae2200 1:06.732:
+      // a 2,429 Flame Shock tick, then the REMOVED) — it is the run's
+      if (at === ts) continue;
+      cut = since === undefined ? undefined : { at, since, touches };
+      since = undefined;
+      touches = [];
+      continue;
+    }
+    if (since === undefined && cut?.at === at) {
+      since = cut.since;
+      touches = cut.touches;
+    } else if (since === undefined) {
+      since = at;
+      touches = [at];
+      continue;
+    } else if (ev === LogEvent.SPELL_AURA_APPLIED) reappliedAt = at;
+    // only the caster's own copy: no one but a reflect puts the
+    // caster's spell on the caster, while the reflector's own copy
+    // stacks and refreshes by itself (cb7fe23f r1 0:20: Ilovearýanne's
+    // Wither doses on Cybermooke 2.4 s after a reflect claimed her whole
+    // run, 167k printed for 5.8k)
+    if (
+      srcId === caster.id &&
+      (ev === LogEvent.SPELL_AURA_APPLIED ||
+        ev === LogEvent.SPELL_AURA_REFRESH ||
+        ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
+    )
+      touches.push(at);
+  }
+  return (
+    since !== undefined &&
+    touches.some(
+      (t) =>
+        t >= firstMs - REFLECT_OWN_ID_LEAD_MS &&
+        t <= lastMs + REFLECT_DIRECT_RETURN_MS,
+    )
+  );
+}
+
 export function reflectedSpells(
   units: readonly ICombatUnit[],
   matchStartMs: number,
@@ -716,64 +782,13 @@ export function reflectedSpells(
     // at 2:17 into the same copy; the 2:17 line kept only its first 20 s and
     // the copy's last 6 s went back to the 2:07 line). `owning` gives a tick
     // to the latest chain standing behind it.
-    const reflectedCopyUp = (
+    const copyUp = (
       spellId: string,
       srcId: string,
       ts: number,
       firstMs: number,
       lastMs: number,
-    ): boolean => {
-      let since: number | undefined;
-      /** the run's APPLIED, REFRESH and dose rows */
-      let touches: number[] = [];
-      let cut: { at: number; since: number; touches: number[] } | undefined;
-      let reappliedAt: number | undefined;
-      for (const a of caster.auraEvents ?? []) {
-        if (a.logLine.timestamp > ts) break;
-        if (a.spellId !== spellId || a.srcUnitId !== srcId) continue;
-        const at = a.logLine.timestamp;
-        const ev = a.logLine.event;
-        if (ev === LogEvent.SPELL_AURA_REMOVED) {
-          // …in either order: an APPLIED logged first in that ms
-          if (reappliedAt === at) continue;
-          // the run's last tick can share its removal ms (c5ae2200 1:06.732:
-          // a 2,429 Flame Shock tick, then the REMOVED) — it is the run's
-          if (at === ts) continue;
-          cut = since === undefined ? undefined : { at, since, touches };
-          since = undefined;
-          touches = [];
-          continue;
-        }
-        if (since === undefined && cut?.at === at) {
-          since = cut.since;
-          touches = cut.touches;
-        } else if (since === undefined) {
-          since = at;
-          touches = [at];
-          continue;
-        } else if (ev === LogEvent.SPELL_AURA_APPLIED) reappliedAt = at;
-        // only the caster's own copy: no one but a reflect puts the
-        // caster's spell on the caster, while the reflector's own copy
-        // stacks and refreshes by itself (cb7fe23f r1 0:20: Ilovearýanne's
-        // Wither doses on Cybermooke 2.4 s after a reflect claimed her whole
-        // run, 167k printed for 5.8k)
-        if (
-          srcId === caster.id &&
-          (ev === LogEvent.SPELL_AURA_APPLIED ||
-            ev === LogEvent.SPELL_AURA_REFRESH ||
-            ev === LogEvent.SPELL_AURA_APPLIED_DOSE)
-        )
-          touches.push(at);
-      }
-      return (
-        since !== undefined &&
-        touches.some(
-          (t) =>
-            t >= firstMs - REFLECT_OWN_ID_LEAD_MS &&
-            t <= lastMs + REFLECT_DIRECT_RETURN_MS,
-        )
-      );
-    };
+    ): boolean => reflectedCopyUp(caster, spellId, srcId, ts, firstMs, lastMs);
     const sameSpell = (reflected: string, hit: string) =>
       reflected === hit ||
       (!BACKLASH_AURA_CC_TYPE.has(hit) &&
@@ -794,7 +809,7 @@ export function reflectedSpells(
         // fixed window only for a return no copy stands behind (F20 D6)
         if (
           ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000 &&
-          !(src !== undefined && reflectedCopyUp(spellId, src, ts, t0, c.last))
+          !(src !== undefined && copyUp(spellId, src, ts, t0, c.last))
         )
           continue;
         if (
@@ -802,7 +817,7 @@ export function reflectedSpells(
           src !== caster.id &&
           (reflectorsOwnAuraUp(spellId, src, ts, t0) ||
             (ts > c.last + REFLECT_DIRECT_RETURN_MS &&
-              !reflectedCopyUp(spellId, src, ts, t0, c.last)))
+              !copyUp(spellId, src, ts, t0, c.last)))
         )
           continue;
         if (!best || t0 > best.first.logLine.timestamp) best = c;

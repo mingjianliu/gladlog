@@ -5837,6 +5837,12 @@ const INDEX: PredicateRow[] = [
     symbol: "maxHpNear",
     mod: spellOutcomeLines,
   },
+  // pipeline T330: the reflected copy's aura run (scan5 t159 imports it)
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "reflectedCopyUp",
+    mod: spellOutcomeLines,
+  },
   // F20 D9 / D13: what one trinket press removed; the [DEATH] trinket tag
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

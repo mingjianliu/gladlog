@@ -107,6 +107,24 @@ describe("burstRatioOwnSideDamage's own-side row (T330)", () => {
     expect(mateSees(at(row(victim.id, "196364"), 30_000))).toBe("own");
     // past the window, or another spell: the unit's own again
     expect(b(at(row(victim.id, "1259790"), 30_000))).toBe("self");
+    // …unless the reflected copy's aura still runs on the caster: applied
+    // by the caster on itself 5 ms after the reflect, removed at 40 s
+    const copy = (event: string, timestamp: number) => ({
+      spellId: "1259790",
+      srcUnitId: victim.id,
+      logLine: { event, timestamp },
+    });
+    const withCopy = {
+      ...victim,
+      auraEvents: [
+        copy(LogEvent.SPELL_AURA_APPLIED as string, 1005),
+        copy(LogEvent.SPELL_AURA_REMOVED as string, 40_000),
+      ],
+    };
+    const bc = (e: ReturnType<typeof row>): string =>
+      sideRowBucket(withCopy, e, sides, ownerOf, reflects);
+    expect(bc(at(row(victim.id, "1259790"), 30_000))).toBe("pressure");
+    expect(bc(at(row(victim.id, "1259790"), 45_000))).toBe("self");
     expect(b(at(row(victim.id, "111400"), 5000))).toBe("self");
   });
 
