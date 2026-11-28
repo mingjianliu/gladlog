@@ -46,3 +46,49 @@ describe("kit — a rate-warped cooldown prints its realised range", () => {
     expect(kit({})).toContain("Emerald Communion [180s");
   });
 });
+
+describe("kit — the unit's own shortest recast (T316)", () => {
+  const twice = (endOfPlayS?: number, floor: number | null = 150) =>
+    buildPlayerLoadout(
+      owner,
+      "Preservation Evoker",
+      [
+        {
+          spellId: "370960",
+          spellName: "Emerald Communion",
+          cooldownSeconds: 180,
+          maxChargesDetected: 1,
+          neverUsed: false,
+          casts: [{ timeSeconds: 10 }, { timeSeconds: 115 }],
+          ...(floor === null ? {} : { earliestCooldownSeconds: floor }),
+        } as unknown as IMajorCooldownInfo,
+      ],
+      [],
+      NO_ENEMIES,
+      undefined,
+      undefined,
+      endOfPlayS === undefined
+        ? undefined
+        : {
+            startTime: 0,
+            endTime: 300_000,
+            startInfo: { bracket: "Rated Solo Shuffle" },
+            units: [
+              {
+                info: {},
+                deathRecords: [{ timestamp: endOfPlayS * 1000 }],
+              },
+            ],
+          },
+    ).text;
+  it("已经是区间(语料下限 150 s)的条目,两次按键隔 105 s:低端不高于它", () => {
+    expect(twice()).toContain("Emerald Communion [105–180s");
+    expect(twice(200)).toContain("Emerald Communion [105–180s");
+  });
+  it("可玩结束之后的按键不读(codex 85-tk-L8-T316-1 #2)", () => {
+    expect(twice(100)).toContain("Emerald Communion [150–180s");
+  });
+  it("没有任何缩短来源的条目保持一个数:早按零点几秒不印成 [179–180s](cover T316-5)", () => {
+    expect(twice(undefined, null)).toContain("Emerald Communion [180s");
+  });
+});

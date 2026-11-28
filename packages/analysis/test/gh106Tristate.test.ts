@@ -17,6 +17,7 @@ import {
   cdSecondsUntilReady,
   earliestCooldownSecondsFor,
   type IMajorCooldownInfo,
+  ownShortestRecast,
   readyAfterReductions,
 } from "../src/utils/cooldowns";
 
@@ -88,7 +89,6 @@ describe("cdRecastFloorGenerated.json", () => {
   });
 });
 
-
 describe("[RES] rendering of the three states", () => {
   const cd = (over: Partial<IMajorCooldownInfo>): IMajorCooldownInfo =>
     ({
@@ -134,6 +134,10 @@ describe("[RES] rendering of the three states", () => {
   it("no floor: the exact seconds, as before", () => {
     expect(res([cd({})], 30)).toContain("cd:Avatar(70s)");
   });
+  it("T316:[RES] 行不读本轮自己的最短重按(只有技能表读),仍按模型 / 语料下限", () => {
+    const twice = cd({ casts: [{ timeSeconds: 10 }, { timeSeconds: 85 }] });
+    expect(res([twice], 30)).toContain("cd:Avatar(70s)");
+  });
   it("a per-cast override never renders a range (Guardian Angel's saved branch)", () => {
     const gs = cd({
       earliestCooldownSeconds: 20,
@@ -141,6 +145,54 @@ describe("[RES] rendering of the three states", () => {
     });
     expect(cdMaybeAvailableAt(gs, 40)).toBe(false);
     expect(res([gs], 40)).toContain("cd:Avatar(30s)");
+  });
+});
+
+describe("ownShortestRecast (T316)", () => {
+  const c = (timeSeconds: number, over: object = {}) => ({
+    timeSeconds,
+    ...over,
+  });
+  it("启动冷却的按键到下一次证明按钮已回的按键,取最短", () => {
+    expect(
+      ownShortestRecast({ casts: [c(10), c(95), c(170)], charges: 1 }),
+    ).toEqual({ gapSeconds: 75, fromSeconds: 95 });
+  });
+  it("只有一次按键、或多充能:没有读数", () => {
+    expect(ownShortestRecast({ casts: [c(10)], charges: 1 })).toBeUndefined();
+    expect(
+      ownShortestRecast({ casts: [c(10), c(20)], charges: 2 }),
+    ).toBeUndefined();
+  });
+  it("免费按键不启动也不证明;没放出去的蓄力证明;按最晚定时的按键既不启动也不证明", () => {
+    // a free press between two real ones: the gap is opener → next real
+    expect(
+      ownShortestRecast({
+        casts: [c(10), c(15, { freeRecast: true }), c(100)],
+        charges: 1,
+      }),
+    ).toEqual({ gapSeconds: 90, fromSeconds: 10 });
+    // an unreleased hold (free, spent nothing) still proves the button back
+    expect(
+      ownShortestRecast({
+        casts: [c(10), c(70, { freeRecast: true, unreleased: true })],
+        charges: 1,
+      }),
+    ).toEqual({ gapSeconds: 60, fromSeconds: 10 });
+    // an aura with no cast row (timed at the latest) is no anchor and no
+    // proof: Divine Hymn's Guardian Spirit 2.4 s after the press (codex
+    // 85-tk-L8-T316-1 #1) — neither 10 → 15 nor 15 → 97 is measured
+    expect(
+      ownShortestRecast({
+        casts: [c(10), c(15, { timedAtLatest: true }), c(97)],
+        charges: 1,
+      }),
+    ).toEqual({ gapSeconds: 87, fromSeconds: 10 });
+  });
+  it("回合可玩结束之后的按键不读", () => {
+    expect(
+      ownShortestRecast({ casts: [c(10), c(95)], charges: 1 }, 90),
+    ).toBeUndefined();
   });
 });
 
@@ -158,7 +210,9 @@ describe("readyAfterReductions (fact7 D71)", () => {
     expect(readyAfterReductions(90, cuts)).toBe(80);
   });
   it("a reduction after `untilSeconds` has not happened yet", () => {
-    expect(readyAfterReductions(90, [{ atSeconds: 40, seconds: 20 }], 30)).toBe(90);
+    expect(readyAfterReductions(90, [{ atSeconds: 40, seconds: 20 }], 30)).toBe(
+      90,
+    );
   });
 });
 

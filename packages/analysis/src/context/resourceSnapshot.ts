@@ -35,6 +35,7 @@ import {
   kitSpellNameOf,
   lockCastsOf,
   ownPressLockout,
+  ownShortestRecast,
   type PressLockoutDebuff,
   pressSpentBy,
   readyAfterReductions,
@@ -56,6 +57,7 @@ import type { CastFailedEvent } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
+import { playableEndMs } from "../utils/roundEnd";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import { unitLogInstant } from "../utils/talents";
 import { DEATH_CASCADE_MS, isDeadAt } from "../utils/unitDeath";
@@ -271,6 +273,22 @@ export function buildPlayerLoadout(
   // `[60s, lasts 12s]` while the [RES] row of a press read `(71s)` — 2,121
   // `cd:` entries of the 605-file capture sat above the kit's own number.
   let shortenedPrinted = false;
+  // T316: the presses the kit's own-recast reading takes end where play
+  // does (`playableEndMs`, the gate's `roundEndAt`): a press after the
+  // deciding death is no press of the round (codex 85-tk-L8-T316-1 #2)
+  const recastUntilS = roundMs
+    ? (Math.min(
+        roundMs.endTime,
+        playableEndMs(
+          roundMs,
+          Array.isArray(roundMs.units)
+            ? (roundMs.units as unknown[])
+            : Object.values(roundMs.units ?? {}),
+        ) ?? Infinity,
+      ) -
+        roundMs.startTime) /
+      1000
+    : Number.POSITIVE_INFINITY;
   const cdSecondsLabel = (cd: IMajorCooldownInfo): string => {
     const official = spellEffectData[cd.spellId]?.cooldownSeconds;
     if (
@@ -368,13 +386,28 @@ export function buildPlayerLoadout(
     // 1 s reductions off 60 s are 51 s and arrive as 50.99999999999999
     // (codex 85-tk-G-T55-1d: four Deep Breath ranges on the 605 printed a
     // second low). A real fraction still floors.
+    const modelled = Math.min(
+      cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
+      cd.cooldownSeconds - eventShortest,
+      rateShortest,
+      realisedShortest,
+    );
+    // T316: a range's low end is never above the unit's own shortest return
+    // in the round. Only a range's: an entry nothing shortens stays its one
+    // number — a re-press a fraction of a second inside the cooldown (the
+    // client's queue window) is no shortening, and floored it printed
+    // `[29–30s]` on 335 kit entries of the cover set (job T316-5). The kit
+    // is the round's line and reads the whole round; a [RES] row is a
+    // moment's, read beside `cdMaybeAvailableAt`, and stays on the corpus
+    // floor (coordinator ruling 2026-11-28)
     const soonest = cdWholeSecond(
-      Math.min(
-        cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
-        cd.cooldownSeconds - eventShortest,
-        rateShortest,
-        realisedShortest,
-      ),
+      cdWholeSecond(modelled) < cd.cooldownSeconds
+        ? Math.min(
+            modelled,
+            ownShortestRecast(cd, recastUntilS)?.gapSeconds ??
+              cd.cooldownSeconds,
+          )
+        : modelled,
     );
     if (soonest < cd.cooldownSeconds) {
       shortenedPrinted = true;
@@ -652,7 +685,7 @@ export const RES_OPENER_SKIP_S = 5;
 
 /** The kit's `[a–Ns]` (fact2, 2026-10-20): written when a kit carries one. */
 export const KIT_SHORTENED_CD_LEGEND =
-  "  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest — the same range the [RES] rows print.";
+  "  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest.";
 
 /**
  * One cooldown's state on a [RES] line, through the shared predicate

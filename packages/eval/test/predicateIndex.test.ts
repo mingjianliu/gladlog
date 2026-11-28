@@ -886,6 +886,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "ownShortestRecast",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "isPressOfCooldown",
     mod: cooldowns,
   },

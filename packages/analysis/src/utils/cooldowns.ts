@@ -3915,6 +3915,53 @@ export function earliestCooldownSecondsFor(
 }
 
 /**
+ * T316: the shortest return of this cooldown the round itself shows — the
+ * shortest gap from a press that started the cooldown to the next press
+ * proving the button back, and where it starts. The kit's `[a–Ns]` low end
+ * is never above it: the corpus floor (`earliestCooldownSecondsFor`) is a
+ * quantile, and a unit whose own presses came sooner has been seen back
+ * sooner. One reading for the loadout and its gate (scan5/t16). The `[RES]`
+ * rows and the availability questions do not read it: they are a moment's
+ * reading, and stay on the floor `cdMaybeAvailableAt` reads.
+ *
+ * `spent`: a press that started the cooldown — not a free press
+ * (`freeRecast`), and not one timed at the latest it can have been
+ * (`timedAtLatest`: a gap from it reads short). `ready`: every press that
+ * proves the button back — those, and a hold that never went out
+ * (`unreleased`). A `timedAtLatest` entry proves nothing either: it is an
+ * aura with no cast row, and that aura can be another spell's doing
+ * (codex 85-tk-L8-T316-1 #1: Divine Hymn puts Guardian Spirit on the
+ * priest 2.4 s after the real press, T336). A multi-charge entry has no single return:
+ * undefined. `untilSeconds` cuts the presses read (the round's end of play).
+ */
+export function ownShortestRecast(
+  cd: Pick<IMajorCooldownInfo, "casts" | "charges">,
+  untilSeconds = Number.POSITIVE_INFINITY,
+): { gapSeconds: number; fromSeconds: number } | undefined {
+  if ((cd.charges ?? 1) > 1) return undefined;
+  const spent: number[] = [];
+  const ready: number[] = [];
+  for (const c of cd.casts ?? []) {
+    if (c.timeSeconds > untilSeconds) continue;
+    if (!c.freeRecast) {
+      if (c.timedAtLatest) continue;
+      spent.push(c.timeSeconds);
+      ready.push(c.timeSeconds);
+    } else if (c.unreleased) ready.push(c.timeSeconds);
+  }
+  spent.sort((x, y) => x - y);
+  let best: { gapSeconds: number; fromSeconds: number } | undefined;
+  for (const r of ready) {
+    let from: number | undefined;
+    for (const x of spent) if (x < r) from = x;
+    if (from === undefined) continue;
+    if (!best || r - from < best.gapSeconds)
+      best = { gapSeconds: r - from, fromSeconds: from };
+  }
+  return best;
+}
+
+/**
  * Rendered-second slack shared by EVERY "is cooldown X available at instant
  * t" consumer: a cast up to this many seconds AFTER the queried instant counts
  * as already consumed, and a cooldown that comes back within this many seconds

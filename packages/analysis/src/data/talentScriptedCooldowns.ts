@@ -554,6 +554,9 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // 0.41 s, 0 of 38 below −0.5 s. 22 gaps on non-holders, lowest 59.98 s: the
   // talent is what splits them. No Seed cast fell inside a holder's gap in
   // that sample; Seed is the tooltip's half.
+  // FLAG (T316, scan5/t316 cdResidual): 6 recasts on the 605 and 1 on the
+  // 12.1.5 files come 0.8–1.5 s early, each one trigger short. No
+  // mechanism found — the row is unchanged.
   "1259886": {
     targets: ["1257052"],
     triggerCastIds: ["1259790", "27243"],
@@ -681,6 +684,9 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // recast pairs on its own 90 s, 35 come back early by up to 31 s; with
   // Guidance's 5 s per faded guardian and Control of the Dream's credit 2
   // are left, at 2.7 and 3.9 s — inside a guardian killed before its 8 s.
+  // FLAG (T316, scan5/t316 cdResidual): 6 recasts on the 605 and 3 on the
+  // 12.1.5 files still come 4.4–13.8 s before this row's ready time; they
+  // need 5.3–6.2 s a fade. No mechanism found — the row keeps 5 s.
   "393371": {
     targets: ["33891", "473909"],
     triggerCastIds: [],

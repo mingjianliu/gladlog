@@ -22,6 +22,7 @@
 import { kitNameWithoutNoWallTag } from "@gladlog/analysis/src/utils/auraMasteryBranch";
 import {
   kitSpellNameOf,
+  ownShortestRecast,
   unitCooldownLedger,
 } from "@gladlog/analysis/src/utils/cooldowns";
 
@@ -33,72 +34,45 @@ export const CHECKS = ["kitSoonestAboveRecast"] as const;
 const KIT_SLACK_S = 1;
 const UNIT_OPEN = /^\s*<unit id="(\d+)"/;
 const KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>/;
-const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+)s([^\]]*)\]/g;
+// the upper bound can carry a fraction (`Master's Call [22–22.5s]`): an
+// integer-only pattern skipped 76 | 23 entries with a measurable recast
+// (codex 85-tk-L8-T316-1d #1)
+const KIT_RANGE = /(?:^|, )([^,[\]]+?) \[(\d+)–(\d+(?:\.\d+)?)s([^\]]*)\]/g;
 
 /**
- * The presses of the kit entry `name`, as the producer selects them: the
- * casts of the ledger entry that kit entry is rendered from
- * (`unitCooldownLedger`, the entry whose `spellName` the kit prints), never
- * re-derived here and never `unitCooldownEntry`'s fallback for an id the
- * ledger does not carry (the Stasis release 370564 built a cooldown entry of
- * its own, its releases read as presses: 61 false Stasis rows on 605). Echo
- * rows (Time Spiral's, Stasis replays, copy casts) are no cast there, and a
- * free press (`freeRecast`) is marked (codex reviews 85-tk-E-T16-1 / -1b /
- * -2, batch review 80-PIPE-20-B20: 08428e7e r2 Spiritwalker's Grace 16.0 /
- * 69.3 s, the second a Time Spiral cast). `spent`: the presses that started
- * a cooldown. `ready`: every press that proves the button was back — those,
- * plus a hold that never went out (`unreleased`: it spent nothing, but it
- * could only start on a ready button). A free press of Time Spiral or a
- * free-recast window proves neither. A press no cast row dates
- * (`timedAtLatest`: unseen, or read off its effect) is ready, not spent: its
- * real instant is at or before its time, so a gap measured from it reads
- * short (codex 85-tk-E-T16-2b: an unseen Life Cocoon at 10 s re-stated at
- * 15 s, pressed again at 97 s, read 82.0 s against `[86–120s]`). Epoch ms, the round's end of play the
- * cut. One per ledger entry of that name.
+ * The shortest recast of the kit entry `name`, as the producer reads it:
+ * `ownShortestRecast` (the predicate the kit's low end is clamped by, T316;
+ * the `[RES]` rows do not read it) over the casts of the ledger entry that kit entry is
+ * rendered from (`unitCooldownLedger`, the entry whose `spellName` the kit
+ * prints), never re-derived here and never `unitCooldownEntry`'s fallback
+ * for an id the ledger does not carry (the Stasis release 370564 built a
+ * cooldown entry of its own, its releases read as presses: 61 false Stasis
+ * rows on 605). Which presses start a cooldown and which prove the button
+ * back is that predicate's: free presses, holds that never went out and
+ * presses no cast row dates are told apart there (codex reviews
+ * 85-tk-E-T16-1 / -1b / -2 / -2b, batch review 80-PIPE-20-B20). The round's
+ * end of play is the cut. Epoch ms.
  */
-function pressesOf(
+function shortestRecastOf(
   ctx: IRoundCtx,
   u: any,
   name: string,
-): Array<{ spent: number[]; ready: number[] }> {
-  return (
-    unitCooldownLedger(u, ctx.legacy)
-      // by the name the kit prints for this holder (`kitSpellNameOf`: an Ice
-      // Cold holder's Ice Block row), codex 85-tk-G-T61-2 #2
-      .filter((cd) => kitSpellNameOf(cd, u) === name)
-      .map((cd) => {
-        const spent: number[] = [];
-        const ready: number[] = [];
-        for (const c of cd.casts) {
-          const ms = ctx.legacy.startTime + c.timeSeconds * 1000;
-          if (ms > ctx.roundEndAt) continue;
-          // a press timed at the latest it can have been is no anchor (the
-          // gap from it reads short), but it still proves the button back
-          if (!c.freeRecast) {
-            if (!c.timedAtLatest) spent.push(ms);
-            ready.push(ms);
-          } else if (c.unreleased) ready.push(ms);
-        }
-        return {
-          spent: spent.sort((x, y) => x - y),
-          ready: ready.sort((x, y) => x - y),
-        };
-      })
-  );
-}
-
-/** The shortest gap from a press that started the cooldown to the next
- * press proving it back, and that press's start; undefined with none. */
-function shortestRecast(p: {
-  spent: number[];
-  ready: number[];
-}): { gapMs: number; at: number } | undefined {
+): { gapMs: number; at: number } | undefined {
   let best: { gapMs: number; at: number } | undefined;
-  for (const r of p.ready) {
-    let from: number | undefined;
-    for (const s of p.spent) if (s < r) from = s;
-    if (from === undefined) continue;
-    if (!best || r - from < best.gapMs) best = { gapMs: r - from, at: from };
+  const untilSeconds = (ctx.roundEndAt - ctx.legacy.startTime) / 1000;
+  for (const cd of unitCooldownLedger(u, ctx.legacy)) {
+    // by the name the kit prints for this holder (`kitSpellNameOf`: an Ice
+    // Cold holder's Ice Block row), codex 85-tk-G-T61-2 #2
+    if (kitSpellNameOf(cd, u) !== name) continue;
+    // a charge entry is skipped by the caller's `Charges` test; here every
+    // entry is read as the kit printed it, a range
+    const r = ownShortestRecast({ casts: cd.casts }, untilSeconds);
+    if (!r) continue;
+    // back on the log's millisecond: 39.032 − 10.032 s is 28.999999999999996
+    // (codex 85-tk-L8-T316-1 #6)
+    const gapMs = Math.round(r.gapSeconds * 1000);
+    if (!best || gapMs < best.gapMs)
+      best = { gapMs, at: ctx.legacy.startTime + r.fromSeconds * 1000 };
   }
   return best;
 }
@@ -122,11 +96,7 @@ export function run(ctx: IRoundCtx): void {
       // check went silent)
       const name = kitNameWithoutNoWallTag(e[1]!.trim());
       const soonest = Number(e[2]);
-      let recast: { gapMs: number; at: number } | undefined;
-      for (const p of pressesOf(ctx, unit, name)) {
-        const r = shortestRecast(p);
-        if (r && (!recast || r.gapMs < recast.gapMs)) recast = r;
-      }
+      const recast = shortestRecastOf(ctx, unit, name);
       if (!recast) continue;
       ctx.bump("kitSoonestAboveRecast");
       const min = recast.gapMs;

@@ -56,7 +56,7 @@ HEALER OFFENSE (each line states the condition it holds under):
   <unit id="6" name="Player5-Test" spec="Assassination Rogue" role="enemy">
     <cooldowns>Kingsbane [60s], Cloak of Shadows [120s, lasts 5s], Evasion [120s, lasts 10s] [UNUSED], Deathmark [120s], Blind [120s], Kidney Shot [30s], Smoke Bomb [180s] [UNUSED], Vanish [120s, 2 Charges], Dismantle [45s], Crimson Vial [30s]</cooldowns>
   </unit>
-  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest — the same range the [RES] rows print.
+  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest.
 </player_loadout>
 
 ENEMY CC KIT (threats to you, plus every control that landed on you this round, marked `landed N×`): Frost Mage (Player4-Test): Ring of Frost [Incapacitate] (landed 1×), Polymorph [Incapacitate] (landed 2×); Assassination Rogue (Player5-Test): Cheap Shot [Stun] (landed 2×), Blind [Disorient] (landed 1×), Sap [Incapacitate] (landed 1×), Garrote - Silence [Silence] (landed 1×); Discipline Priest (Player2-Test): Psychic Scream [Disorient] (landed 1×)

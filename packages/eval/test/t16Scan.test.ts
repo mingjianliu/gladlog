@@ -101,6 +101,16 @@ describe("scan5/t16 kitSoonestAboveRecast — the ledger's presses", () => {
     ]);
   });
 
+  it("带小数上限的区间也检查(codex 85-tk-L8-T316-1d #1:`[22–22.5s]` 以前被整条跳过)", () => {
+    const v = shaman([10_000, 40_000, 200_000], []);
+    expect(scan(v, "Spiritwalker's Grace [100–120.5s]")).toEqual({
+      checked: 1,
+      seen: [
+        "kitSoonestAboveRecast: player-1 Spiritwalker's Grace [100–120.5s]: pressed 30.0 s apart",
+      ],
+    });
+  });
+
   it("Stasis's release is no press of the kit's Stasis (its own fallback entry is not read)", () => {
     // store at 10 s, release at 25 s, store again at 100 s: one gap of 90 s
     const u = makeUnit(PID, {
