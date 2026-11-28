@@ -648,6 +648,43 @@ describe("pipeline T309 — review 85-tk-L5-T309-1", () => {
     );
     expect(buffFullDurationForCaster("190319", before, T0)).toBe(11);
   });
+  it("1d #1 (30846f8e): an APPLIED_DOSE at the count last read is still a gain", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 1),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 2, { amount: 2 }),
+        // one lost unlogged, the aura re-listed, then a dose back to 2
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 5),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 6, { amount: 2 }),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(13);
+  });
+  it("1d #3 (1405c83e): a gain past the worked-out end but before the logged REMOVED counts", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 10.5),
+        row(LogEvent.SPELL_AURA_REMOVED, "190319", 11.8),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(11);
+  });
+  it("1d #4: a re-listing inside Combustion does not move an older count inside it", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", -4),
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 1),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 3, { amount: 3 }),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(11);
+  });
   it("#2 (581d783f): the ghoul's Dark Transformation ends where the death knight's does — coils after it add nothing", () => {
     const dk = {
       id: "dk",

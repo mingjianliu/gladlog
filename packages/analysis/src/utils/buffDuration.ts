@@ -942,7 +942,9 @@ function ownStackWalk(
   stacks: number;
   /** stacks this row shows gained over the count before it; 0 = none */
   gained: number;
-  /** the aura's row before this one, if any */
+  /** the row that set the count this one found (a counted DOSE, an APPLIED
+   * / REFRESH that found it down, a REMOVED), if any — a re-listing sets
+   * nothing */
   prev: ICombatUnit["auraEvents"][number] | undefined;
 }> {
   // a REMOVED the log lost: the aura cannot outlive its own length from
@@ -955,7 +957,6 @@ function ownStackWalk(
   let prevRow: ICombatUnit["auraEvents"][number] | undefined;
   return ownAuraRowsOf(caster, auraId).map((row) => {
     const prev = prevRow;
-    prevRow = row;
     const ev = row.logLine.event;
     const t = row.logLine.timestamp;
     if (
@@ -978,14 +979,27 @@ function ownStackWalk(
       typeof row.amount === "number"
     )
       stacks = row.amount;
+    if (
+      ev === LogEvent.SPELL_AURA_REMOVED ||
+      before === 0 ||
+      ((ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+        ev === LogEvent.SPELL_AURA_REMOVED_DOSE) &&
+        typeof row.amount === "number")
+    )
+      prevRow = row;
     return {
       row,
       stacks,
       gained:
-        ev === LogEvent.SPELL_AURA_APPLIED ||
         ev === LogEvent.SPELL_AURA_APPLIED_DOSE
-          ? Math.max(0, stacks - before)
-          : 0,
+          ? // a dose applied is a stack gained, whatever the count before
+            // it read (a loss between them the log dropped: codex
+            // 85-tk-L5-T309-1d #1, 30846f8e 80.651 s — 2 after a
+            // REMOVED_DOSE, then APPLIED_DOSE 2)
+            Math.max(1, stacks - before)
+          : ev === LogEvent.SPELL_AURA_APPLIED
+            ? Math.max(0, stacks - before)
+            : 0,
       prev,
     };
   });
@@ -1055,7 +1069,13 @@ function auraGainExtensionSeconds(
   for (const w of ownStackWalk(caster, p.gainAuraId)) {
     if (w.gained === 0 || loggedBeforeEdge(w.row, from)) continue;
     if (to && loggedAfterEdge(w.row, to)) break;
-    if (w.row.logLine.timestamp > from.ms + (baseSeconds + start + ext) * 1000)
+    // past the end worked out so far the aura is off — unless the log
+    // itself shows it up there (its REMOVED comes later: codex
+    // 85-tk-L5-T309-1d #3, 1405c83e — a start sphere the log did not count)
+    if (
+      !to &&
+      w.row.logLine.timestamp > from.ms + (baseSeconds + start + ext) * 1000
+    )
       break;
     // a DOSE row that raises the count by more than one is that many gains
     // (the log drops the rows between: codex 85-tk-L5-T309-1c, f966f2d1
