@@ -10,7 +10,11 @@ import { buildRosterSides } from "@gladlog/analysis/src/utils/rosterSide";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { OUT_OF_TOTAL, sideRowBucket } from "../scripts/scan5/t159";
+import {
+  OUT_OF_TOTAL,
+  reflectsByCaster,
+  sideRowBucket,
+} from "../scripts/scan5/t159";
 
 const FRIEND = 0x512;
 const HOSTILE = 0x548;
@@ -36,6 +40,7 @@ const row = (
 ) => ({
   srcUnitId: src,
   srcUnitFlags: srcFlags,
+  srcUnitName: src,
   destUnitId: victim.id,
   destUnitFlags: destFlags,
   spellId,
@@ -68,6 +73,41 @@ describe("burstRatioOwnSideDamage's own-side row (T330)", () => {
   it("reads Cauterize's burn and Ultimate Sacrifice's ticks as pressure", () => {
     expect(bucket(row(victim.id, "87023"))).toBe("pressure");
     expect(bucket(row(victim.id, "199450"))).toBe("pressure");
+    expect(bucket(row(victim.id, "210380"))).toBe("pressure"); // Blessing of Dawn
+  });
+
+  it("reads a reflected spell coming back in its caster's name as pressure", () => {
+    // the victim's Unstable Affliction 1259790 reflected at t = 1000 by the enemy
+    const reflects = reflectsByCaster([
+      {
+        id: victim.id,
+        missesOut: [
+          {
+            missType: "REFLECT",
+            spellId: "1259790",
+            srcUnitId: victim.id,
+            destUnitId: enemy.id,
+            logLine: { timestamp: 1000 },
+          },
+        ],
+      },
+    ]);
+    const at = (e: ReturnType<typeof row>, t: number) => ({
+      ...e,
+      logLine: { ...e.logLine, timestamp: t },
+    });
+    const b = (e: ReturnType<typeof row>): string =>
+      sideRowBucket(victim, e, sides, ownerOf, reflects);
+    // its ticks on the caster: the enemy's doing
+    expect(b(at(row(victim.id, "1259790"), 5000))).toBe("pressure");
+    // a teammate's dispel backlash, 196364 named as the reflected spell
+    const mateSees = (e: ReturnType<typeof row>): string =>
+      sideRowBucket(mate, { ...e, destUnitId: mate.id }, sides, ownerOf, reflects);
+    expect(mateSees(at(row(victim.id, "196364"), 9000))).toBe("pressure");
+    expect(mateSees(at(row(victim.id, "196364"), 30_000))).toBe("own");
+    // past the window, or another spell: the unit's own again
+    expect(b(at(row(victim.id, "1259790"), 30_000))).toBe("self");
+    expect(b(at(row(victim.id, "111400"), 5000))).toBe("self");
   });
 
   it("lists the unit's other own rows apart, out of the total", () => {

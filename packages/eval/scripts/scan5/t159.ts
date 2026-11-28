@@ -20,13 +20,14 @@
  *  - `self`: the victim's own row (Burning Rush; Shadow Word: Death's
  *    backlash, which the log writes with no source and the victim's side in
  *    its flags), listed apart (user ruling 2026-11-28);
- *  - the enemy's pressure: everything else, including a transfer
+ *  - the enemy's pressure: everything else, including a reflected spell
+ *    coming back in its caster's name (`isReflectedReturn`), a transfer
  *    (`isAttackerDamageRow`: a DAMAGE_SPLIT — Blessing of Sacrifice, Soul
  *    Link — or Roar of Sacrifice), a deferral shield's tick
  *    (`isDeferredTickId`: Time Dilation, Stretch Time, Fel Armor,
  *    Refraction) and the enemy-caused own rows
- *    (`ENEMY_CAUSED_SELF_DAMAGE_IDS`: Ultimate Sacrifice's moved damage, the
- *    paladin's own 199450; Cauterize's burn after it ate a killing blow, the
+ *    (`ENEMY_CAUSED_SELF_DAMAGE_IDS`: Ultimate Sacrifice's and Blessing of
+ *    Dawn's moved damage, the paladin's own 199450 / 210380; Cauterize's burn after it ate a killing blow, the
  *    mage's own 87023). By standing rulings the tick is the damage (FT-T02b,
  *    2026-10-09), and only redistribution leaves the pressure, never a
  *    sacrifice transfer or a charmed teammate's damage (2026-09-30,
@@ -52,7 +53,13 @@
  *    more of the window's damage is the side's own.
  * The examples carry the top own-side spell of the window.
  */
+import {
+  REFLECT_DAMAGE_WINDOW_S,
+  REFLECT_OWN_ID_LEAD_MS,
+} from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { ENEMY_CAUSED_SELF_DAMAGE_IDS } from "@gladlog/analysis/src/data/enemyCausedSelfDamage";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { isCountedReflectRow } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   BURST_DAMAGE_RATIO_MAX,
   BURST_DAMAGE_RATIO_MIN,
@@ -120,13 +127,64 @@ const flagsCrossSide = (
  *  - `pressure`: everything else — the enemy's hits, a transfer
  *    (`isAttackerDamageRow`), a deferral shield's tick (`isDeferredTickId`),
  *    a charmed unit's hits. */
+/** A caster's counted REFLECT rows (`isCountedReflectRow`), for
+ *  `isReflectedReturn`. */
+export type ReflectsByCaster = ReadonlyMap<
+  string,
+  ReadonlyArray<{ t: number; spellId: string; name: string }>
+>;
+
+export function reflectsByCaster(units: readonly any[]): ReflectsByCaster {
+  const out = new Map<string, Array<{ t: number; spellId: string; name: string }>>();
+  for (const u of units)
+    for (const m of (u.missesOut ?? []) as any[]) {
+      if (!isCountedReflectRow(m)) continue;
+      const list = out.get(m.srcUnitId ?? u.id) ?? [];
+      list.push({
+        t: m.logLine.timestamp,
+        spellId: String(m.spellId),
+        name: getEnglishSpellName(String(m.spellId), ""),
+      });
+      out.set(m.srcUnitId ?? u.id, list);
+    }
+  return out;
+}
+
+/** The row is a reflected spell coming back: its source had that spell (by
+ *  id or English name, as the product's reflect chains match — a reflected
+ *  Unstable Affliction's dispel backlash 196364 is named as its 1259790)
+ *  reflected by an enemy from `REFLECT_OWN_ID_LEAD_MS` before the row to
+ *  `REFLECT_DAMAGE_WINDOW_S` after the reflect (`reflectedSpells`' own
+ *  bounds). The enemy's doing, written in the caster's name (codex
+ *  85-claude-b-T330-1 #2: a912b05a r6 0:21, a Frostfire Bolt Nether Ward
+ *  sent back, seven mage → mage rows). */
+export function isReflectedReturn(e: any, reflects: ReflectsByCaster): boolean {
+  const list = reflects.get(e.srcUnitId ?? "");
+  if (!list) return false;
+  const id = String(e.spellId ?? "");
+  const name = id ? getEnglishSpellName(id, "") : "";
+  const t = e.logLine?.timestamp ?? NaN;
+  return list.some(
+    (r) =>
+      (r.spellId === id || (name !== "" && r.name === name)) &&
+      t >= r.t - REFLECT_OWN_ID_LEAD_MS &&
+      t - r.t <= REFLECT_DAMAGE_WINDOW_S * 1000,
+  );
+}
+
 export function sideRowBucket(
   u: any,
   e: any,
   sides: RosterSides,
   ownerOf: ReadonlyMap<string, string>,
+  reflects: ReflectsByCaster = new Map(),
 ): "own" | "self" | "pressure" {
-  if (!isAttackerDamageRow(e) || isDeferredTickId(e.spellId)) return "pressure";
+  if (
+    !isAttackerDamageRow(e) ||
+    isDeferredTickId(e.spellId) ||
+    isReflectedReturn(e, reflects)
+  )
+    return "pressure";
   const victimSide = sides.get(u.id) ?? u.reaction;
   // no source named, the victim's side in its flags: the unit's own
   // backlash (Shadow Word: Death 32409 `0000000000000000,nil,0x511` — the
@@ -168,6 +226,7 @@ export function run(ctx: IRoundCtx): void {
       ownerOf.set(u.id, u.ownerId);
   // the roster sides the product's window sums read (`enemyCDs.ts`)
   const sides = buildRosterSides(Object.values(ctx.legacy.units ?? {}) as never);
+  const reflects = reflectsByCaster(ctx.units as any[]);
   const combat = { ...ctx.legacy, startTime: ctx.start, endTime: ctx.end };
   // the round's end the burst readers stop at (`roundDamageEndMs`, T237)
   const dmgEnd = roundDamageEndMs({
@@ -193,7 +252,7 @@ export function run(ctx: IRoundCtx): void {
       rows.push({
         t: (e.logLine.timestamp - ctx.start) / 1000,
         amount: Math.abs(e.effectiveAmount ?? 0),
-        side: sideRowBucket(u, e, sides, ownerOf),
+        side: sideRowBucket(u, e, sides, ownerOf, reflects),
         id: String(e.spellId ?? ""),
       });
     }

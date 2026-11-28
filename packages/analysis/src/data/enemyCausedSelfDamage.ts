@@ -8,7 +8,8 @@
  * keeps a unit's own damage apart from the enemy's pressure except for
  * these (user ruling 2026-11-28, pipeline T330: a unit's own damage is
  * listed apart, out of the total; Cauterize and Ultimate Sacrifice count as
- * the enemy's, as the B-report section 13 audit read them). It lives in the
+ * the enemy's, as the B-report section 13 audit read them; Blessing of Dawn,
+ * a redirect like Ultimate Sacrifice's, by codex 85-claude-b-T330-1). It lives in the
  * analysis package so that `curatedIdRegistry.ts` can register it
  * (Curated-List Completeness Rule).
  */
@@ -21,5 +22,9 @@ export const ENEMY_CAUSED_SELF_DAMAGE_IDS: ReadonlyMap<string, string> =
     [
       "199450",
       "Ultimate Sacrifice (Holy Paladin PvP talent) — the damage moved off the blessed ally lands as SPELL_PERIODIC_DAMAGE from the paladin on itself (b917c46c: the 199448 cast on an ally, then the paladin's own 199450 ticks one per second; window b917c46c r3 2:33–2:43, 3 of the scan's 126 in-total rows on the 605 at 3bf27b642)",
+    ],
+    [
+      "210380",
+      "Blessing of Dawn (Holy Paladin, Aura of Sacrifice 183416 / 210372: \"Whenever you take damage, X% is redirected to the Paladin\") — the moved damage lands as SPELL_DAMAGE from the paladin on itself (f966f2d1: 59 rows, all source = target; r3 0:07, 8 rows / 88k; codex 85-claude-b-T330-1 #1)",
     ],
   ]);
