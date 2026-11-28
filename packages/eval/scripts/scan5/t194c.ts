@@ -86,6 +86,7 @@ import {
   dispelIsDelayedRepeat,
 } from "@gladlog/analysis/src/utils/dispelKind";
 import {
+  ENEMY_DEF_ALSO_ON_RE_SRC,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
   unseenTailCouldBeFull,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -418,7 +419,7 @@ function hiddenPressAtRelisting(ctx: IRoundCtx): void {
 /** `0:12  [ENEMY DEF]   4(SRogue) (Subtlety Rogue): Cloak of Shadows (immune
  * to magic, 2.4s — removed early) [pressed while unseen]` */
 const UNSEEN_EARLY = new RegExp(
-  String.raw`^\s*(\d+:\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)[^:]*: (.+?) \((?:[^()]*, )?(\d+\.\d)s — removed early\)(.*)$`,
+  String.raw`^\s*(\d+:\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\)[^:]*: (.+?) \((?:[^()]*, )?(\d+\.\d)s — removed early(?:${ENEMY_DEF_ALSO_ON_RE_SRC})?\)(.*)$`,
 );
 
 function unseenTailRemovedEarly(ctx: IRoundCtx): void {

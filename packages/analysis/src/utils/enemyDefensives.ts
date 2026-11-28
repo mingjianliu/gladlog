@@ -1905,7 +1905,7 @@ export function endsEarlyOnLength(
  * run its full length? The press lies at most `unseenLeadMs` before the
  * batch, so its life is up to `observedS` + that lead. A `— removed early`
  * read on length alone holds only when even that falls short (pipeline
- * T321, 0284fcd9 r1 2:37: Cloak of Shadows 2.4 s seen + 2.6 s unseen of
+ * T321, 0284fcd9 r1 2:37: Cloak of Shadows 2.4 s seen + 3.1 s unseen of
  * 5.0 s printed `removed early`). One predicate for the `[ENEMY DEF]` line
  * and its audit (scan5/t194c `unseenTailRemovedEarly`).
  */
@@ -1916,7 +1916,13 @@ export function unseenTailCouldBeFull(
   batchMs: number,
 ): boolean {
   const leadMs = unseenLeadMs(holder, batchMs);
-  return !endsEarlyOnLength(spellId, holder, observedS + leadMs / 1000);
+  // the shown length as the line prints it, so the scan re-reading the
+  // printed `N.Ns` decides alike (codex 85-tk-L5-T321-1 #2)
+  return !endsEarlyOnLength(
+    spellId,
+    holder,
+    renderedObservedSeconds(observedS) + leadMs / 1000,
+  );
 }
 
 export interface IEnemyDefensiveEvent {
