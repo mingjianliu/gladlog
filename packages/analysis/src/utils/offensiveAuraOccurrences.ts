@@ -585,13 +585,12 @@ export function auraOffensiveOccurrences(
         )
       )
         endMs = untilMs;
+      // …and with none past it, a life a granting press carried on runs
+      // that press's own length (codex 85-tk-L5-T308-1f #1: strikes to 22.2
+      // s after an Ascendance at 12.5 s, the life read off at 19.2 s)
+      else if (life.pressMs > startMs)
+        endMs = Math.max(endMs, Math.min(life.capMs, roundEnd, nextPressMs));
     }
-    // a life the log never closes ends at its holder's death, whatever its
-    // cap — as the timeline and the threat reader end it (codex
-    // 85-tk-L5-T308-1d #4: a REFRESHed Doom Winds ran 7 s past its
-    // holder's death). On the combat itself only, as above.
-    if (roundEnd !== undefined && iv.inferredEnd)
-      endMs = Math.max(startMs, auraSurelyUpUntilMs(unit, startMs, endMs));
     const formName = OFFENSIVE_FORM_FACT_AURAS.get(iv.spellId);
     if (formName !== undefined) {
       if (iv.inferredStart) continue;
@@ -828,13 +827,6 @@ export function auraOffensiveOccurrences(
           }
         }
       }
-      // a form the log never closes ends at its holder's death (codex
-      // 85-tk-L5-T308-1e #4: a press's nominal end ran 18 s past it)
-      if (!endObserved && roundEnd !== undefined)
-        pressEnd = Math.max(
-          splitAt,
-          auraSurelyUpUntilMs(unit, startMs, pressEnd),
-        );
       result.occurrences.push({
         spellId: "191427",
         spellName: "Metamorphosis",

@@ -938,7 +938,12 @@ describe("T308 round 4 (codex 85-tk-L5-T308-1d)", () => {
       ],
     );
     (u as any).deathRecords = [{ timestamp: s(16) }];
-    expect(occEnd(u)).toBe(16_000);
+    // the occurrence keeps the end it was due (no countdown knows a death
+    // to come — 1f #2); nothing is active on the dead holder
+    expect(occEnd(u)).toBe(23_000);
+    expect(hasOffensiveSpellActive(u, s(15), null, undefined, round(u))).toBe(
+      true,
+    );
     expect(hasOffensiveSpellActive(u, s(21), null, undefined, round(u))).toBe(
       false,
     );
@@ -1013,7 +1018,7 @@ describe("T308 round 5 (codex 85-tk-L5-T308-1e)", () => {
     const resent = resentAuraApplications(w, rows as any, "107574");
     expect([...resent]).toEqual([rows[1]]);
   });
-  it("#4: a Metamorphosis the log never closes ends at its holder's death", () => {
+  it("#4 (1f #2): a Metamorphosis the log never closes keeps its due end, and is off once its holder is dead", () => {
     const u = havoc(
       [cast("200166", 10.6, "dh")],
       [aura(LogEvent.SPELL_AURA_APPLIED, "162264", 10, "dh")],
@@ -1023,7 +1028,41 @@ describe("T308 round 5 (codex 85-tk-L5-T308-1e)", () => {
     const meta = auraOffensiveOccurrences(u, bounds as any).occurrences.find(
       (o) => o.spellId === "191427",
     );
-    expect((meta?.endMs ?? Infinity) - START).toBeLessThanOrEqual(16_000);
+    expect((meta?.endMs ?? 0) - START).toBeGreaterThan(16_000);
+    expect(hasOffensiveSpellActive(u, s(21), null, undefined, bounds)).toBe(
+      false,
+    );
+  });
+  it("1f #1 (90c01e7f r6, strikes cut short): a life an Ascendance carried on, with no evidence past it, runs the Ascendance's length", () => {
+    // the round's own rows: Doom Winds up at 9.197 s, Ascendance pressed
+    // and up 12.494–27.504 s, a pulse (469270, its cast row and its hits)
+    // each second from 10.2 s — codex kept them to 22.2 s on the round's
+    // 10 s Doom Winds; this unit has no talents (8 s: due off at 17.197 s,
+    // 20.494 s from the Ascendance), so they stop at 20.206 s
+    const pulses = [10.196, 11.202, 12.189, 13.2, 14.201, 15.202, 16.209];
+    pulses.push(17.2, 18.202, 19.218, 20.206);
+    const u = enh(
+      [
+        cast("114051", 12.494, "sh"),
+        ...pulses.map((t) => cast("469270", t, "sh")),
+      ],
+      [
+        aura(LogEvent.SPELL_AURA_APPLIED, "466772", 9.197, "sh"),
+        aura(LogEvent.SPELL_AURA_APPLIED, "114051", 12.494, "sh"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "114051", 27.504, "sh"),
+      ],
+    );
+    (u as any).damageOut = pulses
+      .filter((t) => t > 17)
+      .map((t) => hit("sh", "469270", "Doom Winds", t + 0.001));
+    const bounds = { startTime: START, endTime: s(33.65), units: { sh: u } };
+    const o = auraOffensiveOccurrences(u, bounds as any).occurrences.find(
+      (x) => x.spellId === "384352",
+    );
+    expect((o?.endMs ?? 0) - START).toBe(20_494);
+    expect(hasOffensiveSpellActive(u, s(20.207), null, undefined, bounds)).toBe(
+      true,
+    );
   });
   it("#5: a run first seen as a REFRESH, re-sent, then REMOVED is up between", () => {
     const mage = makeUnit("mA", {

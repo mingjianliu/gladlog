@@ -29,12 +29,13 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraRebroadcast";
 import {
   AURA_SURELY_UP_PAST_MS,
+  auraLifeLastPress,
   auraSurelyUpPastMs,
   auraSurelyUpUntilMs,
-  nextAuraPressMs,
   otherEffectAurasOf,
   resentAuraApplications,
 } from "@gladlog/analysis/src/utils/auraSurelyUp";
+import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
@@ -104,7 +105,21 @@ export function run(ctx: IRoundCtx): void {
             o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
         )
         .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity),
-      (nextAuraPressMs(owner, app.spellId, s.spellId, castMs) - ctx.start) /
+      // a granting press inside the life carries it on (the producers'
+      // `auraLifeLastPress`; codex 85-tk-L5-T308-1f #3: 90c01e7f r6's
+      // Ascendance 3.3 s into Doom Winds read as its next press)
+      (auraLifeLastPress(
+        owner,
+        app.spellId,
+        s.spellId,
+        castMs,
+        castMs +
+          (buffDurationOfApplication(app.spellId, owner, tsOf(app)) ??
+            s.spanToSeconds - s.castTimeSeconds) *
+            1000,
+        (atMs) => buffDurationOfApplication(app.spellId, owner, atMs),
+      ).nextPressMs -
+        ctx.start) /
         1000,
     );
     // the REMOVED that closes THIS life: before the spell's next press — a

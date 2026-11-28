@@ -109,7 +109,17 @@ export function run(ctx: IRoundCtx): void {
   }
 
   const side = new Set<string>(friends.map((u: any) => u.id));
-  const round = { startTime: ctx.start, endTime: ctx.end };
+  // the bounds the timeline passes the tag (setup.ts `roundBounds`): with
+  // the round's players and bracket, an aura the log shows still up runs on
+  // as it does there (T308; codex 85-tk-L5-T308-1f #4)
+  const round = {
+    startTime: ctx.start,
+    endTime: ctx.end,
+    units: Object.fromEntries(
+      [...friends, ...enemies].map((u: any) => [u.id, u]),
+    ),
+    startInfo: { bracket: (ctx.legacy as any)?.startInfo?.bracket },
+  };
   for (const line of ctx.lines) {
     if (!line.includes(TAG)) continue;
     const m = TAGGED_LINE.exec(line);

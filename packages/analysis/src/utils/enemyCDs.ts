@@ -853,7 +853,8 @@ function observedEffectEnd(
     );
     const otherAuraIds = new Set(ids);
     otherAuraIds.delete(b.auraId);
-    return untilMs > capMs &&
+    if (
+      untilMs > capMs &&
       auraSurelyUpPastMs(
         caster,
         holder,
@@ -863,8 +864,16 @@ function observedEffectEnd(
         untilMs,
         { nextPressMs, otherAuraIds },
       )
-      ? (untilMs - combat.startTime) / 1000
-      : undefined;
+    )
+      return (untilMs - combat.startTime) / 1000;
+    // …and with none past it, a life a granting press carried on runs that
+    // press's own length (codex 85-tk-L5-T308-1f #1)
+    if (life.pressMs > combat.startTime + castS * 1000) {
+      const endMs = Math.min(life.capMs, roundEndMs(combat), nextPressMs);
+      if (endMs > combat.startTime + b.end * 1000)
+        return (endMs - combat.startTime) / 1000;
+    }
+    return undefined;
   };
   let best: {
     end: number;

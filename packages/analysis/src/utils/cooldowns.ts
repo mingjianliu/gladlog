@@ -9075,7 +9075,19 @@ export function hasOffensiveSpellActive(
   // timeline uses — observed end, else a duration cap — never by the open-
   // ended "applied, no removal = active forever" loop below. They are
   // self-sourced, so only a filter that admits the unit itself sees them.
+  // …not once its holder is dead: an occurrence's inferred end keeps the
+  // length it was due to run (the countdown must not know a death still to
+  // come — codex 85-tk-L5-T308-1f #2), but nothing is up on a dead unit
+  // (1d #4 / 1e #4). On the combat itself (its units), as the T308 reading.
+  const holderDead =
+    (combat as { units?: unknown } | undefined)?.units !== undefined &&
+    (unit.deathRecords ?? []).some(
+      (d) =>
+        d.timestamp <= timestampMs &&
+        d.timestamp >= (combat?.startTime ?? -Infinity),
+    );
   if (
+    !holderDead &&
     (requiredSourceIds === null || requiredSourceIds.has(unit.id)) &&
     auraOffensiveActiveAt(unit, timestampMs, spellIdFilter, combat)
   )
