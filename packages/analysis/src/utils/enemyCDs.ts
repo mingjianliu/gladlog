@@ -661,6 +661,18 @@ export function observedEffectCopy(
   return end ?? out.openHolder ?? null;
 }
 
+/** T323: the side a press's target is on — the caster's other side; none
+ * for a neutral or unknown caster (codex 85-tk-L6-T323-1 #6) */
+function oppositeReactionOf(
+  caster: Pick<ICombatUnit, "reaction">,
+): CombatUnitReaction | undefined {
+  return caster.reaction === CombatUnitReaction.Friendly
+    ? CombatUnitReaction.Hostile
+    : caster.reaction === CombatUnitReaction.Hostile
+      ? CombatUnitReaction.Friendly
+      : undefined;
+}
+
 /** Non-player units' aura intervals (pets, guardians, totems), the
  * counterpart of `auraIndexOf` for T323's second reading. */
 const OTHER_AURA_INDEX = new WeakMap<
@@ -746,26 +758,12 @@ function observedEffectEnd(
     return keep(onPlayers, first);
   const ids = effectSpanIdsOfCast(castSpellId);
   const fromS = castS - EFFECT_START_BEFORE_S;
-  const toS = castS + EFFECT_START_AFTER_S;
   const byCaster = (iv: IAuraInterval) =>
     ids.has(iv.spellId) &&
     iv.srcUnitName === caster.name &&
     (iv.srcUnitId === undefined || iv.srcUnitId === caster.id);
-  const anotherPlayerHeldOne = players.some(
-    ({ destId, iv }) =>
-      destId !== caster.id &&
-      byCaster(iv) &&
-      iv.fromS <= toS &&
-      iv.toS >= fromS &&
-      iv.fromS < nextSameCastS,
-  );
-  if (anotherPlayerHeldOne) return keep(onPlayers, first);
-  const opposite =
-    caster.reaction === CombatUnitReaction.Friendly
-      ? CombatUnitReaction.Hostile
-      : caster.reaction === CombatUnitReaction.Hostile
-        ? CombatUnitReaction.Friendly
-        : undefined;
+  if (first.otherHolderOfPress) return keep(onPlayers, first);
+  const opposite = oppositeReactionOf(caster);
   if (opposite === undefined) return keep(onPlayers, first);
   const onTargets = nonPlayerAuraIndexOf(combat).filter(
     ({ reaction, iv }) => reaction === opposite && byCaster(iv),
@@ -817,6 +815,12 @@ function observedEffectEndOn(
   out?: {
     windowEndS?: number;
     openHolder?: { holderId: string; auraId: string; appliedS: number };
+    /** T323: another unit than the caster holds a copy THIS press put on
+     * it — applied in the press's start window (or along its flight,
+     * `startsForPress`), or running at the press and refreshed by it —
+     * sourced by the caster's GUID, however short (codex 85-tk-L6-T323-3
+     * #2) */
+    otherHolderOfPress?: boolean;
   },
 ): {
   endS: number;
@@ -893,6 +897,14 @@ function observedEffectEndOn(
         spellId !== castSpellId &&
         pressAuraEndS !== undefined &&
         fromS <= pressAuraEndS));
+  if (out)
+    out.otherHolderOfPress = mine.some(
+      ({ destId, iv }) =>
+        destId !== caster.id &&
+        (iv.srcUnitId === undefined || iv.srcUnitId === caster.id) &&
+        (startsForPress(iv.fromS, destId, iv.spellId) ||
+          (iv.fromS <= castS && iv.toS >= castS && refreshedAtCast(destId))),
+    );
   /**
    * Pipeline T150: the interval builder closes a run at its official length
    * when the aura is APPLIED again with no REMOVED (a lost REMOVED must not
@@ -2257,18 +2269,34 @@ function reconstructEnemyCDTimelineUncached(
         // round over at 2:39, the span read zero and `[RES]` the instant
         // member's 8 s for a 14 s effect). On players only, as the
         // observed-chain reader reads (FT F13: a copy on a pet, a totem or
-        // a guardian is not the effect's span).
+        // a guardian is not the effect's span) — save a press whose effect
+        // no player wore, read on the other side's non-player units, as the
+        // observed chain reads it (T323; codex 85-tk-L6-T323-3 #1: a
+        // Goremaw's Bite whose aura only an enemy guardian wore, unclosed,
+        // read a zero-length span)
         if (cd.buffEndSeconds <= cd.castTimeSeconds) {
-          const effectEnd = pressEffectEndSeconds(
-            enemy,
-            Object.values(combat.units ?? {}).filter(
-              (u) => u.type === CombatUnitType.Player,
-            ),
-            getEnglishSpellName(cd.spellId, cd.spellName),
-            matchStartMs + cd.castTimeSeconds * 1000,
-            matchStartMs,
-            combat.endTime,
-          );
+          const units = Object.values(combat.units ?? {});
+          const effectOn = (holders: ICombatUnit[]) =>
+            pressEffectEndSeconds(
+              enemy,
+              holders,
+              getEnglishSpellName(cd.spellId, cd.spellName),
+              matchStartMs + cd.castTimeSeconds * 1000,
+              matchStartMs,
+              combat.endTime,
+            );
+          const opposite = oppositeReactionOf(enemy);
+          const effectEnd =
+            effectOn(units.filter((u) => u.type === CombatUnitType.Player)) ??
+            (opposite === undefined
+              ? undefined
+              : effectOn(
+                  units.filter(
+                    (u) =>
+                      u.type !== CombatUnitType.Player &&
+                      u.reaction === opposite,
+                  ),
+                ));
           if (effectEnd !== undefined) {
             cd.buffEndSeconds = Math.max(
               cd.castTimeSeconds,

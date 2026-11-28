@@ -590,3 +590,115 @@ describe("T323 (c) — codex 85-tk-L6-T323-2", () => {
     expect(withPlayer).not.toBeCloseTo(17, 1);
   });
 });
+
+describe("T323 (c) — codex 85-tk-L6-T323-3", () => {
+  const pet = (rows: unknown[]) => ({
+    pet: holder("pet", CombatUnitType.Guardian, rows),
+  });
+
+  it("#2a: a player's SHORTER copy laid along the flight keeps the players' reading", () => {
+    // Breath of Eons at 10 s, flight to 13.75 s; a player's wound 12.004–13.2
+    const BOE = "442204";
+    const WOUND = "409560";
+    const evoker = {
+      id: "dh",
+      name: "DH",
+      type: CombatUnitType.Player,
+      reaction: CombatUnitReaction.Friendly,
+      class: CombatUnitClass.Evoker,
+      spec: CombatUnitSpec.Evoker_Augmentation,
+      spellCastEvents: [
+        {
+          spellId: BOE,
+          spellName: "Breath of Eons",
+          srcUnitId: "dh",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 10_000,
+          },
+        },
+      ],
+      auraEvents: [
+        aura("dh", BOE, LogEvent.SPELL_AURA_APPLIED, 10),
+        aura("dh", BOE, LogEvent.SPELL_AURA_REMOVED, 13.75),
+      ],
+      damageIn: [],
+      damageOut: [],
+      healOut: [],
+      healIn: [],
+    } as never;
+    const wound = (dest: string, from: number, to: number) => [
+      aura(dest, WOUND, LogEvent.SPELL_AURA_APPLIED, from),
+      aura(dest, WOUND, LogEvent.SPELL_AURA_REMOVED, to),
+    ];
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 200_000,
+      units: {
+        dh: evoker,
+        v: holder("v", CombatUnitType.Player, wound("v", 12.004, 13.2)),
+        ...pet(wound("pet", 12.004, 22.457)),
+      },
+    } as never;
+    const end = reconstructEnemyCDTimeline([evoker], combat).players[0]!
+      .offensiveCDs[0]!.buffEndSeconds;
+    expect(end).toBeLessThan(14);
+  });
+
+  it("#2b: an older player DoT that ended before the press does not veto the pet", () => {
+    const s = huntSpan({
+      v: holder("v", CombatUnitType.Player, [
+        aura("v", "370969", LogEvent.SPELL_AURA_APPLIED, 322),
+        aura("v", "370969", LogEvent.SPELL_AURA_REMOVED, 328.8),
+      ]),
+      ...pet(dotRows("pet", 329.42, 335.43)),
+    });
+    expect(s.to).toBeCloseTo(335.43, 2);
+  });
+
+  it("#1: a no-length button whose aura only an enemy guardian wore, unclosed, runs as on a player", () => {
+    // Goremaw's Bite: cast 426591, aura 426593 (14 s), the round over at 159 s
+    const rogue = {
+      id: "dh",
+      name: "DH",
+      type: CombatUnitType.Player,
+      reaction: CombatUnitReaction.Friendly,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      spellCastEvents: [
+        {
+          spellId: "426591",
+          spellName: "Goremaw's Bite",
+          srcUnitId: "dh",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 150_128,
+          },
+        },
+      ],
+      auraEvents: [],
+      damageIn: [],
+      damageOut: [],
+      healOut: [],
+      healIn: [],
+    } as never;
+    const bite = (dest: string) => [
+      {
+        ...aura(dest, "426593", LogEvent.SPELL_AURA_APPLIED, 150.129),
+        spellName: "Goremaw's Bite",
+      },
+    ];
+    const endOn = (id: string, type: CombatUnitType) => {
+      const combat = {
+        startTime: T0,
+        endTime: T0 + 159_000,
+        units: { dh: rogue, [id]: holder(id, type, bite(id)) },
+      } as never;
+      return reconstructEnemyCDTimeline([rogue], combat).players[0]!
+        .offensiveCDs[0]!.buffEndSeconds;
+    };
+    const onPlayer = endOn("v", CombatUnitType.Player);
+    expect(onPlayer).toBeGreaterThan(150.2);
+    expect(endOn("pet", CombatUnitType.Guardian)).toBeCloseTo(onPlayer, 3);
+  });
+});
