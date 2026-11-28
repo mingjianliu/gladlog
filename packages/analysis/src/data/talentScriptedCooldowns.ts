@@ -135,6 +135,14 @@ export interface IEventCooldownReduction {
   /** A talent worded "each enemy hit by X": the unit's own damage rows of
    * these ids drop it too — one trigger per enemy hit (`eventTriggerTimesMs`). */
   triggerHitIds?: readonly string[];
+  /** A trigger cast (`triggerCastIds`) logged in the millisecond of a press
+   * of a target and BEFORE that press's row acts on the cooldown running
+   * then, not on the one that press starts: the log's row order is the
+   * order (T289, codex 85-tk-L8-T289-1b #1, a1cc7584 r2: Zenith, then
+   * Rising Sun Kick four rows later, both 56.163 s — the kick read as back
+   * the instant it was pressed). Opt-in per row: as a rule for every
+   * trigger it is wrong (T240 1c #1, Grounding Totem). */
+  triggerCastRowOrderInPressMs?: true;
   /** With `triggerHitIds`: at most this many hits of one use count (the
    * talent's "up to N sec" cap ÷ `seconds`). */
   maxHitsPerUse?: number;
@@ -1239,6 +1247,74 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     seconds: Number.POSITIVE_INFINITY,
     note: "Morning Breeze — Thunder Focus Tea resets Rising Sun Kick",
   },
+  // Windwalker's kicks (pipeline T289). scan5/t289 `wwRecast`, the wsl2 base
+  // capture, 605 | the 12.1.5 files: Rising Sun Kick 107428 pressed before
+  // the model had it back 987 of 1,718 | 939 of 1,699 times, Fists of Fury
+  // 113656 390 of 649 | 378 of 631. DB2 12.1.5.70391, dummies with no mask
+  // (the tooltips name the spells); every one of the 3,417 kick re-presses
+  // is by a holder of Sharp Reflexes and Zenith, 3,381 by a holder of Combo
+  // Breaker, so there is no non-holder group to split on — the corpus leg
+  // is what the rows clear, and that no re-press turns out later than the
+  // model allows. Each row is gated on its talent read from COMBATANT_INFO.
+  // Rushing Wind Kick 467307 is the kick under another id (Windwalker talent
+  // 1250566: "After consuming Blackout Kick!, Rising Sun Kick has a chance
+  // to become Rushing Wind Kick") on the same DB2 charge pool: every row
+  // that names the kick names it too, as T240's Mistweaver rows do.
+  //
+  // Sharp Reflexes (261917): "Blackout Kick reduces the cooldown of Rising
+  // Sun Kick and Fists of Fury by ${$100784m3/1000}.1 sec" — Blackout Kick
+  // 100784 effect 2: 1000 ms. Zenith 1249625 effect 2 (1000): "Blackout
+  // Kick reduces the cooldown of affected abilities by an additional 1 sec"
+  // while it is up — the same give-back doubled under the Zenith buff.
+  "261917": {
+    targets: ["107428", "467307", "113656"],
+    triggerCastIds: ["100784"],
+    seconds: 1,
+    creditBonus: { whileSelfAura: { auraId: "1249625", pct: 100 } },
+    note: "Sharp Reflexes — Blackout Kick: Rising Sun Kick and Fists of Fury −1 s (−2 s inside Zenith)",
+  },
+  // RESETS.
+  // Zenith (1249625): "Activating Zenith resets the remaining cooldown on
+  // Rising Sun Kick." A Zenith press sat between 253 | 246 of the kick's
+  // early re-presses.
+  "1249625": {
+    targets: ["107428", "467307"],
+    triggerCastIds: ["1249625"],
+    triggerCastRowOrderInPressMs: true,
+    seconds: Number.POSITIVE_INFINITY,
+    note: "Zenith — its press resets Rising Sun Kick",
+  },
+  // NOT a row, FLAG — Combo Breaker. The sentence "When Tiger Palm causes
+  // the Blackout Kick! effect, the cooldown of Rising Sun Kick is reset" is
+  // on spell 262107, which is no node of the 12.1.5 tree (`talentIdMap`);
+  // the tree's node 137384 is one dummy effect (8: the proc chance). And
+  // the log does not show it (scan5/t289, T289-11): with the kick down for
+  // 3 s more on its static 9 s, a press of the kick followed within 3 s
+  // after 7 of 59 (12 %) | 11 of 78 (14 %) Blackout Kick! applications
+  // that came with a Tiger Palm, against 877 of 6,216 (14 %) | 844 of 6,254
+  // (14 %) of the same units' other whole seconds. The effect from another
+  // source (≈ 86 % of its applications; Strike of the Windlord grants it)
+  // reads 103 of 474 (22 %) | 118 of 474 (25 %): above the baseline, no
+  // tooltip sentence, and one refusal by the game (codex 85-tk-L8-T289-1
+  // #1, 7de9da81: kick 49.980 s, the effect 52.730 s, the kick refused
+  // "not yet recovered" at 55.452 s). Unexplained, not modelled.
+  // After these two rows and the Windwalker charge-pool exemption
+  // (`SHARED_CHARGE_NOT_SPENT_BY_SPEC`), same scan and capture (T289-11):
+  // the kick 372 of 1,813 | 276 of 1,775, Fists of Fury 268 of 649 | 229 of
+  // 631. Is the Zenith reset real? With the kick down for 3 s more on its
+  // static 9 s, a press of the kick followed within 3 s after 203 of 260
+  // (78 %) | 193 of 252 (77 %) Zenith presses, against 14 % | 14 % of the
+  // same units' other whole seconds.
+  // NOT priced, FLAG: Teachings of the Monastery 116645 ("Blackout Kick has
+  // a 12 % chance to reset the remaining cooldown on Rising Sun Kick": no
+  // row in the log says it fired — the kick's 213 | 176 re-presses with a
+  // Blackout Kick between that its second does not cover), the 140 | 90
+  // with a Blackout Kick! application between (above), haste on the
+  // recharge (GH #219; 19 | 10), and Fists of Fury's remainder, 115 | 110
+  // of it with a Zenith press between (the tooltip names no Fists of Fury
+  // reset).
+  // Ordered Elements 451463 (Storm, Earth, and Fire resets the kick) is no
+  // node of the 12.1.5 Windwalker tree (`talentIdMap.json`): left out.
   //
   // Apotheosis (Holy, 200183): 「$?s235587[获得一次圣言术的使用次数]
   // [重置圣言术的冷却时间]」 — one charge of each Holy Word with Miracle

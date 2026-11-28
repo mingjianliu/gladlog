@@ -4542,8 +4542,34 @@ export function sharesChargePool(spellIdA: string, spellIdB: string): boolean {
 }
 
 /**
+ * T289: a spec for which a spell of a shared DB2 charge pool does NOT spend
+ * the pool — `spec → the ids of the pool it leaves alone`. A Windwalker's
+ * Rushing Wind Kick 467307 is Rising Sun Kick's button turned into another
+ * spell for one press (talent 1250566: "After consuming Blackout Kick!,
+ * Rising Sun Kick has a chance to become Rushing Wind Kick"; 1250566 effect
+ * 0 a dummy 60, 1250554 an aura 332 override of the kick's class mask to
+ * 467307). DB2 12.1.5 gives no reason for it: SpellCategories puts both ids
+ * in charge category 1518 and nothing else. The exemption rests on the log
+ * alone (scan5/t289, 605 | the 12.1.5 files): with the Rushing Wind Kick
+ * read as a press of the pool, 356 | 381 presses of the kick came before
+ * the model had it back after one, 243 | 268 of them within 2 s of it. For Mistweaver the same id replaces the kick outright
+ * (T240) and spends the charge: not listed.
+ * FLAG, not modelled: those 243 | 268 say more than "no lock" — the kick
+ * is back right after a Rushing Wind Kick (kick 0 s, Rushing Wind Kick
+ * 3.0 s, kick 4.2 s). No tooltip sentence says so. Registered in
+ * curatedIdRegistry.
+ */
+export const SHARED_CHARGE_NOT_SPENT_BY_SPEC: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  "269": new Set(["107428", "467307"]), // Monk_Windwalker
+};
+
+/**
  * A press of ANOTHER spell that spends X's charge: both draw on one DB2
- * charge pool (`sharesChargePool`). Not a press OF X (the ledger never lists
+ * charge pool (`sharesChargePool`), unless the presser's spec leaves that
+ * pool alone (`SHARED_CHARGE_NOT_SPENT_BY_SPEC`). Not a press OF X (the
+ * ledger never lists
  * it as X's cast); it only makes X unavailable. Shared by the ledger's
  * availability (`extractMajorCooldowns` → `sharedCasts`) and the death-outcome
  * path (`deathOutcomeAnalysis.isAvailableAt`) — reliability round 2 W1e.
@@ -4551,9 +4577,16 @@ export function sharesChargePool(spellIdA: string, spellIdB: string): boolean {
 export function spendsSharedChargeOf(
   e: { spellId?: string | null; logLine: { event: string } },
   spellId: string,
+  /** the presser's spec (`CombatUnitSpec`); absent: the pool alone decides */
+  presserSpec?: string,
 ): boolean {
   if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
     return false;
+  const exempt =
+    presserSpec === undefined
+      ? undefined
+      : SHARED_CHARGE_NOT_SPENT_BY_SPEC[presserSpec];
+  if (exempt?.has(spellId) && exempt.has(e.spellId)) return false;
   return sharesChargePool(spellId, e.spellId);
 }
 
@@ -7249,7 +7282,7 @@ function buildCooldownEntry(
   // Presses of another spell from the same DB2 charge pool
   // (`spendsSharedChargeOf`): not X's casts, but they spend X's charge.
   const sharedCasts: ICooldownCast[] = unit.spellCastEvents
-    .filter((e) => spendsSharedChargeOf(e, spell.spellId))
+    .filter((e) => spendsSharedChargeOf(e, spell.spellId, unit.spec))
     .map((e) => ({
       timeSeconds: (e.logLine.timestamp - matchStartMs) / 1000,
     }))
@@ -7459,9 +7492,38 @@ function buildCooldownEntry(
             .map((e) => e.logLine.timestamp)
         : [],
     );
+    // …and a row that says so (`triggerCastRowOrderInPressMs`): its trigger
+    // cast logged before THIS entry's press of the same millisecond — the
+    // first row of the entry's own id there, the one the ledger keeps (a
+    // duplicate row or another target's press after the trigger is not it:
+    // codex 85-tk-L8-T289-1c #1) (T289)
+    const rowOrdered = reductions.filter((r) => r.triggerCastRowOrderInPressMs);
+    const castRowBeforePressMs = new Set<number>();
+    if (rowOrdered.length) {
+      const rows = unit.spellCastEvents.filter(
+        (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      );
+      for (const r of rowOrdered)
+        for (const g of rows) {
+          if (!r.triggerCastIds.includes(String(g.spellId))) continue;
+          const line = g.logLine.lineIndex;
+          if (line === undefined) continue;
+          const own = rows
+            .filter(
+              (p) =>
+                p.logLine.timestamp === g.logLine.timestamp &&
+                String(p.spellId) === spell.spellId,
+            )
+            .map((p) => p.logLine.lineIndex);
+          if (own.length === 0 || own.some((i) => i === undefined)) continue;
+          if (line < Math.min(...(own as number[])))
+            castRowBeforePressMs.add(g.logLine.timestamp);
+        }
+    }
     const precededItsPress = (atMs: number) =>
-      buffOwnerCastMs.has(atMs) &&
-      buffPressMs.some((ms) => Math.abs(ms - atMs) < 1);
+      castRowBeforePressMs.has(atMs) ||
+      (buffOwnerCastMs.has(atMs) &&
+        buffPressMs.some((ms) => Math.abs(ms - atMs) < 1));
     applyEventReductions(
       casts.filter((c) => !spiralFree.has(c)),
       cooldownSeconds,

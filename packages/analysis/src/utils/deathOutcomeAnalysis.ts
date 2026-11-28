@@ -370,7 +370,7 @@ function pressSeconds(
       (e) =>
         (isPressOfCooldown(e, spellId, name, replacements, unit) &&
           !isFormReshiftCast(unit, e)) ||
-        spendsSharedChargeOf(e, spellId),
+        spendsSharedChargeOf(e, spellId, unit.spec),
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
   const auraSeconds = auraOnlyActivationSeconds(unit, spellId, matchStartMs);

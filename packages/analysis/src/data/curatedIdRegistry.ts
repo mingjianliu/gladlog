@@ -121,6 +121,7 @@ import {
   PROC_ONLY_ACTIVATION_IDS,
   RESPONSE_ONLY_DEFENSIVE_IDS,
   SELF_CAST_NOOP_EXTERNAL_IDS,
+  SHARED_CHARGE_NOT_SPENT_BY_SPEC,
   SPEC_EXCLUSIVE_SPELLS,
   STUN_PURGE_WITHHELD_IDS,
   TEAM_HEAL_CD_IDS,
@@ -730,6 +731,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
     keys(RACIAL_ABILITIES),
+  ),
+  t("SHARED_CHARGE_NOT_SPENT_BY_SPEC", "utils/cooldowns.ts", "cast", () =>
+    Object.values(SHARED_CHARGE_NOT_SPENT_BY_SPEC).flatMap((ids) => [...ids]),
   ),
   t("SHARED_CD_RACIAL_SPELL_IDS", "data/racialAbilities.ts", "cast", () =>
     set(SHARED_CD_RACIAL_SPELL_IDS),
