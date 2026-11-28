@@ -2048,5 +2048,16 @@
  *  (Apotheosis -> Chastise); Void Metamorphosis prints as a press the log
  *  writes only as its form; a surely-up burst span ends at its last evidence
  *  row. See docs/prompt-version-history.md.
+ *
+ * v684 (2026-11-28; Mac bundle M5: T314 T324 T321 T329 T330 T319 T274 T323
+ *  T309 T289 T316): an enemy Feign Death without Survival Tactics prints its
+ *  [ENEMY DEF] line; a save pressed unseen says `removed early` only when even
+ *  its unseen life falls short; Dark Transformation, Pillar of Frost and
+ *  Combustion read their talent extensions; Tear reads Circle of Life and
+ *  Death; a Windwalker's Rising Sun Kick / Fists of Fury read Sharp Reflexes
+ *  and Zenith, and Rushing Wind Kick leaves the kick's charge alone; a
+ *  ranged kit entry's soonest return is never above the unit's own shortest
+ *  recast, and the kit legend no longer says it is the [RES] range. See
+ *  docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 683;
+export const PROMPT_VERSION = 684;

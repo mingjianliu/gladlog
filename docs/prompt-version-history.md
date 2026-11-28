@@ -9097,3 +9097,45 @@ press; it feeds no prompt (cdRecastFloorGenerated 22842|105 stale until the
 GH #115 regen).
 scan5 in-total 28,785 -> 28,365 | 33,089 -> 32,420 (pre-T314 accounting);
 rose only the inventory relabel above.
+
+v684 (Mac bundle M5: T314 T324 T321 T329 T330 T319 T274 T323 T309 T289 T316,
+on dev 688756324). Full check on wsl2 (BM-1-M5, 688756324 -> b94f4b58f; 605 |
+1215, contexts 3,519 | 2,955; the later bundle commits 0fa3d91a6, 2c5281385
+and the T309 assembly-review fix are measured on their lanes at 0 real cases
+and 0 changed scan rows): changed context files 3,515 | 2,955, nearly all from
+the kit legend; scan5 in-total 2,055 -> 1,609 | 1,896 -> 1,580, rose 0 of 765
+| 729 kinds; gates identical. Per ticket (scan kinds the ticket targets; the
+signed-line counts are the runner's tagged diff):
+T324 — an enemy Feign Death without Survival Tactics prints `Feign Death (drops
+targets; no absorb without Survival Tactics)` (user wording 2026-11-28):
+feignNoTactics 81 -> 0 | 18 -> 0; [ENEMY DEF] Feign Death lines +81 | +18.
+T316 — a kit entry that prints a range never shows a soonest return above the
+unit's own shortest recast (`ownShortestRecast`, read by the kit and scan5
+t16); entries that print one number keep it. The kit legend drops "— the same
+range the [RES] rows print" (false after T316). kitSoonestAboveRecast 20 -> 0 |
+15 -> 0.
+T321 — an unseen save says `removed early` only when even its unseen life falls
+short: unseenTailRemovedEarly 15 -> 0 | 3 -> 0; [ENEMY DEF] lines changed 15 |
+3 (e.g. Cloak of Shadows loses `removed early`).
+T323 — small slips (a grip stop is no cancel, a kicked bar is no refusal, The
+Hunt's effect span): effectSpanSideAuraEnd The Hunt 2 -> 0, kickedBarAsRefusal
+1 -> 0, resEnemySameSecondPressMissing 18 -> 0 | 12 -> 0.
+T309 — Dark Transformation (+1 s per Death Coil / Epidemic), Pillar of Frost
+(Chosen of Frostbrood) and Combustion (Fired Up, Savor the Moment) read their
+extensions: resEnemyLeftPastLogEnd 294 -> 0 | 264 -> 0; exact clean lives on
+605 | 1215, Dark Transformation 12 -> 611 of 637 | 17 -> 300 of 313, Pillar of
+Frost 46 -> 118 of 119 | 22 -> 46 of 58, Combustion 3 -> 471 of 479 | 3 -> 433
+of 451 (lane counts).
+T289 — a Windwalker's Rising Sun Kick / Fists of Fury cooldowns read Sharp
+Reflexes and Zenith, and a Rushing Wind Kick press does not spend the kick's
+charge (the log alone; DB2 shares charge category 1518): lane counts of
+impossible re-presses 987 -> 372 | 939 -> 276 (kick), 390 -> 268 | 378 -> 229
+(Fists of Fury). It changes kick ledger entries.
+T319 — Tear reads Circle of Life and Death (-20 %): shortenedDuration Tear
+4 -> 0 | 12 -> 0 (lane scan).
+Not attributed per ticket: [RES] lines +-812 | +-708, [OFFENSIVE WINDOW]
++-18 | +-18, ledgerWallSchool 24 -> 0 | 10 -> 0, ownShieldNotPopped (Dark Pact)
+3 -> 0 on 1215 (unchanged on 605).
+T314 (scan5 accounting: measurement and model-gap checks out of the total),
+T329, T330 (scan predicates shared with the product: reflectRowsByCaster,
+reflectedCopyUp) and T274 (timewalkerCap) change no prompt line.
