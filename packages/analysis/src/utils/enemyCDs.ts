@@ -2269,34 +2269,21 @@ function reconstructEnemyCDTimelineUncached(
         // round over at 2:39, the span read zero and `[RES]` the instant
         // member's 8 s for a 14 s effect). On players only, as the
         // observed-chain reader reads (FT F13: a copy on a pet, a totem or
-        // a guardian is not the effect's span) — save a press whose effect
-        // no player wore, read on the other side's non-player units, as the
-        // observed chain reads it (T323; codex 85-tk-L6-T323-3 #1: a
-        // Goremaw's Bite whose aura only an enemy guardian wore, unclosed,
-        // read a zero-length span)
+        // a guardian is not the effect's span). T323 leaves this no-length
+        // fallback on players: a guardian-only copy here (codex
+        // 85-tk-L6-T323-3 #1) is recorded, not read — reading it outside the
+        // chain's own press ownership mis-owned copies (-4 #1 #2).
         if (cd.buffEndSeconds <= cd.castTimeSeconds) {
-          const units = Object.values(combat.units ?? {});
-          const effectOn = (holders: ICombatUnit[]) =>
-            pressEffectEndSeconds(
-              enemy,
-              holders,
-              getEnglishSpellName(cd.spellId, cd.spellName),
-              matchStartMs + cd.castTimeSeconds * 1000,
-              matchStartMs,
-              combat.endTime,
-            );
-          const opposite = oppositeReactionOf(enemy);
-          const effectEnd =
-            effectOn(units.filter((u) => u.type === CombatUnitType.Player)) ??
-            (opposite === undefined
-              ? undefined
-              : effectOn(
-                  units.filter(
-                    (u) =>
-                      u.type !== CombatUnitType.Player &&
-                      u.reaction === opposite,
-                  ),
-                ));
+          const effectEnd = pressEffectEndSeconds(
+            enemy,
+            Object.values(combat.units ?? {}).filter(
+              (u) => u.type === CombatUnitType.Player,
+            ),
+            getEnglishSpellName(cd.spellId, cd.spellName),
+            matchStartMs + cd.castTimeSeconds * 1000,
+            matchStartMs,
+            combat.endTime,
+          );
           if (effectEnd !== undefined) {
             cd.buffEndSeconds = Math.max(
               cd.castTimeSeconds,
