@@ -454,3 +454,41 @@ describe("pipeline T309 — Dark Transformation grows 1 s per Death Coil / Epide
     });
   });
 });
+
+describe("pipeline T309 — Pillar of Frost under Chosen of Frostbrood", () => {
+  // Chosen of Frostbrood 1265633: spec node 110400, entry 136967, two ranks
+  const dk = (rank: number, casts: Array<[string, number]>) =>
+    ({
+      spec: "251",
+      info: {
+        talents: rank ? [{ id1: 110400, id2: 136967, count: rank }] : [],
+        pvpTalents: [],
+      },
+      spellCastEvents: casts.map(([id, s]) => press(id, s)),
+    }) as never;
+  const FURY: [string, number] = ["279302", 3];
+  const RECAST: [string, number] = ["1265384", 9];
+  it("rank 2: 12 s, +4 s per Frostwyrm's Fury, +2 s per recast (90c57b63: 12 / 14 / 16 / 18 s)", () => {
+    expect(buffFullDurationForCaster("51271", dk(2, []), T0)).toBe(12);
+    expect(buffFullDurationForCaster("51271", dk(2, [RECAST]), T0)).toBe(14);
+    expect(buffFullDurationForCaster("51271", dk(2, [FURY]), T0)).toBe(16);
+    expect(buffFullDurationForCaster("51271", dk(2, [FURY, RECAST]), T0)).toBe(
+      18,
+    );
+    // the recast at 15 s is inside only because the first press grew it
+    expect(
+      buffFullDurationForCaster("51271", dk(2, [FURY, ["1265384", 15]]), T0),
+    ).toBe(18);
+  });
+  it("the amount is per purchased rank; without the talent, or past the end, nothing", () => {
+    expect(buffFullDurationForCaster("51271", dk(1, [FURY, RECAST]), T0)).toBe(
+      15,
+    );
+    expect(buffFullDurationForCaster("51271", dk(0, [FURY, RECAST]), T0)).toBe(
+      12,
+    );
+    expect(
+      buffFullDurationForCaster("51271", dk(2, [["279302", 12.5]]), T0),
+    ).toBe(12);
+  });
+});

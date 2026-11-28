@@ -274,6 +274,13 @@ export interface ITooltipPerPressDuration extends ITooltipPerEventBase {
   /** the caster's next press of one of these ends the application as its
    * REMOVED does: no later press extends it (a re-roll replaces the roll) */
   endsAtCastIds?: readonly string[];
+  /** `addSecondsPerEvent` is one purchased rank's (a tiered talent); the
+   * caster's rank multiplies it (`talentRankOf` — a rank that cannot be
+   * read adds nothing) */
+  perRank?: true;
+  /** presses that add a share of the amount, by cast id — the rest add all
+   * of it (a recast the game makes at reduced effectiveness) */
+  eventShareBySpellId?: Readonly<Record<string, number>>;
 }
 
 /** An effect row id whose rows can stand for casts the log did not write. */
@@ -501,6 +508,31 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   },
   ...ROLL_ENHANCEMENT_ROWS,
   ...DARK_TRANSFORMATION_ROWS,
+  // Chosen of Frostbrood 1265633 (pipeline T309 b; two ranks): 「冰霜巨龙
+  // 之怒使一个激活的冰霜之柱的持续时间延长${$s1/1000}.1秒」 — effect 0 a
+  // dummy, base 2000 ms per rank, no class mask and no label (scripted).
+  // Its node also lets Frostwyrm's Fury be cast again 「以$s2%的效果」
+  // (1265637 effect 1: 50) — the recast is 1265384, and it extends by that
+  // share. Every holder in both sets has rank 2 (COMBATANT_INFO): 4 s per
+  // Frostwyrm's Fury 279302 and 2 s per recast. Raw rows, closed runs of
+  // 51271 not cut by a death or the round's end, holders of The Long Winter
+  // apart, life against 12 + 4 × 279302 + 2 × 1265384 cast inside, within
+  // 0.3 s — 605 files | the 1215-set: 121 of 121 | 44 of 44 (at a flat
+  // 12 s: 49 | 23; lives of 12 / 14 / 16 / 18 s).
+  // Open: The Long Winter 456240 (auto-attack crits, +1 s each up to 4 s)
+  // stacks on the same aura — one holder in both sets (68e7d162, 14 lives),
+  // not modelled; a rank-1 holder is unseen (the row prices it at 2 / 1 s,
+  // DB2's per-rank value).
+  "51271": {
+    event: "press",
+    talentSpellId: "1265633",
+    untalentedBaseSeconds: 12,
+    addSecondsPerEvent: 2,
+    perRank: true,
+    specs: ["251"],
+    qualifyingSpellIds: new Set(["279302", "1265384"]),
+    eventShareBySpellId: { "1265384": 0.5 },
+  },
   // Burn to Ash 446663: 「真理觉醒爆击时，其持续时间延长$s1秒」 (effect 0
   // dummy, bp 2) on Truth's Wake 403695, Wake of Ashes' DoT (DB2 9 s). GH
   // #183, 2026-11-03, raw ticks of 605-file subsets: non-holders 54 of 54

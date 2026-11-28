@@ -547,6 +547,10 @@ function perEventExtensionSeconds(
           (x.c.logLine.lineIndex ?? 0) - (y.c.logLine.lineIndex ?? 0),
       )
     : (caster.spellCastEvents ?? []).map((c) => ({ c, hidden: false }));
+  // a tiered talent's amount is per purchased rank; a recast adds its share
+  const rankFactor =
+    "perRank" in p && p.perRank ? talentRankOf(caster, p.talentSpellId) : 1;
+  const shares = "eventShareBySpellId" in p ? p.eventShareBySpellId : undefined;
   let ext = 0;
   for (const { c, hidden: isHidden } of walk) {
     const t = c.logLine.timestamp;
@@ -563,7 +567,13 @@ function perEventExtensionSeconds(
         continue;
     }
     const cap = p.capSeconds ?? Number.POSITIVE_INFINITY;
-    ext = Math.min(cap, ext + p.addSecondsPerEvent);
+    ext = Math.min(
+      cap,
+      ext +
+        p.addSecondsPerEvent *
+          rankFactor *
+          (isHidden ? 1 : (shares?.[c.spellId ?? ""] ?? 1)),
+    );
     if (ext >= cap) break;
   }
   return ext;
