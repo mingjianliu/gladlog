@@ -11,9 +11,9 @@ import {
 import { auraStandsForPressAt } from "./auraActivationEra";
 import { buildAuraIntervals } from "./auraIntervals";
 import {
+  auraLifeLastPress,
   auraSurelyUpPastMs,
   auraSurelyUpUntilMs,
-  nextAuraPressMs,
   otherEffectAurasOf,
 } from "./auraSurelyUp";
 import {
@@ -551,11 +551,21 @@ export function auraOffensiveOccurrences(
       const pressId = genericCdOfAura(iv.spellId, unit.spec);
       // the next press: its next application, or the caster's next cast row
       // of any button that puts this aura up (`nextAuraPressMs`)
+      // …a granting press inside the life's span carries it on from its
+      // own press (`auraLifeLastPress`, codex 85-tk-L5-T308-1e #1)
+      const life = auraLifeLastPress(
+        unit,
+        iv.spellId,
+        pressId,
+        startMs,
+        Math.min(endMs, auraOfficialEndMs ?? endMs),
+        (atMs) => buffDurationOfApplication(iv.spellId, unit, atMs),
+      );
       const nextPressMs = Math.min(
         bounds.startTime + nextFromS * 1000,
-        nextAuraPressMs(unit, iv.spellId, pressId, startMs),
+        life.nextPressMs,
       );
-      const capMs = Math.min(endMs, auraOfficialEndMs ?? endMs);
+      const capMs = life.capMs;
       // never past its holder's death, from the life's start (#4, 1c #4)
       const untilMs = auraSurelyUpUntilMs(
         unit,
@@ -818,6 +828,13 @@ export function auraOffensiveOccurrences(
           }
         }
       }
+      // a form the log never closes ends at its holder's death (codex
+      // 85-tk-L5-T308-1e #4: a press's nominal end ran 18 s past it)
+      if (!endObserved && roundEnd !== undefined)
+        pressEnd = Math.max(
+          splitAt,
+          auraSurelyUpUntilMs(unit, startMs, pressEnd),
+        );
       result.occurrences.push({
         spellId: "191427",
         spellName: "Metamorphosis",

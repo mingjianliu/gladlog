@@ -9169,9 +9169,14 @@ export function hasOffensiveSpellActive(
       const run = open.get(runKey);
       // a REFRESH with no open run opens one, as the builder's does (an
       // aura already up before its first row): a source-less REMOVED then
-      // closes it first (codex 85-tk-L5-T308-1d #5)
+      // closes it first (codex 85-tk-L5-T308-1d #5); the run starts there
+      // for the reading below too (1e #5: Touch of the Magi first seen as a
+      // REFRESH, re-sent, then REMOVED, read off while the builder paired it)
       if (run) run.lastSeenMs = aura.timestamp;
-      else open.set(runKey, { lastSeenMs: aura.timestamp });
+      else {
+        open.set(runKey, { lastSeenMs: aura.timestamp });
+        applied.set(runKey, [...(applied.get(runKey) ?? []), aura.timestamp]);
+      }
       refreshed.set(runKey, [...(refreshed.get(runKey) ?? []), aura.timestamp]);
     } else if (isClose(ev)) {
       open.delete(runKey);

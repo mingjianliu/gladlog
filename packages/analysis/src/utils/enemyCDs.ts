@@ -37,9 +37,9 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import {
+  auraLifeLastPress,
   auraSurelyUpPastMs,
   auraSurelyUpUntilMs,
-  nextAuraPressMs,
 } from "./auraSurelyUp";
 import { buffDurationOfApplication } from "./buffDuration";
 import { channelEndSeconds, channelRefusedAtCast } from "./castCommitSpans";
@@ -825,24 +825,25 @@ function observedEffectEnd(
       caster,
       combat.startTime + appliedS * 1000,
     );
-    const capMs =
+    // a granting press inside the life's span carries it on from its own
+    // press (`auraLifeLastPress`; codex 85-tk-L5-T308-1e #1: Ascendance
+    // 3.3 s into a Doom Winds); the next press is the next same cast, or
+    // the caster's next cast row of any button that puts this aura up past
+    // that span (`nextAuraPressMs`; 1c #1)
+    const life = auraLifeLastPress(
+      caster,
+      b.auraId,
+      castSpellId,
+      combat.startTime + castS * 1000,
       combat.startTime +
-      Math.min(b.end, ownFull === undefined ? b.end : appliedS + ownFull) *
-        1000;
+        Math.min(b.end, ownFull === undefined ? b.end : appliedS + ownFull) *
+          1000,
+      (atMs) => buffDurationOfApplication(b.auraId, caster, atMs),
+    );
+    const capMs = life.capMs;
     const holder = combat.units?.[b.destId] as ICombatUnit | undefined;
     if (!holder) return undefined;
-    // the next press: the next same cast, or the caster's next cast row of
-    // any button that puts this aura up (`nextAuraPressMs`; codex
-    // 85-tk-L5-T308-1c #1: Ascendance → Doom Winds)
-    const nextPressMs = Math.min(
-      nextSameMs,
-      nextAuraPressMs(
-        caster,
-        b.auraId,
-        castSpellId,
-        combat.startTime + castS * 1000,
-      ),
-    );
+    const nextPressMs = Math.min(nextSameMs, life.nextPressMs);
     // …and never past its holder's death, from the life's start (1b #4,
     // 1c #4)
     const untilMs = auraSurelyUpUntilMs(

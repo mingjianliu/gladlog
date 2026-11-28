@@ -103,6 +103,91 @@ export function otherEffectAurasOf(
 }
 
 /**
+ * T308: the APPLIED rows of one caster's aura on one holder (`rows`,
+ * re-broadcast pairs already dropped, time order) that are the aura
+ * re-sent, not a new life — the interval builder's reading: a second
+ * APPLIED while the life is open, inside the official length from the
+ * life's last REFRESH / DOSE / real APPLIED (a re-sent row moves no anchor —
+ * codex 85-tk-L5-T308-1e #3), with no press of it near
+ * (`sourcePressedAuraNear`). Shared by the evidence predicate and
+ * scan5/t308's life pairing (1e #2: an Avatar re-sent 2.7 s in, removed at
+ * its 20 s, read as a lost life).
+ */
+export function resentAuraApplications<
+  R extends {
+    logLine: { event: string; timestamp: number };
+  },
+>(
+  caster: Partial<Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">>,
+  rows: readonly R[],
+  auraId: string,
+): ReadonlySet<R> {
+  const out = new Set<R>();
+  let lastSeenMs: number | undefined;
+  for (const a of rows) {
+    const ev = a.logLine.event;
+    const t = a.logLine.timestamp;
+    if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      if (lastSeenMs !== undefined) {
+        const d = officialDurationS(auraId, caster as never, lastSeenMs);
+        if (
+          d !== null &&
+          t <= lastSeenMs + d * 1000 &&
+          !sourcePressedAuraNear(caster.spellCastEvents ?? [], auraId, t)
+        ) {
+          out.add(a);
+          continue;
+        }
+      }
+      lastSeenMs = t;
+    } else if (
+      ev === LogEvent.SPELL_AURA_REFRESH ||
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+      ev === LogEvent.SPELL_AURA_REMOVED_DOSE
+    ) {
+      lastSeenMs = t;
+    } else if (
+      ev === LogEvent.SPELL_AURA_REMOVED ||
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      lastSeenMs = undefined;
+    }
+  }
+  return out;
+}
+
+/**
+ * T308: the press a life without a REMOVED answers for at its end — a button
+ * that grants the aura pressed INSIDE the life's official span, its aura
+ * logging no new application, carries the same life on from its own press
+ * (90c01e7f r6: Doom Winds at 9.2 s, Ascendance at 12.5 s, its strikes on to
+ * the kill at 33.2 s — codex 85-tk-L5-T308-1e #1); one pressed after the
+ * span is the life's next press (1b #3: an Ascendance 22 s past it). From
+ * the press at `startMs` capped at `capMs`, each such press re-caps the life
+ * at its own official length (`durationAtS`). Returns the life's cap and
+ * its next press (Infinity when none).
+ */
+export function auraLifeLastPress(
+  caster: Pick<ICombatUnit, "spellCastEvents">,
+  auraId: string,
+  pressId: string | undefined,
+  startMs: number,
+  capMs: number,
+  durationAtS: (atMs: number) => number | undefined,
+): { pressMs: number; capMs: number; nextPressMs: number } {
+  let pressMs = startMs;
+  let cap = capMs;
+  for (;;) {
+    const q = nextAuraPressMs(caster, auraId, pressId, pressMs);
+    if (!(q < cap)) return { pressMs, capMs: cap, nextPressMs: q };
+    pressMs = q;
+    const d = durationAtS(q);
+    if (d !== undefined) cap = Math.max(cap, q + d * 1000);
+  }
+}
+
+/**
  * T308 (user 2026-11-27): does the log show `auraId` (the caster's, on
  * `holder`) still up more than `AURA_SURELY_UP_PAST_MS` past `capMs` — the
  * official end of a life with no REMOVED — and before `untilMs` (the round's
@@ -152,34 +237,12 @@ export function auraSurelyUpPastMs(
     (a) => a.logLine.timestamp > capMs && a.logLine.timestamp <= untilMs,
   );
   // a lost end: applied again with nothing closing the life before it —
-  // unless it is the aura re-sent, as the interval builder reads one: no
-  // press of it near, inside the official length of its last row (codex
-  // 85-tk-L5-T308-1d #3: a re-sent APPLIED inside a REFRESHed life vetoed
-  // the hits after it)
-  const resent = (a: (typeof own)[number]): boolean => {
-    const last = own
-      .filter((o) => o.logLine.timestamp < a.logLine.timestamp)
-      .pop();
-    if (!last || last.logLine.event === LogEvent.SPELL_AURA_REMOVED)
-      return false;
-    const d = officialDurationS(
-      auraId,
-      caster as never,
-      last.logLine.timestamp,
-    );
-    return (
-      d !== null &&
-      a.logLine.timestamp <= last.logLine.timestamp + d * 1000 &&
-      !sourcePressedAuraNear(
-        caster.spellCastEvents ?? [],
-        auraId,
-        a.logLine.timestamp,
-      )
-    );
-  };
+  // unless it is the aura re-sent, as the interval builder reads one
+  // (`resentAuraApplications`; codex 85-tk-L5-T308-1d #3)
+  const resent = resentAuraApplications(caster, own, auraId);
   if (
     rows.some(
-      (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED && !resent(a),
+      (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED && !resent.has(a),
     )
   )
     return false;

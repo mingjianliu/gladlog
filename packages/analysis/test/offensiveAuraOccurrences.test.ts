@@ -9,7 +9,11 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 
 import { effectiveCooldownSeconds } from "../src/data/spellEffectData";
-import { auraSurelyUpPastMs, nextAuraPressMs } from "../src/utils/auraSurelyUp";
+import {
+  auraSurelyUpPastMs,
+  nextAuraPressMs,
+  resentAuraApplications,
+} from "../src/utils/auraSurelyUp";
 import { hasOffensiveSpellActive } from "../src/utils/cooldowns";
 import {
   isEnemyCdWindowSpell,
@@ -966,5 +970,81 @@ describe("T308 round 4 (codex 85-tk-L5-T308-1d)", () => {
       aura(LogEvent.SPELL_AURA_REMOVED, "466772", 24, "sh"),
     ];
     expect(occEnd(u)).toBe(24_000);
+  });
+});
+
+describe("T308 round 5 (codex 85-tk-L5-T308-1e)", () => {
+  const hit = (src: string, id: string, name: string, sec: number) => ({
+    srcUnitId: src,
+    destUnitId: "e1",
+    spellId: id,
+    spellName: name,
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(sec) },
+  });
+  it("#1 (90c01e7f r6): an Ascendance inside a Doom Winds' span carries the life on to the kill", () => {
+    const u = enh(
+      [cast("114051", 12.494, "sh")],
+      [aura(LogEvent.SPELL_AURA_APPLIED, "466772", 9.197, "sh")],
+    );
+    (u as any).damageOut = [30.217, 33.211].map((t) =>
+      hit("sh", "466772", "Doom Winds", t),
+    );
+    const bounds = { startTime: START, endTime: s(33.234), units: { sh: u } };
+    const o = auraOffensiveOccurrences(u, bounds as any).occurrences.find(
+      (x) => x.spellId === "384352",
+    );
+    expect((o?.endMs ?? 0) - START).toBe(33_234);
+    expect(hasOffensiveSpellActive(u, s(30.217), null, undefined, bounds)).toBe(
+      true,
+    );
+  });
+  it("#2 #3: a re-sent APPLIED is the same life and moves no anchor; one past the anchor's length is a new life", () => {
+    const w = makeUnit("w", {
+      name: "Arms",
+      spec: CombatUnitSpec.Warrior_Arms,
+      spellCastEvents: [cast("107574", 10, "w")],
+    } as any);
+    const rows = [
+      aura(LogEvent.SPELL_AURA_APPLIED, "107574", 10, "w"),
+      aura(LogEvent.SPELL_AURA_APPLIED, "107574", 24, "w"),
+      aura(LogEvent.SPELL_AURA_APPLIED, "107574", 36, "w"),
+      aura(LogEvent.SPELL_AURA_REFRESH, "107574", 39, "w"),
+    ];
+    const resent = resentAuraApplications(w, rows as any, "107574");
+    expect([...resent]).toEqual([rows[1]]);
+  });
+  it("#4: a Metamorphosis the log never closes ends at its holder's death", () => {
+    const u = havoc(
+      [cast("200166", 10.6, "dh")],
+      [aura(LogEvent.SPELL_AURA_APPLIED, "162264", 10, "dh")],
+    );
+    (u as any).deathRecords = [{ timestamp: s(16) }];
+    const bounds = { startTime: START, endTime: s(60), units: { dh: u } };
+    const meta = auraOffensiveOccurrences(u, bounds as any).occurrences.find(
+      (o) => o.spellId === "191427",
+    );
+    expect((meta?.endMs ?? Infinity) - START).toBeLessThanOrEqual(16_000);
+  });
+  it("#5: a run first seen as a REFRESH, re-sent, then REMOVED is up between", () => {
+    const mage = makeUnit("mA", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Arcane,
+    } as any);
+    const t = makeUnit("t", {
+      name: "Target",
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_REFRESH, "210824", s(10), "mA", "t"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "210824", s(12), "mA", "t"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "210824", s(18), "mA", "t"),
+      ],
+    } as any);
+    const combat = {
+      startTime: START,
+      endTime: s(60),
+      units: { mA: mage, t },
+    };
+    expect(
+      hasOffensiveSpellActive(t, s(14), new Set(["mA"]), undefined, combat),
+    ).toBe(true);
   });
 });

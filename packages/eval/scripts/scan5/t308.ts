@@ -33,6 +33,7 @@ import {
   auraSurelyUpUntilMs,
   nextAuraPressMs,
   otherEffectAurasOf,
+  resentAuraApplications,
 } from "@gladlog/analysis/src/utils/auraSurelyUp";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
@@ -112,12 +113,17 @@ export function run(ctx: IRoundCtx): void {
     // …and before the aura's next APPLIED: a REMOVED past it is that later
     // life's (codex 85-tk-L5-T308-1d #2, d79985d0 r6: Malevolence applied
     // at 25.7 and 48.6 s, removed at 61.7 s — read as a 36 s closed life)
-    const nextApplied = own.find(
+    // — a new life as the builder reads one: an APPLIED re-sent inside the
+    // life (`resentAuraApplications`) is none (codex 85-tk-L5-T308-1e #2,
+    // c1dd6341: Avatar re-sent 2.7 s in, removed at its 20 s, read as lost)
+    const auraRows = own.filter((r) => r.spellId === app.spellId);
+    const resent = resentAuraApplications(owner, auraRows, app.spellId);
+    const nextApplied = auraRows.find(
       (r) =>
-        r.spellId === app.spellId &&
         ev(r) === APPLIED &&
         r.srcUnitId === owner.id &&
-        tsOf(r) > tsOf(app),
+        tsOf(r) > tsOf(app) &&
+        !resent.has(r),
     );
     const gone = own.find(
       (r) =>
@@ -151,10 +157,10 @@ export function run(ctx: IRoundCtx): void {
     if (s.spanToSeconds >= upTo - 1) continue;
     ctx.bump("burstAuraPastSpan");
     const capMs = ctx.start + s.spanToSeconds * 1000;
-    const reapplied = own.some(
+    const reapplied = auraRows.some(
       (r) =>
-        r.spellId === app.spellId &&
         ev(r) === APPLIED &&
+        !resent.has(r) &&
         tsOf(r) > tsOf(app) + AURA_SURELY_UP_PAST_MS &&
         tsOf(r) <= untilMs,
     );
