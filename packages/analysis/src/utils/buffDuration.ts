@@ -880,6 +880,10 @@ function pressLanded(
  * press spending it (the rows of one press can be logged either way round). */
 const START_STACKS_SPENT_LEAD_MS = 100;
 
+/** A cast of the aura's own spell this long after a run's APPLIED is a second
+ * application inside it, not the press that opened it. */
+const RUN_SECOND_CAST_AFTER_MS = 1000;
+
 /** A stack aura whose last row is more than its own length plus this ago
  * is down: its REMOVED was lost. */
 const STACK_AURA_LOST_END_SLACK_S = 1;
@@ -911,18 +915,22 @@ function ownAuraRowsOf(
   caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
   auraId: string,
 ): ICombatUnit["auraEvents"] {
-  return (caster.auraEvents ?? [])
-    .filter(
+  // …with the game's re-broadcasts taken out first (`dropAuraRebroadcasts`,
+  // the one predicate every aura reader filters through — review
+  // 80-PIPE-261 #3: a REMOVED → APPLIED pair of one millisecond read as the
+  // aura lost and a stack gained)
+  return dropAuraRebroadcasts(
+    (caster.auraEvents ?? []).filter(
       (a) =>
         a.spellId === auraId &&
         a.srcUnitId === caster.id &&
         a.destUnitId === caster.id,
-    )
-    .sort(
-      (x, y) =>
-        x.logLine.timestamp - y.logLine.timestamp ||
-        (x.logLine.lineIndex ?? 0) - (y.logLine.lineIndex ?? 0),
-    );
+    ),
+  ).sort(
+    (x, y) =>
+      x.logLine.timestamp - y.logLine.timestamp ||
+      (x.logLine.lineIndex ?? 0) - (y.logLine.lineIndex ?? 0),
+  );
 }
 
 /**
@@ -1048,9 +1056,29 @@ function auraGainExtensionSeconds(
   atMs: number,
 ): number {
   const run = ownAuraRunNear(caster, spellId, atMs);
-  const from: IRunEdge = { ms: run?.fromMs ?? atMs, line: run?.fromLine };
-  const to: IRunEdge | undefined =
+  let from: IRunEdge = { ms: run?.fromMs ?? atMs, line: run?.fromLine };
+  let to: IRunEdge | undefined =
     run?.toMs === undefined ? undefined : { ms: run.toMs, line: run.toLine };
+  // Two casts inside one logged run are two applications the log joined
+  // (the first REMOVED and the second APPLIED lost — review 80-PIPE-261 #1:
+  // one gain credited to both). Each cast's walk is its own: it starts at
+  // its cast and stops at the next one, where no logged end is its own.
+  const laterCasts = (caster.spellCastEvents ?? [])
+    .filter(
+      (c) =>
+        c.spellId === spellId &&
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.logLine.timestamp > from.ms + RUN_SECOND_CAST_AFTER_MS &&
+        (to === undefined || c.logLine.timestamp < to.ms),
+    )
+    .map((c) => c.logLine.timestamp)
+    .sort((a, b) => a - b);
+  const ownCast = laterCasts
+    .filter((t) => t <= atMs + RUN_SECOND_CAST_AFTER_MS / 2)
+    .pop();
+  if (ownCast !== undefined) from = { ms: ownCast };
+  const nextCastMs = laterCasts.find((t) => t > from.ms);
+  if (nextCastMs !== undefined) to = undefined;
   const st = p.startStacks;
   const start =
     st && talentModifierOwnershipOf(caster, st.talentSpellId) === "yes"
@@ -1069,6 +1097,8 @@ function auraGainExtensionSeconds(
   for (const w of ownStackWalk(caster, p.gainAuraId)) {
     if (w.gained === 0 || loggedBeforeEdge(w.row, from)) continue;
     if (to && loggedAfterEdge(w.row, to)) break;
+    if (nextCastMs !== undefined && w.row.logLine.timestamp >= nextCastMs)
+      break;
     // past the end worked out so far the aura is off — unless the log
     // itself shows it up there (its REMOVED comes later: codex
     // 85-tk-L5-T309-1d #3, 1405c83e — a start sphere the log did not count)

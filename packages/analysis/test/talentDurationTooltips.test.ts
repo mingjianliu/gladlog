@@ -684,6 +684,33 @@ describe("pipeline T309 — review 85-tk-L5-T309-1", () => {
     );
     expect(buffFullDurationForCaster("190319", u, T0)).toBe(11);
   });
+  it("80-PIPE-261 #1: two casts inside one logged run (a REMOVED and an APPLIED lost) each walk their own gains", () => {
+    const u = {
+      id: "mage",
+      spec: "63",
+      info: { talents: [FIRED_UP], pvpTalents: [] },
+      spellCastEvents: [press("190319", 0), press("190319", 120)],
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 121),
+        row(LogEvent.SPELL_AURA_REMOVED, "190319", 131),
+      ],
+    } as never;
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(10);
+    expect(buffFullDurationForCaster("190319", u, T0 + 120_000)).toBe(11);
+  });
+  it("80-PIPE-261 #3: a Fired Up REMOVED → APPLIED re-broadcast is no stack gained", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 2),
+        row(LogEvent.SPELL_AURA_REMOVED, "1257350", 4),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 4),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(11);
+  });
   it("#2 (581d783f): the ghoul's Dark Transformation ends where the death knight's does — coils after it add nothing", () => {
     const dk = {
       id: "dk",
