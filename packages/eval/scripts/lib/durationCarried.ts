@@ -34,7 +34,13 @@ export function durationPairCarriedBy(
     )
   )
     return "tooltip";
-  if (TOOLTIP_PER_EVENT_DURATIONS[target]?.talentSpellId === talent)
+  const perEvent = TOOLTIP_PER_EVENT_DURATIONS[target];
+  if (
+    perEvent?.talentSpellId === talent ||
+    // a row's second talent (codex 85-tk-L5-T309-1 #7: Savor the Moment)
+    (perEvent?.event === "aura-gain" &&
+      perEvent.startStacks?.talentSpellId === talent)
+  )
     return "per-event";
   return undefined;
 }

@@ -425,7 +425,13 @@ function perEventFor(
   if (
     p &&
     p.specs.includes(caster.spec) &&
-    talentModifierOwnershipOf(caster, p.talentSpellId) === "yes"
+    (talentModifierOwnershipOf(caster, p.talentSpellId) === "yes" ||
+      // …or the row's second talent alone (codex 85-tk-L5-T309-1 #3: Savor
+      // the Moment without Fired Up)
+      (p.event === "aura-gain" &&
+        p.startStacks !== undefined &&
+        talentModifierOwnershipOf(caster, p.startStacks.talentSpellId) ===
+          "yes"))
   )
     return p;
   return setBonusPerEventFor(spellId, caster);
@@ -477,7 +483,14 @@ function perEventExtensionSeconds(
   // removed at 20.000 s, a Thunder Blast logged after that row in the same
   // millisecond read 22 s); with no logged run of the aura on its caster it
   // walks from the time it was given, as before.
-  const run = ownAuraRunNear(caster, spellId, atMs);
+  // …of the caster's own copy when the aura asked for sits on another unit
+  // (`runAuraId`; codex 85-tk-L5-T309-1 #2: the ghoul's Dark Transformation
+  // had no end to stop at and counted three coils cast after it)
+  const run = ownAuraRunNear(
+    caster,
+    ("runAuraId" in p ? p.runAuraId : undefined) ?? spellId,
+    atMs,
+  );
   const fromMs = run?.fromMs ?? atMs;
   // …and it ends at the press that replaces it (`endsAtCastIds`: the next
   // roll), whatever the aura rows merge into — a re-roll into the same
@@ -867,35 +880,109 @@ function pressLanded(
  * press spending it (the rows of one press can be logged either way round). */
 const START_STACKS_SPENT_LEAD_MS = 100;
 
+type IRunEdge = { ms: number; line?: number };
+/** `a` is logged before the edge: by time, then — in its millisecond — by
+ * log line (a row with no line there is taken as inside) */
+const loggedBeforeEdge = (
+  a: { logLine: { timestamp: number; lineIndex?: number } },
+  edge: IRunEdge,
+): boolean =>
+  a.logLine.timestamp !== edge.ms
+    ? a.logLine.timestamp < edge.ms
+    : edge.line !== undefined &&
+      a.logLine.lineIndex !== undefined &&
+      a.logLine.lineIndex < edge.line;
+const loggedAfterEdge = (
+  a: { logLine: { timestamp: number; lineIndex?: number } },
+  edge: IRunEdge,
+): boolean =>
+  a.logLine.timestamp !== edge.ms
+    ? a.logLine.timestamp > edge.ms
+    : edge.line !== undefined &&
+      a.logLine.lineIndex !== undefined &&
+      a.logLine.lineIndex > edge.line;
+
+/** The caster's own rows of `auraId`, in log order. */
+function ownAuraRowsOf(
+  caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+  auraId: string,
+): ICombatUnit["auraEvents"] {
+  return (caster.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === auraId &&
+        a.srcUnitId === caster.id &&
+        a.destUnitId === caster.id,
+    )
+    .sort(
+      (x, y) =>
+        x.logLine.timestamp - y.logLine.timestamp ||
+        (x.logLine.lineIndex ?? 0) - (y.logLine.lineIndex ?? 0),
+    );
+}
+
 /**
- * The stacks of the caster's own `auraId` just before `atMs`: the last DOSE
- * row's count, 1 after an APPLIED that found it down, 0 after its REMOVED.
- * An APPLIED while it is up is the aura re-sent and keeps the count; a
- * REMOVED within `START_STACKS_SPENT_LEAD_MS` before `atMs` is read past.
+ * The stack count of the caster's own `auraId` row by row, and the rows
+ * that are a stack GAINED: an APPLIED that finds it down, a DOSE row with a
+ * higher count. An APPLIED while it is up is the aura re-sent — the count
+ * stands and nothing is gained (codex 85-tk-L5-T309-1 #1, 30846f8e r1: a
+ * re-listed Fired Up read as a third gain); a lone REFRESH shows it up.
+ */
+function ownStackWalk(
+  caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
+  auraId: string,
+): Array<{
+  row: ICombatUnit["auraEvents"][number];
+  stacks: number;
+  gained: boolean;
+}> {
+  let stacks = 0;
+  return ownAuraRowsOf(caster, auraId).map((row) => {
+    const ev = row.logLine.event;
+    const before = stacks;
+    if (ev === LogEvent.SPELL_AURA_REMOVED) stacks = 0;
+    else if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    ) {
+      if (stacks === 0) stacks = 1;
+    } else if (
+      (ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
+        ev === LogEvent.SPELL_AURA_REMOVED_DOSE) &&
+      typeof row.amount === "number"
+    )
+      stacks = row.amount;
+    return {
+      row,
+      stacks,
+      gained:
+        stacks > before &&
+        (ev === LogEvent.SPELL_AURA_APPLIED ||
+          ev === LogEvent.SPELL_AURA_APPLIED_DOSE),
+    };
+  });
+}
+
+/**
+ * The stacks of the caster's own `auraId` as the application at `edge` went
+ * up: the count after its last row logged before that edge — a REMOVED
+ * within `START_STACKS_SPENT_LEAD_MS` before it is read past (the press
+ * spending them).
  */
 function ownStacksBefore(
   caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
   auraId: string,
-  atMs: number,
+  edge: IRunEdge,
 ): number {
   let stacks = 0;
-  for (const a of caster.auraEvents ?? []) {
-    if (a.spellId !== auraId) continue;
-    if (a.srcUnitId !== caster.id || a.destUnitId !== caster.id) continue;
-    const t = a.logLine.timestamp;
-    if (t >= atMs) continue;
-    const ev = a.logLine.event;
-    if (ev === LogEvent.SPELL_AURA_REMOVED) {
-      if (t >= atMs - START_STACKS_SPENT_LEAD_MS) continue;
-      stacks = 0;
-    } else if (ev === LogEvent.SPELL_AURA_APPLIED) {
-      if (stacks === 0) stacks = 1;
-    } else if (
-      ev === LogEvent.SPELL_AURA_APPLIED_DOSE ||
-      ev === LogEvent.SPELL_AURA_REMOVED_DOSE
-    ) {
-      if (typeof a.amount === "number") stacks = a.amount;
-    } else if (ev === LogEvent.SPELL_AURA_REFRESH && stacks === 0) stacks = 1;
+  for (const w of ownStackWalk(caster, auraId)) {
+    if (!loggedBeforeEdge(w.row, edge)) break;
+    if (
+      w.row.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      w.row.logLine.timestamp >= edge.ms - START_STACKS_SPENT_LEAD_MS
+    )
+      continue;
+    stacks = w.stacks;
   }
   return stacks;
 }
@@ -903,11 +990,12 @@ function ownStacksBefore(
 /**
  * Pipeline T309: an aura that grows each time its caster gains another
  * aura of its own (`ITooltipAuraGainDuration` — Combustion under Fired Up:
- * +1 s per Fired Up stack gained) — each APPLIED / APPLIED_DOSE row of the
- * gain aura on the caster inside the (growing) duration adds
- * `addSecondsPerEvent` — plus what a second talent adds at the start for
- * the stacks held then (`startStacks`: Savor the Moment). Walked on the run
- * the log shows, as a press talent is; a gain after its REMOVED adds nothing.
+ * +1 s per Fired Up stack gained) — each stack of the gain aura gained
+ * (`ownStackWalk`) inside the (growing) duration adds `addSecondsPerEvent`
+ * — plus what a second talent adds at the start for the stacks held then
+ * (`startStacks`: Savor the Moment). Each half needs its own talent. Walked
+ * on the run the log shows, in log order: a gain logged before its APPLIED
+ * or after its REMOVED adds nothing (codex 85-tk-L5-T309-1 #4).
  */
 function auraGainExtensionSeconds(
   p: ITooltipAuraGainDuration,
@@ -918,8 +1006,9 @@ function auraGainExtensionSeconds(
   atMs: number,
 ): number {
   const run = ownAuraRunNear(caster, spellId, atMs);
-  const fromMs = run?.fromMs ?? atMs;
-  const toMs = run?.toMs ?? Number.POSITIVE_INFINITY;
+  const from: IRunEdge = { ms: run?.fromMs ?? atMs, line: run?.fromLine };
+  const to: IRunEdge | undefined =
+    run?.toMs === undefined ? undefined : { ms: run.toMs, line: run.toLine };
   const st = p.startStacks;
   const start =
     st && talentModifierOwnershipOf(caster, st.talentSpellId) === "yes"
@@ -927,26 +1016,19 @@ function auraGainExtensionSeconds(
           st.capSeconds,
           Math.round(
             st.secondsPerStack *
-              ownStacksBefore(caster, st.stackAuraId, fromMs) *
+              ownStacksBefore(caster, st.stackAuraId, from) *
               10,
           ) / 10,
         )
       : 0;
-  const gains = (caster.auraEvents ?? [])
-    .filter(
-      (a) =>
-        a.spellId === p.gainAuraId &&
-        a.srcUnitId === caster.id &&
-        a.destUnitId === caster.id &&
-        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          a.logLine.event === LogEvent.SPELL_AURA_APPLIED_DOSE),
-    )
-    .map((a) => a.logLine.timestamp)
-    .filter((t) => t >= fromMs && t <= toMs)
-    .sort((a, b) => a - b);
+  if (talentModifierOwnershipOf(caster, p.talentSpellId) !== "yes")
+    return start;
   let ext = 0;
-  for (const t of gains) {
-    if (t > fromMs + (baseSeconds + start + ext) * 1000) break;
+  for (const w of ownStackWalk(caster, p.gainAuraId)) {
+    if (!w.gained || loggedBeforeEdge(w.row, from)) continue;
+    if (to && loggedAfterEdge(w.row, to)) break;
+    if (w.row.logLine.timestamp > from.ms + (baseSeconds + start + ext) * 1000)
+      break;
     ext += p.addSecondsPerEvent;
   }
   return start + ext;

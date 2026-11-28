@@ -576,3 +576,93 @@ describe("pipeline T309 — Combustion under Fired Up and Savor the Moment", () 
     expect(buffFullDurationForCaster("190319", u, T0)).toBe(10);
   });
 });
+
+describe("pipeline T309 — review 85-tk-L5-T309-1", () => {
+  const FIRED_UP = { id1: 110423, id2: 137035, count: 1 };
+  const SAVOR = { id1: 94650, id2: 117253, count: 1 };
+  const row = (
+    ev: LogEvent,
+    id: string,
+    sec: number,
+    over: { amount?: number; lineIndex?: number; who?: string } = {},
+  ) => {
+    const who = over.who ?? "mage";
+    const r = makeAuraEvent(ev, id, T0 + sec * 1000, who, who, "BUFF");
+    if (over.lineIndex !== undefined) r.logLine.lineIndex = over.lineIndex;
+    return {
+      ...r,
+      ...(over.amount !== undefined ? { amount: over.amount } : {}),
+    };
+  };
+  const mage = (talents: unknown[], auraEvents: unknown[]) =>
+    ({
+      id: "mage",
+      spec: "63",
+      info: { talents, pvpTalents: [] },
+      spellCastEvents: [],
+      auraEvents,
+    }) as never;
+  it("#1 (30846f8e r1): Fired Up re-listed while up is no gain — two gains, 12 s", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 2),
+        row(LogEvent.SPELL_AURA_APPLIED_DOSE, "1257350", 4, { amount: 2 }),
+        row(LogEvent.SPELL_AURA_REMOVED_DOSE, "1257350", 8, { amount: 1 }),
+        // the aura re-sent with one stack left
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 9),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(12);
+  });
+  it("#2 (581d783f): the ghoul's Dark Transformation ends where the death knight's does — coils after it add nothing", () => {
+    const dk = {
+      id: "dk",
+      spec: "252",
+      info: { talents: [{ id1: 76185, id2: 96322, count: 1 }], pvpTalents: [] },
+      spellCastEvents: [2, 5, 8, 9, 10].map((sec) => press("1242174", sec)),
+      // its own copy, removed at 7.388 s; the ghoul's aura is on the pet
+      auraEvents: [
+        row(LogEvent.SPELL_AURA_APPLIED, "1235391", 0, { who: "dk" }),
+        row(LogEvent.SPELL_AURA_REMOVED, "1235391", 7.388, { who: "dk" }),
+      ],
+    } as never;
+    expect(buffFullDurationForCaster("1235391", dk, T0)).toBe(17);
+    expect(buffFullDurationForCaster("1233448", dk, T0)).toBe(17);
+  });
+  it("#3: Savor the Moment alone lengthens the cast; Fired Up's gains need Fired Up", () => {
+    const rows = [
+      row(LogEvent.SPELL_AURA_APPLIED, "448604", -30),
+      row(LogEvent.SPELL_AURA_APPLIED_DOSE, "448604", -20, { amount: 3 }),
+      row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+      row(LogEvent.SPELL_AURA_APPLIED, "1257350", 3),
+    ];
+    expect(
+      buffFullDurationForCaster("190319", mage([SAVOR], rows), T0),
+    ).toBeCloseTo(12.4, 5);
+    expect(
+      buffFullDurationForCaster("190319", mage([FIRED_UP, SAVOR], rows), T0),
+    ).toBeCloseTo(13.4, 5);
+  });
+  it("#4: in Combustion's own milliseconds the log line decides — a gain before its APPLIED or after its REMOVED adds nothing, a sphere applied just before it counts", () => {
+    const life = (talents: unknown[], rows: unknown[]) =>
+      buffFullDurationForCaster("190319", mage(talents, rows), T0);
+    const up = row(LogEvent.SPELL_AURA_APPLIED, "190319", 0, {
+      lineIndex: 100,
+    });
+    const off = row(LogEvent.SPELL_AURA_REMOVED, "190319", 10, {
+      lineIndex: 200,
+    });
+    const gain = (sec: number, lineIndex: number) =>
+      row(LogEvent.SPELL_AURA_APPLIED, "1257350", sec, { lineIndex });
+    expect(life([FIRED_UP], [gain(0, 99), up, off])).toBe(10);
+    expect(life([FIRED_UP], [up, gain(0, 101), off])).toBe(11);
+    expect(life([FIRED_UP], [up, gain(10, 199), off])).toBe(11);
+    expect(life([FIRED_UP], [up, off, gain(10, 201)])).toBe(10);
+    const sphere = row(LogEvent.SPELL_AURA_APPLIED, "448604", 0, {
+      lineIndex: 99,
+    });
+    expect(life([SAVOR], [sphere, up, off])).toBeCloseTo(10.8, 5);
+  });
+});

@@ -281,6 +281,9 @@ export interface ITooltipPerPressDuration extends ITooltipPerEventBase {
   /** presses that add a share of the amount, by cast id — the rest add all
    * of it (a recast the game makes at reduced effectiveness) */
   eventShareBySpellId?: Readonly<Record<string, number>>;
+  /** the caster's own aura of the same application, when this one sits on
+   * another unit (a pet): the run the walk is bounded by */
+  runAuraId?: string;
 }
 
 /** An effect row id whose rows can stand for casts the log did not write. */
@@ -481,8 +484,9 @@ const DARK_TRANSFORMATION_ROW: ITooltipPerPressDuration = {
   qualifyingSpellIds: new Set(["47541", "207317", "1242174", "383269"]),
 };
 const DARK_TRANSFORMATION_ROWS: Record<string, ITooltipPerPressDuration> = {
-  // the ghoul's aura, under the cast's id
-  "1233448": DARK_TRANSFORMATION_ROW,
+  // the ghoul's aura, under the cast's id — walked on the death knight's
+  // own copy, which goes up and off with it
+  "1233448": { ...DARK_TRANSFORMATION_ROW, runAuraId: "1235391" },
   // the death knight's own
   "1235391": DARK_TRANSFORMATION_ROW,
 };
@@ -525,6 +529,10 @@ export const TOOLTIP_PER_EVENT_DURATIONS: Readonly<
   },
   ...ROLL_ENHANCEMENT_ROWS,
   ...DARK_TRANSFORMATION_ROWS,
+  // FLAG, not modelled (pipeline T309): Vengeful Beast 1265818 — 「恶魔变形
+  // 的持续时间延长${$s1/1000}秒」, DB2 aura 107 op 1 +5000 ms, class mask
+  // covering Vengeance's Metamorphosis 187827 — has no corpus leg: 0 lives
+  // of 187827 in the 605 files and in the 1215-set.
   // Combustion 190319 (pipeline T309 c), two Fire talents:
   // · Fired Up 1257348: 「焚烧殆尽现在会将燃烧的持续时间延长${$s2/1000}.1秒」
   //   — effect 1 is a label modifier (aura 219, op 23, label 5673, base
