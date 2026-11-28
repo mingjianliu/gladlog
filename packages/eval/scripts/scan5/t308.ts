@@ -96,29 +96,41 @@ export function run(ctx: IRoundCtx): void {
         (o) => o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
       )
       .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity);
-    const copy = observedEffectCopy(
-      owner,
-      s.spellId,
-      s.castTimeSeconds,
-      nextSameS,
-      ctx.legacy as never,
-    );
+    // …the caster's own copy when the ledger's span ends on it
+    // (`spanCopy`; codex 85-tk-L5-T308-1j #2: Power Infusion's priest copy)
+    const copy =
+      s.spanCopy ??
+      observedEffectCopy(
+        owner,
+        s.spellId,
+        s.castTimeSeconds,
+        nextSameS,
+        ctx.legacy as never,
+      );
     const holder: any =
       copy && copy.holderId !== owner.id
         ? (ctx.legacy as any).units?.[copy.holderId]
         : owner;
     if (!holder) continue;
     const own = holder === owner ? ownOnOwner : rowsOn(holder);
-    const app = own.find(
-      (r) =>
-        (copy
-          ? r.spellId === copy.auraId
-          : r.spellId === s.spellId ||
-            getEnglishSpellName(r.spellId, r.spellName ?? "") ===
-              s.spellName) &&
-        (ev(r) === APPLIED || ev(r) === REFRESH) &&
-        Math.abs(tsOf(r) - castMs) <= 1000,
-    );
+    // the copy's own application (`appliedS`), however late after the cast
+    // (codex 85-tk-L5-T308-1j #1: 7abf7067 r2's The Hunt landed 1.5 s after
+    // its cast); with no copy, the owner's aura of the spell at the cast
+    const app = copy
+      ? own.find(
+          (r) =>
+            r.spellId === copy.auraId &&
+            (ev(r) === APPLIED || ev(r) === REFRESH) &&
+            Math.abs(tsOf(r) - (ctx.start + copy.appliedS * 1000)) <= 1,
+        )
+      : own.find(
+          (r) =>
+            (r.spellId === s.spellId ||
+              getEnglishSpellName(r.spellId, r.spellName ?? "") ===
+                s.spellName) &&
+            (ev(r) === APPLIED || ev(r) === REFRESH) &&
+            Math.abs(tsOf(r) - castMs) <= 1000,
+        );
     if (!app) continue;
     const key = `${ctx.roundKey}|${owner.id}|${s.spellId}|${s.castTimeSeconds}`;
     const first = !seen.has(key);

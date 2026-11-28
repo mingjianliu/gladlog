@@ -176,6 +176,12 @@ export interface IEnemyCDCast {
    * (`casterCopyEndSeconds`). One press can so show two ends (accepted,
    * R83; 72 presses on the 605 a second or more apart). */
   casterCopyEndSeconds?: number;
+  /** T308: the caster's own copy `casterCopyEndSeconds` is read from — its
+   * aura and this press's application of it (`observedEffectEnd`'s own
+   * selection), for a scan that re-checks that end (codex
+   * 85-tk-L5-T308-1j #2: 0551e539 r4's Power Infusion, its span the
+   * priest's copy, audited on the death knight's) */
+  casterCopy?: { holderId: string; auraId: string; appliedS: number };
   /** T140: the end `[RES]` counts to is an upper bound, not the effect's
    * end — a `(no press)` occurrence (a talent's proc put the cooldown's
    * aura up) whose end the log does not show: still up when the slice
@@ -2025,8 +2031,14 @@ function reconstructEnemyCDTimelineUncached(
         combat,
         caster.id,
       );
-      if (own !== null && own.endS < cd.buffEndSeconds)
+      if (own !== null && own.endS < cd.buffEndSeconds) {
         cd.casterCopyEndSeconds = own.endS;
+        cd.casterCopy = {
+          holderId: own.holderId,
+          auraId: own.auraId,
+          appliedS: own.appliedS,
+        };
+      }
     };
     const setObservedEnd = (
       cd: IEnemyCDCast,

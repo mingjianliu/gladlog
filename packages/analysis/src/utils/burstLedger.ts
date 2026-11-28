@@ -308,6 +308,10 @@ export interface IBurstLedgerEntry {
     /** end of this CD's own active span (`burstCastSpan`) — the header's
      *  span is the union (triage sync-burst F-L4) */
     spanToSeconds: number;
+    /** T308: the caster's own copy the span ends on, when `ledgerCastSpan`
+     * read it (`casterCopyEndSeconds` before the chain's end); unset, the
+     * span reads the press's whole chain (`observedEffectCopy`) */
+    spanCopy?: { holderId: string; auraId: string; appliedS: number };
   }>;
   /** Player damage to enemy players inside the span (pets excluded from targeting). */
   totalDamage: number;
@@ -1760,6 +1764,11 @@ export function analyzeBurstLedgerUncached(
         castTimeSeconds: cd.castTimeSeconds,
         // clipped like the header's own end (the round can end mid-burst)
         spanToSeconds: Math.min(ledgerCastSpan(cd).to, toSeconds),
+        ...(cd.casterCopy !== undefined &&
+        cd.casterCopyEndSeconds !== undefined &&
+        cd.casterCopyEndSeconds < cd.buffEndSeconds
+          ? { spanCopy: cd.casterCopy }
+          : {}),
       })),
       totalDamage,
       damageByTarget,
