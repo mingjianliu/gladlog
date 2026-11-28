@@ -282,6 +282,7 @@ import {
   FORM_BOUND_BUFF_IDS,
   FORM_COOLDOWN_BUFF_BY_CAST_ID,
 } from "./druidForms";
+import { ENEMY_CAUSED_SELF_DAMAGE_IDS } from "./enemyCausedSelfDamage";
 import { ENEMY_HEAL_CD_IDS } from "./enemyHealCds";
 import { HEALER_HELD_OFFENSIVE_SPEC } from "./healerHeldOffensive";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
@@ -786,6 +787,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("NO_COOLDOWN_ROW_BUTTON_IDS", "data/noCooldownRowButtons.ts", "cast", () => [
     ...NO_COOLDOWN_ROW_BUTTON_IDS.keys(),
   ]),
+  // scan5 burstRatioOwnSideDamage's enemy-caused own rows (no product
+  // reader; pipeline T330, user ruling 2026-11-28)
+  t(
+    "ENEMY_CAUSED_SELF_DAMAGE_IDS",
+    "data/enemyCausedSelfDamage.ts",
+    "cast",
+    () => [...ENEMY_CAUSED_SELF_DAMAGE_IDS.keys()],
+  ),
   t("CD_ROLE_TAGS", "utils/cooldowns.ts", "cast", () => keys(CD_ROLE_TAGS)),
   t("TEAM_HEAL_CD_IDS", "utils/cooldowns.ts", "cast", () =>
     set(TEAM_HEAL_CD_IDS),
