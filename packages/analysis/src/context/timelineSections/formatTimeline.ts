@@ -24,6 +24,7 @@ import {
   ENEMY_DEF_NO_AURA_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
+  FEIGN_NO_TACTICS_NOTE,
   isShieldOnEnemyCdLine,
   selfSaveReductionNames,
 } from "../../utils/enemyDefensives";
@@ -61,8 +62,8 @@ import {
 } from "../timelineHelpers";
 import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
-import { PROC_TRIGGER_LEAD_MS } from "./enemyCd";
 import type { TimelineCtx } from "./ctx";
+import { PROC_TRIGGER_LEAD_MS } from "./enemyCd";
 import { OFF_LIST_PRESS_LEGEND, OFF_LIST_PRESS_TAG } from "./offListPress";
 import {
   CC_NOT_LANDED_LEGEND,
@@ -508,6 +509,11 @@ export function formatTimeline(
     ...(enemyDefLines.some(isShieldOnEnemyCdLine)
       ? [
           "    Ultimate Penitence is one [ENEMY CD] line carrying these same readings: it is an offensive cooldown that also shields the caster;",
+        ]
+      : []),
+    ...(enemyDefLines.some((l) => l.includes(FEIGN_NO_TACTICS_NOTE))
+      ? [
+          `    \`(${FEIGN_NO_TACTICS_NOTE})\` = a Feign Death of a hunter without the Survival Tactics PvP talent: it drops the hunter as a target and stops casts aimed at it, shields nothing, and the log writes no end for it;`,
         ]
       : []),
     "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",

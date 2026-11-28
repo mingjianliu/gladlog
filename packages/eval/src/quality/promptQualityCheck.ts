@@ -227,6 +227,7 @@ import {
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
   ENEMY_DEF_IMMUNE_LABEL_RE_SRC,
   ENEMY_DEF_TAG_RE_SRC,
+  ENEMY_SAVE_ALT_EFFECT_BY_NAME,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
   isShieldOnEnemyCdLine,
@@ -5814,7 +5815,12 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
     const stated = enemySaveEffectOfNote(after);
     const expected = ENEMY_SAVE_EFFECT_BY_NAME.get(spell);
     if (expected !== undefined) {
-      if (stated !== expected)
+      // …or its second effect (T324: Feign Death without Survival Tactics)
+      if (
+        stated !== expected &&
+        (stated === undefined ||
+          stated !== ENEMY_SAVE_ALT_EFFECT_BY_NAME.get(spell))
+      )
         failures.push(
           `line ${i + 1}: [ENEMY DEF] prints ${spell} as something other than its effect (${expected}): ${quoted}`,
         );

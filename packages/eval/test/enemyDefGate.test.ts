@@ -597,6 +597,11 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
           "Feign Death (absorb 64k, 2.0s) [friendly offensive CD active] (at 67% HP)",
         ),
         D(HUNTER, "Feign Death (absorb, 2.0s) (at 67% HP)"),
+        // T324: a Feign Death without Survival Tactics (user wording (A))
+        D(
+          HUNTER,
+          "Feign Death (drops targets; no absorb without Survival Tactics) [friendly offensive CD active] (at 97% HP)",
+        ),
         D(HUNTER, "Feign Death (absorb <1k, 0.4s — removed early)"),
         D(HUNTER, "Feign Death (absorb 594k, 1.2s — used up) (at 12% HP)"),
         D(
@@ -638,6 +643,11 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ["Cauterize with the burn's duration", "Cauterize (immune, 6.0s)"],
     ["Cheat Death as a pressed heal", "Cheat Death (heal) (at 7% HP)"],
     ["the wrong effect for the ability", "Feign Death (cheat-death proc)"],
+    [
+      "T324's effect on another save",
+      "Cauterize (drops targets; no absorb without Survival Tactics)",
+    ],
+    ["a cut-down T324 note", "Feign Death (drops targets) (at 97% HP)"],
     ["a proc called an absorb", "Cauterize (absorb 12k, 6.0s)"],
   ])("fails %s", (_why, rest) => {
     const f = checkEnemyDefSaveEffect([D(HUNTER, rest)]);

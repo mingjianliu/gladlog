@@ -66,6 +66,7 @@ import {
   buffFullDurationForCaster,
   TIMEWALKER_LENGTHENED_IDS,
 } from "@gladlog/analysis/src/utils/buffDuration";
+import { feignsWithoutTacticsMs } from "@gladlog/analysis/src/utils/castStopEvidence";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
@@ -383,21 +384,16 @@ function enemyTrinketSelfCc(ctx: IRoundCtx): void {
 }
 
 // ── GH #173 item 34 ────────────────────────────────────────────────────────
-const SURVIVAL_TACTICS = "202748";
 
 function feignNoTactics(ctx: IRoundCtx): void {
   for (const u of ctx.players as any[]) {
+    // the producer's own reading of "no shield with it" (T324)
+    const bare = new Set(feignsWithoutTacticsMs(u));
     for (const r of (u.unconsciousRecords ?? []) as any[]) {
       const ms = r.timestamp as number;
       if (ms < ctx.start || ms > ctx.roundEndAt) continue;
       ctx.bump("feignNoTactics");
-      const aura = ((u.auraEvents ?? []) as any[]).some(
-        (a) =>
-          a.spellId === SURVIVAL_TACTICS &&
-          ev(a) === APPLIED &&
-          Math.abs(tsOf(a) - ms) <= 1000,
-      );
-      if (aura) continue;
+      if (!bare.has(ms)) continue;
       const s = Math.floor((ms - ctx.start) / 1000);
       const id = `${u.name}:${ms}`;
       const where = `${u.name} feigned at ${fmtS(s)} with no Survival Tactics aura`;

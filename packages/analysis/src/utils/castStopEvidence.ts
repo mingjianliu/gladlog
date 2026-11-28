@@ -145,6 +145,36 @@ export function feignDeathUnconsciousMs(
   return (unit.unconsciousRecords ?? []).map((r) => r.timestamp);
 }
 
+/** How far a Feign Death's Survival Tactics APPLIED may sit from its
+ * `UNIT_DIED … unconscious=1` row and still be that feign's shield. */
+export const FEIGN_TACTICS_PAIR_MS = 1000;
+
+/**
+ * The Feign Deaths of `unit` (epoch ms, its `unconscious=1` rows) that put
+ * up no Survival Tactics shield — no aura `AURA_ONLY_ACTIVATION_IDS` lists
+ * for 5384 APPLIED within `FEIGN_TACTICS_PAIR_MS`: a hunter without the PvP
+ * talent (pipeline T324; ruling R40, user 2026-11-14: Feign Death is a
+ * defensive). One predicate for the `[ENEMY DEF]` line and its audit
+ * (scan5/t65 `feignNoTactics`). 605 (scan5 at 3bf27b642): 81 rows, 27
+ * facts, none with a line.
+ */
+export function feignsWithoutTacticsMs(
+  unit: Pick<ICombatUnit, "auraEvents" | "unconsciousRecords">,
+): number[] {
+  const auras = AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? [];
+  const shields = (unit.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        !!a.spellId &&
+        auras.includes(a.spellId),
+    )
+    .map((a) => a.timestamp);
+  return feignDeathUnconsciousMs(unit).filter(
+    (ms) => !shields.some((t) => Math.abs(t - ms) <= FEIGN_TACTICS_PAIR_MS),
+  );
+}
+
 export function feignDeathInstantsMs(
   unit: Pick<ICombatUnit, "auraEvents" | "unconsciousRecords">,
 ): number[] {

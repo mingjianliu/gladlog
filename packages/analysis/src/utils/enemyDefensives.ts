@@ -87,6 +87,7 @@ export {
 import { buffFullDurationForCaster } from "./buffDuration";
 import { missBelongsToCast } from "./castMissRows";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
+import { feignsWithoutTacticsMs } from "./castStopEvidence";
 import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
 import {
@@ -703,7 +704,23 @@ export function immunityCountsWhenAlreadyUp(
 /** What an effect save does, as its `[ENEMY DEF]` line says it: a shield
  * (Feign Death's, or a pressed self defensive's whose mechanism is an absorb
  * — `selfDefensiveMechanism`), or what a proc is (`ENEMY_PROC_SAVES`). */
-export type EnemySaveEffect = "absorb" | EnemyProcSaveEffect;
+export type EnemySaveEffect = "absorb" | "drops targets" | EnemyProcSaveEffect;
+
+/** What a Feign Death with no Survival Tactics shield
+ * (`feignsWithoutTacticsMs`) says in its `[ENEMY DEF]` parenthesis: what it
+ * does, and that it shields nothing (pipeline T324; ruling R40, user
+ * 2026-11-14: "it counts as a damage reduction; used well it can stop some
+ * big abilities"). One literal for the renderer and the gate's reader. */
+export const FEIGN_NO_TACTICS_NOTE =
+  "drops targets; no absorb without Survival Tactics";
+
+/** A save name whose `[ENEMY DEF]` line may state a second effect beside
+ * `ENEMY_SAVE_EFFECT_BY_NAME`'s: Feign Death without Survival Tactics
+ * (`FEIGN_NO_TACTICS_NOTE`). */
+export const ENEMY_SAVE_ALT_EFFECT_BY_NAME: ReadonlyMap<
+  string,
+  EnemySaveEffect
+> = new Map<string, EnemySaveEffect>([["Feign Death", "drops targets"]]);
 
 /** Ability name → its effect, for the effect saves that are read off an aura
  * or a heal and not off a press (`effectSaves`, ruling D8). The `[ENEMY DEF]`
@@ -883,6 +900,7 @@ export function enemySaveEffectNote(
   absorbedAmount: number | undefined,
   duration: string,
 ): string {
+  if (effect === "drops targets") return FEIGN_NO_TACTICS_NOTE;
   if (effect !== "absorb") return effect;
   const k =
     absorbedAmount === undefined
@@ -1012,7 +1030,7 @@ export const isShieldOnEnemyCdLine = (line: string): boolean =>
 
 /** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */
 const ENEMY_SAVE_EFFECT_NOTE_RE = new RegExp(
-  String.raw`^\((?:(absorb)(?: (?:\d+|<1)k)?(?:, \d+\.\ds\b|, ${ENEMY_DEF_END_NOT_LOGGED}\)|\))|(heal proc)\)|(cheat-death proc)\))`,
+  String.raw`^\((?:(absorb)(?: (?:\d+|<1)k)?(?:, \d+\.\ds\b|, ${ENEMY_DEF_END_NOT_LOGGED}\)|\))|(heal proc)\)|(cheat-death proc)\)|(drops targets)${FEIGN_NO_TACTICS_NOTE.slice("drops targets".length).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\))`,
 );
 
 /** The effect a rendered `[ENEMY DEF]` parenthesis states (the text that
@@ -1023,7 +1041,7 @@ export function enemySaveEffectOfNote(
   parenthesis: string,
 ): EnemySaveEffect | undefined {
   const m = ENEMY_SAVE_EFFECT_NOTE_RE.exec(parenthesis);
-  return (m?.[1] ?? m?.[2] ?? m?.[3]) as EnemySaveEffect | undefined;
+  return (m?.[1] ?? m?.[2] ?? m?.[3] ?? m?.[4]) as EnemySaveEffect | undefined;
 }
 
 /** When `unit` carried a FULL immunity (`FULL_IMMUNITY_IDS`), seconds since
@@ -3073,6 +3091,27 @@ export function enemyDefensiveEventsUncached(
             ...earlyEndOf(enemy, shield, shield.spellId),
           }
         : { removedEarly: false }),
+    });
+  }
+
+  // Pipeline T324 (ruling R40, user 2026-11-14: Feign Death is a
+  // defensive): a Feign Death that put up no Survival Tactics shield
+  // (`feignsWithoutTacticsMs`, the log's `UNIT_DIED … unconscious=1` row
+  // alone) — a fact line of what it does. No absorb to price, no length (the
+  // log writes no end for it), and no span reader counts it
+  // (`ownSaveSpanS` cuts for an absorb only); R05 keeps it out of the death
+  // readers, which do not read these events.
+  for (const ms of feignsWithoutTacticsMs(enemy)) {
+    if (ms < combat.startTime || ms > roundEndAt) continue;
+    out.push({
+      atSeconds: (ms - combat.startTime) / 1000,
+      spellId: FEIGN_DEATH_CAST_ID,
+      spellName: "Feign Death",
+      casterName: enemy.name,
+      casterId: enemy.id,
+      kind: "self-save",
+      effect: "drops targets",
+      removedEarly: false,
     });
   }
 

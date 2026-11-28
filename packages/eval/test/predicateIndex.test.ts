@@ -615,6 +615,13 @@ const INDEX: PredicateRow[] = [
     symbol: "feignDeathInstantsMs",
     mod: castStopEvidence,
   },
+  // pipeline T324: a Feign Death with no Survival Tactics shield, for the
+  // [ENEMY DEF] line and scan5/t65 feignNoTactics
+  {
+    file: `${A}/utils/castStopEvidence.ts`,
+    symbol: "feignsWithoutTacticsMs",
+    mod: castStopEvidence,
+  },
   // pipeline T194: the target-drop presses, for the cast-bar reader and the
   // kick audit
   {
