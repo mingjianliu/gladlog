@@ -19,7 +19,13 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { DB2_BUILD } from "../scripts/scan5/db2Cache";
-import { DB2_TABLES, OUT_OF_TOTAL, run } from "../scripts/scan5/fact11";
+import {
+  DB2_TABLES,
+  isItemUseSpell,
+  OUT_OF_TOTAL,
+  resetItemUseSpells,
+  run,
+} from "../scripts/scan5/fact11";
 
 const START = 1_000_000;
 
@@ -86,6 +92,9 @@ beforeAll(async () => {
       "1,0,0,0,0,0,0,1291791,0,0",
       "2,0,6,0,0,0,0,66906,0,0",
       "3,0,1,0,0,0,0,999001,0,0",
+      // Enrage 12686: on use, and Ragehammer's chance on hit
+      "4,0,0,0,0,0,0,12686,0,0",
+      "5,0,2,0,0,0,0,12686,0,0",
       "",
     ].join("\n"),
   );
@@ -109,6 +118,29 @@ describe("castLineNoButton (T329)", () => {
     expect(kindsOf("999001", "Equip Passive")).toEqual([
       "Equip Passive 999001",
     ]);
+  });
+
+  it("still flags a spell some item also fires as a passive", () => {
+    expect(kindsOf("12686", "Enrage")).toEqual(["Enrage 12686"]);
+  });
+
+  it("refuses a table that names no pressed item spell", () => {
+    const saved = process.env.DATAGEN_CACHE;
+    const dir = mkdtempSync(join(tmpdir(), "scan5T329-empty-"));
+    writeFileSync(
+      join(dir, `ItemEffect-${DB2_BUILD}.csv`),
+      "ID,LegacySlotIndex,TriggerType,Charges,CoolDownMSec,CategoryCoolDownMSec,SpellCategoryID,SpellID,ChrSpecializationID,PlayerConditionID\n",
+    );
+    process.env.DATAGEN_CACHE = dir;
+    resetItemUseSpells();
+    try {
+      expect(() => isItemUseSpell("1291791")).toThrow(
+        "names no pressed item spell",
+      );
+    } finally {
+      process.env.DATAGEN_CACHE = saved;
+      resetItemUseSpells();
+    }
   });
 
   it("files Rite of Sanctification and Unity Within out of the total", () => {

@@ -1043,15 +1043,21 @@ let itemSpellIds: ReadonlySet<string> | undefined;
  * a toy, a trinket), 6 learned from the item (a mount). On equip (1) and
  * chance on hit (2) are passives. */
 const PRESSED_ITEM_TRIGGERS: ReadonlySet<string> = new Set(["0", "6"]);
+const PASSIVE_ITEM_TRIGGERS: ReadonlySet<string> = new Set(["1", "2"]);
 /** Every item's pressed spell (DB2 ItemEffect.SpellID, `PRESSED_ITEM_TRIGGERS`):
  * pressed from the bags or the mount journal; an item's spell has no
  * SpellCooldowns row of its own (pipeline T329: 39 of castLineNoButton's 54
  * in-total rows on the 605 at 87e3bc72c — Drink, Winning Hand, Feeling
- * Fielder Mk. 7, Argent Charger …). No table (a unit test without a cache)
- * reads as none; a run is refused (`DB2_TABLES`). */
+ * Fielder Mk. 7, Argent Charger …). A spell some item also fires as a
+ * passive (`PASSIVE_ITEM_TRIGGERS`: Enrage 12686, on use and Ragehammer's
+ * proc) stays out — its row may be the proc (codex 85-claude-b-T329-1 #1;
+ * none of the 605's exempted rows is such a spell). No table (a unit test
+ * without a cache) reads as none; a run is refused (`DB2_TABLES`); a table
+ * that names no pressed spell is an error, never an empty exemption (#2). */
 export function isItemUseSpell(spellId: string): boolean {
   if (!itemSpellIds) {
-    const out = new Set<string>();
+    const pressed = new Set<string>();
+    const passive = new Set<string>();
     const lines = db2Lines("ItemEffect");
     if (lines) {
       const cols = lines[0]!.trim().split(",");
@@ -1062,13 +1068,23 @@ export function isItemUseSpell(spellId: string): boolean {
       for (const l of lines.slice(1)) {
         const f = l.split(",");
         const id = f[sp]?.trim();
-        if (id && id !== "0" && PRESSED_ITEM_TRIGGERS.has(f[tr]?.trim() ?? ""))
-          out.add(id);
+        if (!id || id === "0") continue;
+        const trigger = f[tr]?.trim() ?? "";
+        if (PRESSED_ITEM_TRIGGERS.has(trigger)) pressed.add(id);
+        else if (PASSIVE_ITEM_TRIGGERS.has(trigger)) passive.add(id);
       }
+      if (pressed.size === 0)
+        throw new Error("ItemEffect: the table names no pressed item spell");
+      for (const id of passive) pressed.delete(id);
     }
-    itemSpellIds = out;
+    itemSpellIds = pressed;
   }
   return itemSpellIds.has(spellId);
+}
+
+/** @internal unit tests: read the ItemEffect table again on the next call */
+export function resetItemUseSpells(): void {
+  itemSpellIds = undefined;
 }
 
 /** A row of a button: a DB2 SpellCooldowns row, or an item's on-use spell. */
