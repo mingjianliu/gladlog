@@ -1150,7 +1150,8 @@ function pressWindowEarlyEnd(
   lengthS: number,
   untilMs: number,
   /** the press's instant: the length runs from it when the copy was laid
-   * after it (`pressEffectHandoffRow`'s `pressMs`) */
+   * more than `PRESS_CHAIN_HANDOVER_MS` after it (`pressEffectHandoffRow`'s
+   * `pressMs`) */
   pressMs?: number,
 ):
   | {
@@ -1185,7 +1186,15 @@ function pressWindowEarlyEnd(
   if (!removed) return undefined;
   const endMs = removed.logLine.timestamp;
   if (endMs >= untilMs) return undefined;
-  const fromMs = Math.min(startMs, pressMs ?? startMs);
+  // …only for a copy laid after the press's own instant
+  // (`PRESS_CHAIN_HANDOVER_MS`): a unit walking into a ground window late.
+  // A copy laid with the press runs its own length from its own row — a
+  // Tricks of the Trade window logged 149 ms after the cast (f156e7ac) and
+  // consumed at +29.85 s ended early (codex 85-tk-L5-T284-1o)
+  const fromMs =
+    pressMs !== undefined && startMs - pressMs > PRESS_CHAIN_HANDOVER_MS
+      ? pressMs
+      : startMs;
   if ((endMs - fromMs) / 1000 >= lengthS - BUFF_FADE_EARLY_TOLERANCE_S)
     return undefined;
   return { own: own ?? row, startMs, endMs, removed };

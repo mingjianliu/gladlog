@@ -1607,4 +1607,27 @@ describe("T284 (b) × M3 assembly review 80-PIPE-255", () => {
       ),
     ).toBeUndefined();
   });
+  it("a window laid with the press (149 ms on) and consumed just before its end still hands off (codex 85-tk-L5-T284-1o)", () => {
+    const cast = makeSpellCastEvent("57934", T, "hun", "Hun", "rog", "Rog");
+    const rog = makeUnit("rog", { spellCastEvents: [cast] });
+    const hun = makeUnit("hun", {
+      auraEvents: [
+        makeAuraEvent(APPLIED, "57934", T + 149, "rog", "hun", "BUFF"),
+        makeAuraEvent(REMOVED, "57934", T + 29_850, "rog", "hun", "BUFF"),
+        makeAuraEvent(APPLIED, "221630", T + 29_851, "rog", "hun", "BUFF"),
+      ],
+    });
+    expect(
+      pressEffectHandoffRow(
+        { id: "rog" },
+        hun,
+        "57934",
+        hun.auraEvents[0] as any,
+        30,
+        Infinity,
+        [rog, hun],
+        T,
+      )?.row.spellId,
+    ).toBe("221630");
+  });
 });
