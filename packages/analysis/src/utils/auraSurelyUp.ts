@@ -236,8 +236,12 @@ export function auraSurelyUpEndMs(
       (a) => a.spellId === auraId && a.srcUnitId === caster.id,
     ),
   );
+  // …before `untilMs`: an APPLIED at it is the next life that bounds this
+  // one, not a lost end of it (codex 85-tk-L5-T308-1i #1, 63d890de r5: an
+  // Ignite tick at 69.3 s, past its 67.3 s, read off by the 71.0 s
+  // application that ends the window)
   const rows = own.filter(
-    (a) => a.logLine.timestamp > capMs && a.logLine.timestamp <= untilMs,
+    (a) => a.logLine.timestamp > capMs && a.logLine.timestamp < untilMs,
   );
   // a lost end: applied again with nothing closing the life before it —
   // unless it is the aura re-sent, as the interval builder reads one

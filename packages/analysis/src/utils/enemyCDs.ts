@@ -624,6 +624,34 @@ function pressOwnAuraEndS(
   return end;
 }
 
+/**
+ * T308: the copy of a press's effect the timeline reads its end from — its
+ * holder, its aura and this press's application of it (`observedEffectEnd`'s
+ * own selection; with no end shown, the copy that ran longest unclosed) —
+ * for a scan that re-checks that end on the same rows (codex
+ * 85-tk-L5-T308-1i #2: 7abf7067 r6's The Hunt ends on its DoT on the
+ * target, which a scan of the caster's own auras never saw).
+ */
+export function observedEffectCopy(
+  caster: ICombatUnit,
+  castSpellId: string,
+  castS: number,
+  nextSameCastS: number,
+  combat: AtomicArenaCombat,
+): { holderId: string; auraId: string; appliedS: number } | null {
+  const out: Parameters<typeof observedEffectEnd>[6] = {};
+  const end = observedEffectEnd(
+    caster,
+    castSpellId,
+    castS,
+    nextSameCastS,
+    combat,
+    undefined,
+    out,
+  );
+  return end ?? out.openHolder ?? null;
+}
+
 /** `observedEffectEndSeconds` with the unit whose chain it read — the
  * effect's holder (codex 20-G167-02: Power Infusion's end is its target's,
  * not its caster's). */

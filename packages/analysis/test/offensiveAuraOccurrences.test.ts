@@ -10,6 +10,7 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 
 import { effectiveCooldownSeconds } from "../src/data/spellEffectData";
 import {
+  auraSurelyUpEndMs,
   auraSurelyUpPastMs,
   nextAuraPressMs,
   resentAuraApplications,
@@ -1175,5 +1176,30 @@ describe("T308 round 8 (codex 85-tk-L5-T308-1h)", () => {
       aura(LogEvent.SPELL_AURA_REFRESH, "466772", 45, "sh"),
     ];
     expect(auraSurelyUpPastMs(...args, { lifeStartMs: s(t) })).toBe(true);
+  });
+});
+
+describe("T308 round 9 (codex 85-tk-L5-T308-1i)", () => {
+  it("#1 (63d890de r5 shape): the next application that bounds the window vetoes no row before it", () => {
+    const u = enh([], []);
+    (u as any).auraEvents = [
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", 10, "sh"),
+      aura(LogEvent.SPELL_AURA_APPLIED, "466772", 22.7, "sh"),
+    ];
+    (u as any).damageOut = [
+      {
+        srcUnitId: "sh",
+        destUnitId: "e1",
+        spellId: "466772",
+        spellName: "Doom Winds",
+        logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: s(21.0) },
+      },
+    ];
+    // 8 s from 10 s: due off at 18 s; a hit at 21 s; the next life at 22.7 s
+    expect(
+      auraSurelyUpEndMs(u, u, "466772", "384352", s(18), s(22.7), {
+        lifeStartMs: s(10),
+      }),
+    ).toBe(s(21));
   });
 });

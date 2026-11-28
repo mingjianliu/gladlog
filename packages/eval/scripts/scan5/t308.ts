@@ -37,6 +37,7 @@ import {
 } from "@gladlog/analysis/src/utils/auraSurelyUp";
 import { buffDurationOfApplication } from "@gladlog/analysis/src/utils/buffDuration";
 import { analyzeBurstLedger } from "@gladlog/analysis/src/utils/burstLedger";
+import { observedEffectCopy } from "@gladlog/analysis/src/utils/enemyCDs";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 
 import { APPLIED, ev, type IRoundCtx, REFRESH, REMOVED, tsOf } from "./ctx";
@@ -71,22 +72,50 @@ export function run(ctx: IRoundCtx): void {
   // read as a closed life)
   // …and a REMOVED written with no source of an aura on the owner: it
   // closes the life as the builder pairs it (codex 85-tk-L5-T308-1d #7)
-  const own = dropAuraRebroadcasts(
-    ((owner.auraEvents ?? []) as any[]).filter(
-      (r) =>
-        r.destUnitId === owner.id &&
-        (r.srcUnitId === owner.id ||
-          ((!r.srcUnitId || r.srcUnitId === "0000000000000000") &&
-            ev(r) === REMOVED)),
-    ),
-  );
+  // the owner's auras on a holder (its own, or the copy the press put on
+  // another unit)
+  const rowsOn = (holder: any): any[] =>
+    dropAuraRebroadcasts(
+      ((holder.auraEvents ?? []) as any[]).filter(
+        (r) =>
+          r.destUnitId === holder.id &&
+          (r.srcUnitId === owner.id ||
+            ((!r.srcUnitId || r.srcUnitId === "0000000000000000") &&
+              ev(r) === REMOVED)),
+      ),
+    );
+  const ownOnOwner = rowsOn(owner);
   const all = ledger.flatMap((x) => x.spells);
   for (const s of all) {
     const castMs = ctx.start + s.castTimeSeconds * 1000;
+    // the copy the producer reads this press's end from — its holder and
+    // its aura (`observedEffectCopy`; codex 85-tk-L5-T308-1i #2: The Hunt's
+    // DoT on its target), else the owner's own aura of the spell
+    const nextSameS = all
+      .filter(
+        (o) => o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
+      )
+      .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity);
+    const copy = observedEffectCopy(
+      owner,
+      s.spellId,
+      s.castTimeSeconds,
+      nextSameS,
+      ctx.legacy as never,
+    );
+    const holder: any =
+      copy && copy.holderId !== owner.id
+        ? (ctx.legacy as any).units?.[copy.holderId]
+        : owner;
+    if (!holder) continue;
+    const own = holder === owner ? ownOnOwner : rowsOn(holder);
     const app = own.find(
       (r) =>
-        (r.spellId === s.spellId ||
-          getEnglishSpellName(r.spellId, r.spellName ?? "") === s.spellName) &&
+        (copy
+          ? r.spellId === copy.auraId
+          : r.spellId === s.spellId ||
+            getEnglishSpellName(r.spellId, r.spellName ?? "") ===
+              s.spellName) &&
         (ev(r) === APPLIED || ev(r) === REFRESH) &&
         Math.abs(tsOf(r) - castMs) <= 1000,
     );
@@ -114,15 +143,7 @@ export function run(ctx: IRoundCtx): void {
         : tsOf(app) + ownFullS * 1000,
       (atMs) => buffDurationOfApplication(app.spellId, owner, atMs),
     );
-    const renewed = Math.min(
-      all
-        .filter(
-          (o) =>
-            o.spellId === s.spellId && o.castTimeSeconds > s.castTimeSeconds,
-        )
-        .reduce((m, o) => Math.min(m, o.castTimeSeconds), Infinity),
-      (life.nextPressMs - ctx.start) / 1000,
-    );
+    const renewed = Math.min(nextSameS, (life.nextPressMs - ctx.start) / 1000);
     // the REMOVED that closes THIS life: before the spell's next press — a
     // later life's REMOVED leaves this one unclosed (codex 85-tk-L5-T308-1b
     // #11)
@@ -165,7 +186,7 @@ export function run(ctx: IRoundCtx): void {
     }
     // …and never past the owner's death (the producers' `auraSurelyUpUntilMs`)
     const untilMs = auraSurelyUpUntilMs(
-      owner,
+      holder,
       tsOf(app),
       Math.min(endMs, ctx.start + renewed * 1000),
     );
@@ -185,7 +206,7 @@ export function run(ctx: IRoundCtx): void {
       ? undefined
       : auraSurelyUpEndMs(
           owner,
-          owner,
+          holder,
           app.spellId,
           s.spellId,
           capMs,

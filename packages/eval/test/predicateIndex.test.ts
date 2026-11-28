@@ -1622,6 +1622,16 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/auraSurelyUp.ts`,
+    symbol: "auraSurelyUpEndMs",
+    mod: auraSurelyUp,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "observedEffectCopy",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/auraSurelyUp.ts`,
     symbol: "AURA_SURELY_UP_PAST_MS",
     mod: auraSurelyUp,
   },
