@@ -47,8 +47,10 @@
  *  - `timewalkerCap` (GH #179 item 25), once per round: a run of an aura on
  *    Timewalker's mask (`TIMEWALKER_LENGTHENED_IDS`) cast by an
  *    Augmentation Evoker. Occasion: its logged life ran past the official
- *    length. Wrong: the run was left without a REMOVED row, its end the
- *    official-length cap.
+ *    length. Wrong: the run was left without a REMOVED row and ran its
+ *    official length — its end is the official-length cap's (a run the
+ *    round's end or a death cut shorter, or a permanent aura's, is not the
+ *    cap's doing: T274).
  */
 import {
   countsAsTeamBurst,
@@ -631,6 +633,10 @@ function survivalSet4(ctx: IRoundCtx): void {
 }
 
 // ── GH #179 item 25 ────────────────────────────────────────────────────────
+/** an official length this long is a permanent aura's (Source of Magic,
+ * Blistering Scales: 3600 s) — no cap ends it inside a round */
+const PERMANENT_AURA_S = 600;
+
 function timewalkerCap(ctx: IRoundCtx): void {
   const combat = combatOf(ctx);
   const augs = (ctx.players as any[]).filter((p) => String(p.spec) === "1473");
@@ -659,7 +665,26 @@ function timewalkerCap(ctx: IRoundCtx): void {
           id,
           where,
         );
-      if (iv.inferredEnd && !closed)
+      // …when the cap decided it: a run the round's end or a death cut
+      // short of the official length, or a permanent aura's, was ended by
+      // nothing the cap said (T274: 17 + 5 of the 32 rows on the 12.1.5
+      // files, 2 of 2 on the 605)
+      // …measured as the builder places the cap: from the run's last
+      // application (`capFromS`: a refresh restarts the length, joined
+      // intervals keep the final one), not from the run's start (codex
+      // 85-tk-L8-T274-1 #1: Shifting Sands applied 97.075 s, refreshed
+      // 100.172 s, the round over 0.58 s before its cap)
+      const capAtS = (iv.capFromS ?? iv.fromS) + (official ?? 0);
+      // …at the builder's own instant (the same seconds addition on both
+      // sides: exact), and while play was still on: a cap that falls after
+      // the round's end of play (`ctx.roundEndAt`: the deciding death) cut
+      // nothing a line can read (codex 85-tk-L8-T274-1b: 6 of 9 rows)
+      const capDecided =
+        official !== undefined &&
+        official < PERMANENT_AURA_S &&
+        iv.toS === capAtS &&
+        ctx.start + capAtS * 1000 < ctx.roundEndAt;
+      if (iv.inferredEnd && !closed && capDecided)
         ctx.violate(
           "timewalkerCap",
           "left without REMOVED: the official-length cap decides its end",

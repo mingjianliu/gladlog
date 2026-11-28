@@ -80,6 +80,23 @@ export const TIMEWALKER_MASTERY_ID = "406380";
  * it is a floor — `lasts 10s+` (user ruling 2026-11-05, cat1 #10). The
  * readers that cap an aura's end at it still cut such a copy early: known,
  * GH #179.
+ * FLAG (T274, 2026-11-28): Ebon Might 395152 / 395296 runs longer for a
+ * second reason this model does not price — Sands of Time 395153 (DB2: four
+ * dummies, 1000 / 2000 / 5000 ms / 50 %; tooltip: Eruption +1 s, each
+ * empower spell +2 s, Breath of Eons +5 s on the active Ebon Might, and the
+ * extension can crit for half as much again, which no log row states), and
+ * Mighty Inferno 1291457 passes the same extensions to Inferno's Blessing
+ * 410263. scan5/t65 `timewalkerCap`, 605 | the 12.1.5 files: Ebon Might 27
+ * runs at 12.2–29.2 s | 46 at 10.5–31.8 s against 10; Inferno's Blessing 20
+ * at 11.5–20.1 s | 20 at 9.6–17.6 s against 8. Temporal Wound 409560 is
+ * Timewalker alone (7 at 10.7–10.8 s | 16 at 10.5–10.7 s). The cap decided
+ * a run's end while play was on 0 | 3 times (Inferno's Blessing 2; Ebon
+ * Might 1, capped 9.7 s before the deciding death with no REMOVED row to
+ * say when the aura left). No prompt line of those two rounds names
+ * either aura (base capture e479d06d8), so the early end reaches no
+ * printed line —
+ * not priced: the presses would give a floor only, the crit and the
+ * mastery staying unpriced either way (coordinator ruling 2026-11-28); a season run with more Augmentation rounds can ask again.
  * The mask's whole target list (`talentEffectInventoryGenerated.json`,
  * `test/buffDuration.test.ts` pins it there). Registered in
  * curatedIdRegistry.
