@@ -157,12 +157,18 @@ if (args.fromDump) {
         }
         for (const cd of cds) {
           if (cd.isProcOnly || !(cd.cooldownSeconds > 0)) continue;
+          // a press a buff's bonus charge paid for (T292, `bonusChargeSpent`:
+          // Call of the Elder Druid's Frenzied Regeneration) restarts no
+          // recharge: it is no recast of the cooldown, and the paid presses
+          // around it still are (pipeline T307 — the 22842|105 floor ×0.07
+          // was fit on those pairs: 605 ratios 0.057–0.124, 1215 0.209–0.431)
+          const paid = cd.casts.filter((c) => !c.bonusChargeSpent);
           // a per-cast override (Guardian Angel's saved branch) is a different
           // cooldown for that one cast — keep the ratio on the modelled one only
-          if (cd.casts.some((c) => c.cooldownSecondsOverride !== undefined))
+          if (paid.some((c) => c.cooldownSecondsOverride !== undefined))
             continue;
           const cap = Math.max(1, cd.charges ?? 1);
-          const ts = cd.casts.map((c) => c.timeSeconds).sort((a, b) => a - b);
+          const ts = paid.map((c) => c.timeSeconds).sort((a, b) => a - b);
           const key = `${cd.spellId}|${u.spec}`;
           const cell = cells.get(key) ?? {
             name: cd.spellName,
