@@ -616,6 +616,18 @@ describe("pipeline T309 — review 85-tk-L5-T309-1", () => {
     );
     expect(buffFullDurationForCaster("190319", u, T0)).toBe(12);
   });
+  it("1b (f966f2d1): a Fired Up whose REMOVED the log lost is down after its own 8 s — the next APPLIED is a gain", () => {
+    const u = mage(
+      [FIRED_UP],
+      [
+        // an earlier Fired Up, never closed in the log
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", -53),
+        row(LogEvent.SPELL_AURA_APPLIED, "190319", 0),
+        row(LogEvent.SPELL_AURA_APPLIED, "1257350", 0.319),
+      ],
+    );
+    expect(buffFullDurationForCaster("190319", u, T0)).toBe(11);
+  });
   it("#2 (581d783f): the ghoul's Dark Transformation ends where the death knight's does — coils after it add nothing", () => {
     const dk = {
       id: "dk",

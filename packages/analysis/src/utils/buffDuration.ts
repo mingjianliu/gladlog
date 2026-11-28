@@ -880,6 +880,10 @@ function pressLanded(
  * press spending it (the rows of one press can be logged either way round). */
 const START_STACKS_SPENT_LEAD_MS = 100;
 
+/** A stack aura whose last row is more than its own length plus this ago
+ * is down: its REMOVED was lost. */
+const STACK_AURA_LOST_END_SLACK_S = 1;
+
 type IRunEdge = { ms: number; line?: number };
 /** `a` is logged before the edge: by time, then — in its millisecond — by
  * log line (a row with no line there is taken as inside) */
@@ -927,6 +931,8 @@ function ownAuraRowsOf(
  * higher count. An APPLIED while it is up is the aura re-sent — the count
  * stands and nothing is gained (codex 85-tk-L5-T309-1 #1, 30846f8e r1: a
  * re-listed Fired Up read as a third gain); a lone REFRESH shows it up.
+ * A row logged more than the aura's own length after its last one finds
+ * it down, whatever the log closed.
  */
 function ownStackWalk(
   caster: Partial<Pick<ICombatUnit, "id" | "auraEvents">>,
@@ -936,9 +942,23 @@ function ownStackWalk(
   stacks: number;
   gained: boolean;
 }> {
+  // a REMOVED the log lost: the aura cannot outlive its own length from
+  // its last row, so a row later than that finds it down (codex
+  // 85-tk-L5-T309-1b, f966f2d1: a Fired Up gained 53 s after the last row
+  // of an 8 s aura read as re-listed)
+  const lengthS = spellEffectData[auraId]?.durationSeconds;
   let stacks = 0;
+  let lastMs = -Infinity;
   return ownAuraRowsOf(caster, auraId).map((row) => {
     const ev = row.logLine.event;
+    const t = row.logLine.timestamp;
+    if (
+      lengthS !== undefined &&
+      lengthS > 0 &&
+      t > lastMs + (lengthS + STACK_AURA_LOST_END_SLACK_S) * 1000
+    )
+      stacks = 0;
+    lastMs = t;
     const before = stacks;
     if (ev === LogEvent.SPELL_AURA_REMOVED) stacks = 0;
     else if (
